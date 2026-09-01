@@ -137,9 +137,55 @@ The system should respect source terms, paywalls, and `robots.txt`.
 
 ## Status
 
-Phase 1 planning is complete. Phase 2 will start the application scaffold.
+Phase 1 planning is complete. Phase 2 application scaffold work is in progress.
+
+## Local Development
+
+Phase 2 uses a split local app:
+
+- `frontend/`: Next.js with TypeScript.
+- `backend/`: FastAPI in Python.
+
+Runtime requirements:
+
+- Node.js `>=20.9.0`
+- Python `>=3.11`
+
+Copy the example environment file before running local services:
+
+```bash
+cp .env.example .env
+```
+
+Run the backend:
+
+```bash
+cd backend
+python3 -m pip install -e ".[dev]"
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Run the frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Or run both with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Local URLs:
+
+- Frontend: `http://localhost:3000`
+- Backend health: `http://localhost:8000/health`
 
 ## Planning Docs
 
 - [Phase 1 Research](docs/phase-1-research.md)
 - [Implementation Phases](docs/implementation-phases.md)
+- [Phase 2 Milestone 2.1](docs/phase-2-milestone-2-1.md)

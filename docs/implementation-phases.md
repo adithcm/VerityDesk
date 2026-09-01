@@ -7,7 +7,7 @@ This document tracks the full InvestorAgent implementation roadmap from planning
 ## Current Status
 
 - Phase 1: Complete
-- Phase 2: Ready to start
+- Phase 2: In progress
 
 ## Phase 1: Research And Planning
 
@@ -32,7 +32,7 @@ Deliverables:
 
 ## Phase 2: Application Scaffold
 
-Status: Next
+Status: In progress
 
 Purpose: build the first runnable local app skeleton.
 
