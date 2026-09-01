@@ -1,6 +1,6 @@
 # Phase 1 Research
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 InvestorAgent is a local-first market intelligence app that collects credible news and data, routes user questions through specialized agents, and produces cited research summaries with financial-safety guardrails.
 
@@ -14,6 +14,24 @@ This document captures the Phase 1 research needed before implementation.
 - Define the first multi-agent architecture.
 - Define output guardrails for investing-related responses.
 - Choose a practical deployment direction for local desktop and portable use.
+
+## Final Phase 1 Decisions
+
+These are the recommended v1 decisions for Phase 2 implementation:
+
+- Frontend: Next.js with TypeScript.
+- Backend: FastAPI in Python.
+- Local database: SQLite.
+- ORM and migrations: SQLAlchemy and Alembic.
+- Agent runtime: Python service with explicit agent contracts.
+- LLM provider: OpenAI API first, behind a provider abstraction.
+- Ingestion strategy: APIs and RSS feeds first.
+- Scraping strategy: compliant lightweight extraction only when allowed by terms and `robots.txt`.
+- Scheduler: APScheduler or equivalent local background job runner.
+- Portable deployment: Docker Compose.
+- Desktop packaging: Tauri after the web app and backend are working.
+- Market/news data policy: use official/free sources first and support user-provided API keys for paid providers.
+- Financial safety policy: research and education only, never direct personalized buy/sell/hold recommendations.
 
 ## MVP User Modes
 
@@ -81,6 +99,27 @@ The system should use sources in this order:
 4. Compliant lightweight page extraction, only when allowed by terms and robots rules.
 
 The app should avoid paywall bypassing, credential sharing, bulk copying of restricted publisher content, and building a full-text database from sources whose terms prohibit automated harvesting.
+
+## V1 Source Catalog
+
+The v1 source catalog should start small and reliable. Each source below should be represented in configuration with source name, access method, domain tags, auth requirements, update cadence, storage rules, and citation requirements.
+
+| Source | Domains | Access | Auth | V1 Use |
+| --- | --- | --- | --- | --- |
+| BBC News RSS | World and Geopolitics, U.S. Economy and Policy, Companies and Earnings | Official RSS | No | Daily world/business headlines and summaries |
+| SEC data APIs | Companies and Earnings, Regulation and Legal | Official API | No key, clear user agent required | Company submissions, XBRL facts, filing history |
+| SEC EDGAR RSS | Companies and Earnings, Regulation and Legal | Official RSS | No | Recent structured filings and filing alerts |
+| FRED API | U.S. Economy and Policy, Markets and Rates, Banking and Credit, Housing and Real Estate | Official API | API key recommended/required by endpoint policy | Macro series, rates, inflation, labor, credit spreads |
+| U.S. Census Economic Indicators | U.S. Economy and Policy, Housing and Real Estate, Consumer and Labor | Official API | API key required | Housing construction, new home sales, trade, retail, construction spending |
+| FHFA HPI | Housing and Real Estate | Official datasets | No | House price indexes across national, state, metro, ZIP, and tract levels |
+| Freddie Mac PMMS | Housing and Real Estate, Markets and Rates | Official webpage/download | No | Weekly mortgage rate averages |
+| Company investor relations pages | Companies and Earnings | Official company pages/RSS when available | No, unless company-specific | Press releases, earnings dates, shareholder letters, presentations |
+| Alpha Vantage | Markets and Rates, Companies and Earnings, Commodities and Energy | Licensed/free-tier API | User API key | Optional stock, fundamental, economic, and news/sentiment data |
+| Finnhub | Companies and Earnings, Markets and Rates | Licensed/free-tier API | User API key | Optional company news, quotes, sentiment |
+| NewsAPI | World and Geopolitics, Technology and AI, Regulation and Legal, Companies and Earnings | Licensed/free-tier API | User API key | Optional article discovery and metadata, not full-content storage |
+| GDELT Cloud | World and Geopolitics, Regulation and Legal, Commodities and Energy | API | API key depending on endpoint | Optional global story/event discovery |
+
+V1 should not depend on AP, Reuters, NAR full data, Polygon, or Nasdaq Data Link unless the user supplies licensed credentials or the project explicitly confirms acceptable usage.
 
 ## Initial Source Catalog
 
@@ -292,6 +331,162 @@ User Request
   -> Final Report
 ```
 
+## Agent Contracts
+
+Each agent should use structured inputs and outputs so reports are auditable and testable.
+
+### Shared Agent Input
+
+- `request_id`
+- `user_query`
+- `intent`
+- `domains`
+- `tickers`
+- `companies`
+- `regions`
+- `time_window`
+- `source_ids`
+- `safety_level`
+
+### Shared Agent Output
+
+- `summary`
+- `claims`
+- `citations`
+- `confidence`
+- `risks`
+- `follow_up_questions`
+- `requires_guardrail_review`
+
+### Claim Object
+
+- `claim`
+- `claim_type`: fact, interpretation, forecast, risk, scenario.
+- `source_ids`
+- `confidence`
+- `as_of`
+
+## Data Model Sketch
+
+Phase 2 should implement these entities first:
+
+### `sources`
+
+- `id`
+- `name`
+- `base_url`
+- `source_type`
+- `domains`
+- `access_method`
+- `requires_api_key`
+- `requires_license`
+- `allows_full_text_storage`
+- `allows_redistribution`
+- `robots_policy_checked_at`
+- `terms_checked_at`
+- `update_cadence`
+- `reliability_tier`
+- `enabled`
+- `notes`
+
+### `articles`
+
+- `id`
+- `source_id`
+- `title`
+- `url`
+- `canonical_url`
+- `publisher`
+- `author`
+- `published_at`
+- `retrieved_at`
+- `summary`
+- `excerpt`
+- `domains`
+- `tickers`
+- `companies`
+- `regions`
+- `content_hash`
+- `dedupe_group_id`
+- `storage_policy`
+
+### `economic_observations`
+
+- `id`
+- `source_id`
+- `series_id`
+- `series_name`
+- `value`
+- `unit`
+- `period`
+- `released_at`
+- `retrieved_at`
+- `vintage`
+- `region`
+
+### `companies`
+
+- `id`
+- `name`
+- `ticker`
+- `exchange`
+- `cik`
+- `sector`
+- `industry`
+- `website`
+- `investor_relations_url`
+
+### `reports`
+
+- `id`
+- `report_type`
+- `title`
+- `summary`
+- `body`
+- `domains`
+- `tickers`
+- `companies`
+- `created_at`
+- `as_of`
+- `disclaimer_version`
+- `guardrail_status`
+
+### `citations`
+
+- `id`
+- `report_id`
+- `article_id`
+- `source_id`
+- `url`
+- `title`
+- `publisher`
+- `published_at`
+- `retrieved_at`
+- `supports_claim`
+
+### `agent_runs`
+
+- `id`
+- `request_id`
+- `agent_name`
+- `input`
+- `output`
+- `status`
+- `started_at`
+- `completed_at`
+- `error`
+
+### `user_settings`
+
+- `id`
+- `watchlist_tickers`
+- `preferred_regions`
+- `enabled_sources`
+- `daily_briefing_time`
+- `llm_provider`
+- `api_key_status`
+- `disclaimer_acknowledged_at`
+
 ## Recommended MVP Outputs
 
 ### Daily Briefing
@@ -337,6 +532,88 @@ User Request
 - Sources.
 - Disclaimer.
 
+## Report Templates
+
+### Daily Briefing Template
+
+```text
+Title
+As of timestamp
+Disclaimer
+
+Executive Summary
+Top Cross-Market Themes
+World and Geopolitics
+U.S. Economy and Policy
+Markets and Rates
+Companies and Earnings
+Housing and Real Estate
+Commodities and Energy
+Technology and AI
+Banking and Credit
+Consumer and Labor
+Regulation and Legal
+Watchlist Signals
+Risks and Uncertainties
+Sources
+```
+
+### Company Research Template
+
+```text
+Title
+As of timestamp
+Disclaimer
+
+Company Snapshot
+Latest News
+SEC and Filing Updates
+Earnings and Fundamental Context
+Bullish Factors
+Bearish Factors
+Watchlist Signals
+Key Risks
+What Would Change The View
+Sources
+```
+
+### Market Strategy Template
+
+```text
+Title
+As of timestamp
+Disclaimer
+
+Current Market Backdrop
+Main Drivers
+Sector And Asset-Class Themes
+Bullish Scenario
+Base Scenario
+Bearish Scenario
+Signals To Monitor
+Risks And Unknowns
+Sources
+```
+
+### Housing And Macro Template
+
+```text
+Title
+As of timestamp
+Disclaimer
+
+Macro Snapshot
+Rates And Fed Context
+Inflation And Labor
+Mortgage Rates
+Housing Prices
+Sales, Inventory, And Construction
+Regional Notes
+Market Implications
+Risks And Unknowns
+Sources
+```
+
 ## Product Requirements
 
 ### Dashboard
@@ -348,6 +625,8 @@ User Request
 - Domain filters for the ten news categories.
 - Latest reports.
 - Source health/status.
+
+The dashboard should be the first screen of the app. It should show useful information immediately, not a marketing landing page.
 
 ### Research Workspace
 
@@ -365,6 +644,8 @@ User Request
 - Error state.
 - API key requirement.
 - Legal/use notes.
+- Storage policy: metadata-only, excerpt-only, or full text allowed.
+- Source type: official API, official RSS, licensed API, dataset, or webpage.
 
 ### Settings
 
@@ -375,6 +656,61 @@ User Request
 - Preferred regions.
 - Disclaimer visibility.
 
+## UI Screen Spec
+
+### Dashboard
+
+- Shows today's briefing status.
+- Shows last successful ingestion time.
+- Shows the ten-domain filter bar.
+- Shows watchlist tickers and key news count.
+- Shows market, macro, and housing snapshots.
+- Shows source health warnings.
+
+### Daily Briefing
+
+- Displays a generated briefing grouped by the ten domains.
+- Each section has top stories, market relevance, uncertainty, and sources.
+- Includes disclaimer at the top and bottom for market strategy content.
+
+### Source Manager
+
+- Lists all configured sources.
+- Shows enabled/disabled status.
+- Shows access type, API key requirement, license requirement, and last run.
+- Shows legal and storage notes.
+- Supports manual source refresh later.
+
+### Watchlist
+
+- Lets the user define tickers and companies to monitor.
+- Shows related news, SEC filings, and report links.
+- Does not provide direct buy/sell/hold instructions.
+
+### Company Research
+
+- Accepts ticker or company name.
+- Shows company profile, latest news, filings, risks, and watchlist signals.
+- Links every material claim to sources.
+
+### Macro And Housing
+
+- Shows rates, inflation, employment, mortgage rates, housing supply, sales, and home price indicators.
+- Shows data vintage and next release date where available.
+
+### Agent Chat
+
+- Lets the user ask a research question.
+- Shows which agents ran.
+- Shows citations and guardrail status.
+- Saves report output when requested.
+
+### Settings
+
+- Stores local-only configuration.
+- Manages API keys through environment variables or local secure storage in a later phase.
+- Lets user set daily briefing time, default regions, and watchlist.
+
 ## Deployment Research
 
 Recommended implementation path:
@@ -382,13 +718,13 @@ Recommended implementation path:
 1. Build as a web app first.
 2. Add local API/backend and SQLite storage.
 3. Add Docker Compose for portable local deployment.
-4. Wrap with Tauri or Electron for desktop distribution.
+4. Wrap with Tauri for desktop distribution after the web app and backend are working.
 
 ### Desktop Option
 
-Tauri is preferred for the macOS desktop app if the team is comfortable with Rust-based packaging. It can build `.app` and `.dmg` bundles on macOS.
+Tauri is the selected desktop path for v1 because the app is local-first and should stay lightweight. It can build `.app` and `.dmg` bundles on macOS.
 
-Electron is preferred if cross-platform packaging speed and ecosystem maturity matter more than app size.
+Electron remains a fallback only if Tauri packaging blocks a required feature later.
 
 ### Portable Option
 
@@ -408,6 +744,12 @@ http://localhost:3000
 
 - Start API/RSS-first, not scraper-first.
 - Use the ten-domain news taxonomy as the v1 organizing structure.
+- Use Next.js with TypeScript for the frontend.
+- Use FastAPI for the backend and agent/data services.
+- Use SQLite, SQLAlchemy, and Alembic for local-first storage.
+- Use OpenAI API first behind a provider abstraction.
+- Use Tauri later for desktop packaging.
+- Use Docker Compose for the first portable deployment path.
 - Store metadata, summaries, and citations before storing full article text.
 - Use official economic and housing datasets for macro/housing.
 - Use user-provided API keys for market data and premium news.
@@ -415,27 +757,52 @@ http://localhost:3000
 - Add desktop packaging after core app flows work.
 - Treat every strategy answer as research, scenario analysis, and watchlist context, not advice.
 
-## Open Questions
+## Remaining User Configuration
 
-- Should the MVP use Python FastAPI plus Next.js, or a single Next.js full-stack app?
-- Which LLM provider and model should power agent synthesis?
-- Should the first desktop wrapper be Tauri or Electron?
-- Will this remain a personal-use app, or should it be designed for broader distribution from the start?
-- Which paid data providers, if any, should be supported in v1?
-- What tickers, sectors, and housing regions should be included in the initial watchlist?
+These choices can be configured during Phase 2 and do not block the build:
+
+- Initial watchlist tickers.
+- Preferred housing regions.
+- User contact email for responsible API/scraper user-agent strings.
+- Which optional paid/free-tier APIs the user wants to enable: Alpha Vantage, Finnhub, NewsAPI, GDELT, Polygon, Nasdaq Data Link, AP, Reuters.
+- Whether the first distributed build should prioritize personal Mac use or broader cross-platform use.
 
 ## Suggested Phase 2 Build Scope
 
 The next phase should create the actual scaffold:
 
-- Next.js frontend.
-- Backend API.
-- SQLite schema.
+- Next.js frontend with TypeScript.
+- FastAPI backend.
+- SQLite database with SQLAlchemy models and Alembic migrations.
 - Source catalog configuration.
 - Daily briefing dashboard shell.
+- Source manager screen shell.
+- Settings screen shell.
 - First ingestion path using RSS/API sources.
 - Guardrail/disclaimer component.
 - Basic agent request/response contract.
+- Docker Compose for local portable execution.
+
+## Phase 1 Completion Checklist
+
+- [x] Product vision defined.
+- [x] Financial-disclaimer guardrails defined.
+- [x] Local desktop and portable deployment goals defined.
+- [x] Recommended architecture selected.
+- [x] V1 news-domain taxonomy selected.
+- [x] Source strategy selected.
+- [x] Initial source catalog defined.
+- [x] Scraping and data-use compliance rules defined.
+- [x] Citation policy defined.
+- [x] Multi-agent architecture defined.
+- [x] Agent input/output contracts sketched.
+- [x] Data model sketched.
+- [x] UI screens defined.
+- [x] Report templates defined.
+- [x] Phase 2 build scope defined.
+- [x] Remaining user configuration separated from implementation blockers.
+
+Phase 1 is complete when this document is committed to `main`.
 
 ## Research References
 

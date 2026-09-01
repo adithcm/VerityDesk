@@ -87,13 +87,14 @@ Every investment-oriented answer should include:
 
 Recommended architecture:
 
-- Frontend: React or Next.js.
-- Backend API: FastAPI or Node.js.
+- Frontend: Next.js with TypeScript.
+- Backend API: FastAPI.
 - Agent orchestration: Python-based workflow, such as LangGraph-style routing.
-- Storage: SQLite for local-first development, with a path to Postgres later.
+- Storage: SQLite with SQLAlchemy and Alembic for local-first development, with a path to Postgres later.
 - Collection: RSS and official APIs first, Playwright/browser scraping only where compliant and necessary.
 - Scheduling: local background jobs for daily updates.
-- Packaging: Tauri or Electron for a native desktop app, plus Docker for portable self-hosting.
+- LLM provider: OpenAI API first, behind a provider abstraction.
+- Packaging: Tauri for a native desktop app later, plus Docker Compose for portable self-hosting.
 
 ## Deployment Targets
 
@@ -136,7 +137,7 @@ The system should respect source terms, paywalls, and `robots.txt`.
 
 ## Status
 
-This repository is currently in the planning and scaffolding phase.
+Phase 1 planning is complete. Phase 2 will start the application scaffold.
 
 ## Planning Docs
 
