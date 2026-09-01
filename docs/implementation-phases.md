@@ -1,0 +1,226 @@
+# Implementation Phases
+
+Last updated: 2026-09-01
+
+This document tracks the full InvestorAgent implementation roadmap from planning through advanced features.
+
+## Current Status
+
+- Phase 1: Complete
+- Phase 2: Ready to start
+
+## Phase 1: Research And Planning
+
+Status: Complete
+
+Purpose: define the product, sources, architecture, compliance posture, and build direction before coding.
+
+Deliverables:
+
+- Product vision.
+- Financial disclaimer and investment-output guardrails.
+- V1 news-domain taxonomy.
+- Recommended architecture.
+- Initial source catalog.
+- Compliance rules for APIs, RSS, scraping, and source storage.
+- Multi-agent architecture.
+- Agent input/output contracts.
+- Data model sketch.
+- UI screen spec.
+- Report templates.
+- Phase 2 build scope.
+
+## Phase 2: Application Scaffold
+
+Status: Next
+
+Purpose: build the first runnable local app skeleton.
+
+Deliverables:
+
+- `frontend/` Next.js app with TypeScript.
+- `backend/` FastAPI app.
+- SQLite database setup.
+- SQLAlchemy models.
+- Alembic migrations.
+- Static source catalog configuration.
+- Backend endpoints:
+  - `GET /health`
+  - `GET /sources`
+  - `GET /reports`
+  - `GET /settings`
+  - `POST /settings`
+  - `POST /agents/query`
+- Placeholder agent contracts.
+- Financial disclaimer and basic guardrail module.
+- Frontend pages:
+  - Dashboard
+  - Daily Briefing
+  - Sources
+  - Watchlist
+  - Agent Chat
+  - Settings
+- Docker Compose local run path.
+- README local setup instructions.
+
+Phase 2 does not need full live ingestion or final agent intelligence.
+
+## Phase 3: Data Ingestion
+
+Status: Planned
+
+Purpose: connect the app to direct sources and begin collecting real data.
+
+Deliverables:
+
+- RSS ingestion pipeline.
+- API ingestion pipeline.
+- Source scheduler.
+- Article/data normalization.
+- Deduplication.
+- Source health tracking.
+- Storage policies by source.
+- Initial live connectors:
+  - BBC RSS
+  - SEC data APIs
+  - SEC EDGAR RSS
+  - FRED
+  - U.S. Census Economic Indicators
+  - FHFA HPI
+  - Freddie Mac PMMS
+- Optional API-key connectors:
+  - Alpha Vantage
+  - Finnhub
+  - NewsAPI
+  - GDELT
+
+## Phase 4: Agent Framework
+
+Status: Planned
+
+Purpose: add the multi-agent research system.
+
+Deliverables:
+
+- `CoordinatorAgent`
+- `NewsDigestAgent`
+- `CompanyAgent`
+- `MarketAgent`
+- `MacroAgent`
+- `HousingAgent`
+- `CitationAgent`
+- `RiskGuardrailAgent`
+- Agent run logging.
+- Agent routing based on user intent, domains, tickers, companies, and regions.
+- Structured agent outputs with citations and confidence levels.
+
+## Phase 5: Research Output System
+
+Status: Planned
+
+Purpose: generate high-quality cited reports from collected data and agent outputs.
+
+Deliverables:
+
+- Daily briefing generation.
+- Company research report generation.
+- Market strategy report generation.
+- Housing and macro report generation.
+- Report persistence.
+- Citation panel support.
+- Scenario framing.
+- Required risks and uncertainty sections.
+- Required disclaimer in investment-oriented reports.
+
+## Phase 6: Full UI Dashboard
+
+Status: Planned
+
+Purpose: turn the scaffold into a complete user-facing research workspace.
+
+Deliverables:
+
+- Polished dashboard.
+- Full daily briefing view.
+- Watchlist management.
+- Company research view.
+- Macro and housing view.
+- Source manager.
+- Saved reports.
+- Agent chat workspace.
+- Settings and API-key status.
+- Domain filters for the ten news categories.
+
+## Phase 7: Local Desktop App
+
+Status: Planned
+
+Purpose: package the local web app as a native-feeling macOS desktop app.
+
+Deliverables:
+
+- Tauri app shell.
+- macOS `.app` build.
+- macOS `.dmg` build.
+- App icon.
+- Local backend startup behavior.
+- Desktop menu basics.
+- Local storage path handling.
+
+## Phase 8: Portable Deployment
+
+Status: Planned
+
+Purpose: make the app easy for someone else to run on their own system.
+
+Deliverables:
+
+- Docker Compose production-like local setup.
+- `.env.example`.
+- Seed source catalog.
+- Local database initialization.
+- One-command startup path.
+- Clear install/run documentation.
+- Basic troubleshooting notes.
+
+## Phase 9: Quality, Safety, And Evaluation
+
+Status: Planned
+
+Purpose: make the system reliable, testable, and safe for research use.
+
+Deliverables:
+
+- Backend tests.
+- Frontend smoke tests.
+- Ingestion tests.
+- Source validation tests.
+- Citation coverage checks.
+- Financial guardrail tests.
+- Agent output evaluation fixtures.
+- Error logging.
+- Failed-source monitoring.
+- Staleness checks.
+
+## Phase 10: Advanced Features
+
+Status: Planned
+
+Purpose: add higher-value features after the core product works.
+
+Deliverables:
+
+- Alerts.
+- Earnings calendar.
+- SEC filing summaries.
+- Portfolio-context research mode.
+- Sector comparison.
+- Regional housing comparison.
+- Report export to PDF.
+- Email or local notification digest.
+- Multi-user or cloud-ready mode if needed.
+- More licensed data providers.
+
+## Build Principle
+
+Each phase should produce a usable increment. The project should avoid building complex agents or scraping logic before the app scaffold, data model, source catalog, and guardrail foundations are in place.
