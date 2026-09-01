@@ -218,8 +218,7 @@ Local URLs:
 
 ## Planning Docs
 
-- [Phase 1 Research](docs/phase-1-research.md)
-- [Implementation Phases](docs/implementation-phases.md)
-- [Phase 2 Milestone 2.1](docs/phase-2-milestone-2-1.md)
-- [Phase 2 Milestone 2.2](docs/phase-2-milestone-2-2.md)
-- [Phase 2 Milestone 2.3](docs/phase-2-milestone-2-3.md)
+- [Documentation Index](docs/README.md)
+- [Implementation Phases](docs/roadmap/implementation-phases.md)
+- [Phase 1](docs/phases/phase-1/README.md)
+- [Phase 2](docs/phases/phase-2/README.md)
