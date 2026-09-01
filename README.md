@@ -1,1 +1,124 @@
 # InvestorAgent
+
+InvestorAgent is a local-first market intelligence application concept that combines credible news collection, multi-agent research workflows, and an interactive UI for daily financial context.
+
+The goal is to help users understand what is happening across world news, company news, markets, macroeconomics, and housing, then turn that information into cited research summaries, watchlist ideas, and scenario-based investing context.
+
+> This project is for research and educational purposes only. It does not provide financial advice, investment recommendations, or instructions to buy or sell securities. Users should do their own research and consult a licensed financial advisor before making investment decisions.
+
+## Product Vision
+
+InvestorAgent should feel like a personal market intelligence terminal:
+
+- Daily digest of major world, business, market, macro, and housing news.
+- Company and ticker-focused research summaries.
+- Market strategy context with bullish factors, bearish factors, risks, and watchlist signals.
+- Source-backed answers with citations, timestamps, and clear separation between facts and analysis.
+- Local desktop app experience for macOS, with a portable version others can run on their own machine.
+
+## Core Capabilities
+
+- Collect news and data from credible sources using APIs, RSS feeds, and compliant scraping where appropriate.
+- Run scheduled daily collection jobs.
+- Deduplicate, normalize, and store articles, source metadata, tickers, sectors, and macro indicators.
+- Analyze user questions through specialized agents.
+- Generate daily briefings and focused reports.
+- Show source links for claims and preserve retrieved timestamps.
+- Apply financial guardrails to strategy-oriented outputs.
+
+## Agent Framework
+
+The system is designed around a coordinator agent that routes user requests to specialized agents.
+
+Potential agents:
+
+- `CoordinatorAgent`: understands the user request and decides which agents should run.
+- `WorldNewsAgent`: summarizes major geopolitical and global economic developments.
+- `CompanyNewsAgent`: tracks company-specific events, earnings, management changes, and product news.
+- `MarketNewsAgent`: watches equity markets, sectors, commodities, bonds, currencies, and volatility.
+- `MacroAgent`: follows inflation, jobs, rates, Fed commentary, GDP, and other macro indicators.
+- `HousingMarketAgent`: tracks housing supply, mortgage rates, affordability, prices, and regional trends.
+- `StrategyAgent`: converts research into scenario-based market context and watchlist themes.
+- `CitationAgent`: verifies claims, attaches sources, and flags unsupported conclusions.
+- `RiskAgent`: checks for missing caveats, uncertainty, and financial-advice wording.
+
+## Financial Guardrails
+
+InvestorAgent should never directly tell a user to buy, sell, or hold a security.
+
+Instead of:
+
+```text
+Buy NVDA.
+```
+
+The app should say:
+
+```text
+NVDA may be worth monitoring if earnings revisions, AI infrastructure demand, and margin trends remain strong. Key risks include valuation compression, export restrictions, and increased competition. This is not financial advice.
+```
+
+Every investment-oriented answer should include:
+
+- Clear disclaimer.
+- Bullish factors.
+- Bearish factors.
+- Key risks.
+- Time horizon assumptions.
+- Source citations.
+- "Not a recommendation" framing.
+
+## App Architecture
+
+Recommended architecture:
+
+- Frontend: React or Next.js.
+- Backend API: FastAPI or Node.js.
+- Agent orchestration: Python-based workflow, such as LangGraph-style routing.
+- Storage: SQLite for local-first development, with a path to Postgres later.
+- Collection: RSS and official APIs first, Playwright/browser scraping only where compliant and necessary.
+- Scheduling: local background jobs for daily updates.
+- Packaging: Tauri or Electron for a native desktop app, plus Docker for portable self-hosting.
+
+## Deployment Targets
+
+InvestorAgent should support two main deployment paths:
+
+1. Local desktop app
+   - Installable macOS app.
+   - Opens like a normal desktop application.
+   - Uses the same local backend and storage.
+
+2. Portable local web app
+   - Runs through Docker or a simple local command.
+   - Opens in a browser.
+   - Can be shared with someone else to run on their own system.
+
+## Source Principles
+
+The project should prioritize reputable and compliant sources:
+
+- Official company investor relations pages.
+- SEC filings and earnings materials.
+- Central bank and government economic data.
+- Trusted financial and business news outlets.
+- Housing and mortgage market data providers.
+- RSS feeds and official APIs where available.
+
+The system should respect source terms, paywalls, and `robots.txt`.
+
+## Roadmap
+
+- Define the initial source catalog.
+- Build the local database schema.
+- Implement daily ingestion jobs.
+- Add article deduplication and source metadata.
+- Build the first set of specialist agents.
+- Create a dashboard UI with daily digest, watchlist, and chat/research modes.
+- Add guardrail checks and citation enforcement.
+- Package the app for local desktop use.
+- Add Docker support for portable deployment.
+
+## Status
+
+This repository is currently in the planning and scaffolding phase.
