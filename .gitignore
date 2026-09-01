@@ -17,6 +17,7 @@ npm-debug.log*
 # Local data and secrets
 .env
 .env.local
+.runtime/
 data/
 *.db
 *.sqlite

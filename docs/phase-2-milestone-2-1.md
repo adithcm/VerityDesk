@@ -21,6 +21,20 @@ Create the first runnable project structure for InvestorAgent.
 - Node.js `>=20.9.0` for the frontend.
 - Python `>=3.11` for the backend.
 
+This branch supports a project-local Node runtime at `.runtime/node-v22.23.2-darwin-arm64`. The runtime folder is ignored by git and should not be committed.
+
+Install it with:
+
+```bash
+make node-install
+```
+
+Use it with:
+
+```bash
+export PATH="$PWD/.runtime/node-v22.23.2-darwin-arm64/bin:$PATH"
+```
+
 ## Not Included Yet
 
 - SQLite models and migrations.
@@ -46,6 +60,14 @@ Frontend:
 cd frontend
 npm install
 npm run dev
+```
+
+Or from the repo root:
+
+```bash
+make frontend-dev
+make frontend-build
+make frontend-typecheck
 ```
 
 Docker:

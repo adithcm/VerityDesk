@@ -151,6 +151,22 @@ Runtime requirements:
 - Node.js `>=20.9.0`
 - Python `>=3.11`
 
+This repo supports a project-local Node install at `.runtime/node-v22.23.2-darwin-arm64`. The `.runtime/` directory is ignored by git because it is machine-local.
+
+Install the project-local Node runtime:
+
+```bash
+make node-install
+```
+
+Use it in your shell with:
+
+```bash
+export PATH="$PWD/.runtime/node-v22.23.2-darwin-arm64/bin:$PATH"
+node --version
+npm --version
+```
+
 Copy the example environment file before running local services:
 
 ```bash
@@ -171,6 +187,14 @@ Run the frontend:
 cd frontend
 npm install
 npm run dev
+```
+
+From the repo root, the Makefile automatically uses the project-local Node runtime:
+
+```bash
+make frontend-dev
+make frontend-build
+make frontend-typecheck
 ```
 
 Or run both with Docker Compose:
