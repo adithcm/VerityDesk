@@ -1,4 +1,4 @@
-.PHONY: node-install backend-dev frontend-dev frontend-build frontend-typecheck compose-up compose-down
+.PHONY: node-install backend-dev backend-test backend-lint db-upgrade db-downgrade frontend-dev frontend-build frontend-typecheck compose-up compose-down
 
 LOCAL_NODE_BIN := $(CURDIR)/.runtime/node-v22.23.2-darwin-arm64/bin
 
@@ -6,7 +6,20 @@ node-install:
 	bash scripts/install-local-node.sh
 
 backend-dev:
-	cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	cd backend && ../.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+backend-test:
+	cd backend && ../.venv/bin/pytest
+
+backend-lint:
+	cd backend && ../.venv/bin/ruff check app tests
+
+db-upgrade:
+	mkdir -p backend/data
+	cd backend && ../.venv/bin/alembic upgrade head
+
+db-downgrade:
+	cd backend && ../.venv/bin/alembic downgrade -1
 
 frontend-dev:
 	cd frontend && PATH="$(LOCAL_NODE_BIN):$$PATH" npm run dev

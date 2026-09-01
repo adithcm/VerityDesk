@@ -176,9 +176,17 @@ cp .env.example .env
 Run the backend:
 
 ```bash
-cd backend
-python3 -m pip install -e ".[dev]"
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python3 -m venv .venv
+.venv/bin/pip install -e backend[dev]
+make backend-dev
+```
+
+Run backend checks and migrations from the repo root:
+
+```bash
+make backend-test
+make backend-lint
+make db-upgrade
 ```
 
 Run the frontend:
@@ -214,3 +222,4 @@ Local URLs:
 - [Implementation Phases](docs/implementation-phases.md)
 - [Phase 2 Milestone 2.1](docs/phase-2-milestone-2-1.md)
 - [Phase 2 Milestone 2.2](docs/phase-2-milestone-2-2.md)
+- [Phase 2 Milestone 2.3](docs/phase-2-milestone-2-3.md)

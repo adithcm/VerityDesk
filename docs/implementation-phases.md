@@ -68,6 +68,7 @@ Completed milestones:
 
 - Milestone 2.1: Repo and tooling scaffold.
 - Milestone 2.2: Backend foundation.
+- Milestone 2.3: Database foundation.
 
 Phase 2 does not need full live ingestion or final agent intelligence.
 

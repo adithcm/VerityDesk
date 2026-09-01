@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "FastAPI backend for InvestorAgent."
 requires-python = ">=3.11"
 dependencies = [
+  "alembic>=1.13,<2",
   "fastapi>=0.111,<0.112",
+  "sqlalchemy>=2.0,<3",
   "uvicorn[standard]>=0.30,<0.31",
   "pydantic-settings>=2.3,<3",
 ]
@@ -21,3 +23,6 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]

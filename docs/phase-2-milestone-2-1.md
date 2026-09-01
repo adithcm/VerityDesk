@@ -49,9 +49,9 @@ export PATH="$PWD/.runtime/node-v22.23.2-darwin-arm64/bin:$PATH"
 Backend:
 
 ```bash
-cd backend
-python3 -m pip install -e ".[dev]"
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python3 -m venv .venv
+.venv/bin/pip install -e backend[dev]
+make backend-dev
 ```
 
 Frontend:
