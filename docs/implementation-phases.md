@@ -40,6 +40,7 @@ Deliverables:
 
 - `frontend/` Next.js app with TypeScript.
 - `backend/` FastAPI app.
+- Modular FastAPI API structure.
 - SQLite database setup.
 - SQLAlchemy models.
 - Alembic migrations.
@@ -62,6 +63,11 @@ Deliverables:
   - Settings
 - Docker Compose local run path.
 - README local setup instructions.
+
+Completed milestones:
+
+- Milestone 2.1: Repo and tooling scaffold.
+- Milestone 2.2: Backend foundation.
 
 Phase 2 does not need full live ingestion or final agent intelligence.
 
