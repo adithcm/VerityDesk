@@ -16,6 +16,21 @@ InvestorAgent should feel like a personal market intelligence terminal:
 - Source-backed answers with citations, timestamps, and clear separation between facts and analysis.
 - Local desktop app experience for macOS, with a portable version others can run on their own machine.
 
+## News Domains
+
+InvestorAgent v1 is organized around ten news domains:
+
+1. World and Geopolitics
+2. U.S. Economy and Policy
+3. Markets and Rates
+4. Companies and Earnings
+5. Housing and Real Estate
+6. Commodities and Energy
+7. Technology and AI
+8. Banking and Credit
+9. Consumer and Labor
+10. Regulation and Legal
+
 ## Core Capabilities
 
 - Collect news and data from credible sources using APIs, RSS feeds, and compliant scraping where appropriate.
@@ -122,3 +137,7 @@ The system should respect source terms, paywalls, and `robots.txt`.
 ## Status
 
 This repository is currently in the planning and scaffolding phase.
+
+## Planning Docs
+
+- [Phase 1 Research](docs/phase-1-research.md)
