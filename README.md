@@ -195,6 +195,12 @@ Run the configured RSS ingestion sources:
 make rss-ingest
 ```
 
+Run the configured official API and dataset ingestion sources:
+
+```bash
+make official-api-ingest
+```
+
 Run the frontend:
 
 ```bash

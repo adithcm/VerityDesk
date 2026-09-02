@@ -1,4 +1,4 @@
-.PHONY: node-install backend-dev backend-test backend-lint db-upgrade db-downgrade rss-ingest frontend-dev frontend-build frontend-typecheck compose-up compose-down
+.PHONY: node-install backend-dev backend-test backend-lint db-upgrade db-downgrade rss-ingest official-api-ingest frontend-dev frontend-build frontend-typecheck compose-up compose-down
 
 LOCAL_NODE_BIN := $(CURDIR)/.runtime/node-v22.23.2-darwin-arm64/bin
 
@@ -23,6 +23,9 @@ db-downgrade:
 
 rss-ingest:
 	cd backend && ../.venv/bin/python -m app.cli.ingest_rss
+
+official-api-ingest:
+	cd backend && ../.venv/bin/python -m app.cli.ingest_official_apis
 
 frontend-dev:
 	cd frontend && PATH="$(LOCAL_NODE_BIN):$$PATH" npm run dev
