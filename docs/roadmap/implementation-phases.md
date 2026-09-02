@@ -8,7 +8,7 @@ This document tracks the full InvestorAgent implementation roadmap from planning
 
 - Phase 1: Complete
 - Phase 2: Complete
-- Phase 3: Planned
+- Phase 3: In progress
 
 ## Phase 1: Research And Planning
 
@@ -82,7 +82,7 @@ Phase 2 does not need full live ingestion or final agent intelligence.
 
 ## Phase 3: Data Ingestion
 
-Status: Planned
+Status: In progress
 
 Purpose: connect the app to direct sources and begin collecting real data.
 
@@ -108,6 +108,14 @@ Deliverables:
   - Finnhub
   - NewsAPI
   - GDELT
+
+Completed milestones:
+
+- [Milestone 3.1: Ingestion data model](../phases/phase-3/milestones/3.1-ingestion-data-model.md).
+
+Next milestone:
+
+- [Milestone 3.2: RSS ingestion foundation](../phases/phase-3/README.md#milestone-32-rss-ingestion-foundation).
 
 ## Phase 4: Agent Framework
 

@@ -137,7 +137,7 @@ The system should respect source terms, paywalls, and `robots.txt`.
 
 ## Status
 
-Phase 1 planning is complete. Phase 2 application scaffold work is complete. Phase 3 data ingestion is planned next.
+Phase 1 planning is complete. Phase 2 application scaffold work is complete. Phase 3 data ingestion is in progress.
 
 ## Local Development
 
