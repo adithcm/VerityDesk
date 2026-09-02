@@ -39,6 +39,9 @@ class Source(TimestampMixin, Base):
     articles: Mapped[list["Article"]] = relationship(back_populates="source")
     observations: Mapped[list["EconomicObservation"]] = relationship(back_populates="source")
     citations: Mapped[list["Citation"]] = relationship(back_populates="source")
+    ingestion_runs: Mapped[list["IngestionRun"]] = relationship(back_populates="source")
+    snapshots: Mapped[list["RetrievedSnapshot"]] = relationship(back_populates="source")
+    health: Mapped["SourceHealth | None"] = relationship(back_populates="source")
 
 
 class Company(TimestampMixin, Base):
@@ -80,6 +83,8 @@ class Article(TimestampMixin, Base):
 
     source: Mapped[Source] = relationship(back_populates="articles")
     citations: Mapped[list["Citation"]] = relationship(back_populates="article")
+    snapshots: Mapped[list["RetrievedSnapshot"]] = relationship(back_populates="article")
+    external_ids: Mapped[list["ExternalID"]] = relationship(back_populates="article")
 
 
 class EconomicObservation(TimestampMixin, Base):
@@ -101,6 +106,84 @@ class EconomicObservation(TimestampMixin, Base):
     region: Mapped[str | None] = mapped_column(String(160), index=True)
 
     source: Mapped[Source] = relationship(back_populates="observations")
+    external_ids: Mapped[list["ExternalID"]] = relationship(back_populates="observation")
+
+
+class IngestionRun(TimestampMixin, Base):
+    __tablename__ = "ingestion_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[int | None] = mapped_column(ForeignKey("sources.id"), index=True)
+    source_key: Mapped[str] = mapped_column(String(120), index=True)
+    run_type: Mapped[str] = mapped_column(String(80), default="manual", index=True)
+    status: Mapped[str] = mapped_column(String(80), default="pending", index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    items_seen: Mapped[int] = mapped_column(default=0)
+    items_inserted: Mapped[int] = mapped_column(default=0)
+    items_updated: Mapped[int] = mapped_column(default=0)
+    items_skipped: Mapped[int] = mapped_column(default=0)
+    error: Mapped[str | None] = mapped_column(Text)
+    run_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+
+    source: Mapped[Source | None] = relationship(back_populates="ingestion_runs")
+
+
+class SourceHealth(TimestampMixin, Base):
+    __tablename__ = "source_health"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[int | None] = mapped_column(ForeignKey("sources.id"), index=True)
+    source_key: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(80), default="not_configured", index=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    latest_item_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    latest_item_title: Mapped[str | None] = mapped_column(String(500))
+    consecutive_failures: Mapped[int] = mapped_column(default=0)
+    freshness_window_hours: Mapped[int] = mapped_column(default=24)
+    stale_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    health_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+
+    source: Mapped[Source | None] = relationship(back_populates="health")
+
+
+class RetrievedSnapshot(TimestampMixin, Base):
+    __tablename__ = "retrieved_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[int | None] = mapped_column(ForeignKey("sources.id"), index=True)
+    article_id: Mapped[int | None] = mapped_column(ForeignKey("articles.id"), index=True)
+    source_key: Mapped[str] = mapped_column(String(120), index=True)
+    url: Mapped[str] = mapped_column(String(2048), index=True)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    content_hash: Mapped[str | None] = mapped_column(String(128), index=True)
+    storage_policy: Mapped[str] = mapped_column(String(80), default="metadata_only")
+    raw_content_path: Mapped[str | None] = mapped_column(String(2048))
+    excerpt: Mapped[str | None] = mapped_column(Text)
+    response_headers: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    article: Mapped[Article | None] = relationship(back_populates="snapshots")
+    source: Mapped[Source | None] = relationship(back_populates="snapshots")
+
+
+class ExternalID(TimestampMixin, Base):
+    __tablename__ = "external_ids"
+    __table_args__ = (
+        UniqueConstraint("source_key", "external_id", "entity_type", name="uq_external_ids_source_entity"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_key: Mapped[str] = mapped_column(String(120), index=True)
+    external_id: Mapped[str] = mapped_column(String(255), index=True)
+    entity_type: Mapped[str] = mapped_column(String(80), index=True)
+    article_id: Mapped[int | None] = mapped_column(ForeignKey("articles.id"), index=True)
+    observation_id: Mapped[int | None] = mapped_column(ForeignKey("economic_observations.id"), index=True)
+    id_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+
+    article: Mapped[Article | None] = relationship(back_populates="external_ids")
+    observation: Mapped[EconomicObservation | None] = relationship(back_populates="external_ids")
 
 
 class Report(TimestampMixin, Base):
