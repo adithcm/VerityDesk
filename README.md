@@ -137,7 +137,7 @@ The system should respect source terms, paywalls, and `robots.txt`.
 
 ## Status
 
-Phase 1 planning is complete. Phase 2 application scaffold work is in progress.
+Phase 1 planning is complete. Phase 2 application scaffold work is complete. Phase 3 data ingestion is planned next.
 
 ## Local Development
 
@@ -216,6 +216,7 @@ Local URLs:
 - Frontend: `http://localhost:3000`
 - Backend health: `http://localhost:8000/health`
 - Source catalog: `http://localhost:8000/api/v1/sources`
+- Agent query: `POST http://localhost:8000/api/v1/agents/query`
 
 ## Planning Docs
 

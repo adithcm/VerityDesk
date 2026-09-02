@@ -1,13 +1,14 @@
 # Implementation Phases
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 This document tracks the full InvestorAgent implementation roadmap from planning through advanced features.
 
 ## Current Status
 
 - Phase 1: Complete
-- Phase 2: In progress
+- Phase 2: Complete
+- Phase 3: Planned
 
 ## Phase 1: Research And Planning
 
@@ -32,7 +33,7 @@ Deliverables:
 
 ## Phase 2: Application Scaffold
 
-Status: In progress
+Status: Complete
 
 Purpose: build the first runnable local app skeleton.
 
@@ -70,10 +71,12 @@ Completed milestones:
 - [Milestone 2.2: Backend foundation](../phases/phase-2/milestones/2.2-backend-foundation.md).
 - [Milestone 2.3: Database foundation](../phases/phase-2/milestones/2.3-database-foundation.md).
 - [Milestone 2.4: Source catalog foundation](../phases/phase-2/milestones/2.4-source-catalog-foundation.md).
+- [Milestone 2.5: Agent and guardrail contracts](../phases/phase-2/milestones/2.5-agent-and-guardrail-contracts.md).
+- [Milestone 2.6: Frontend shell](../phases/phase-2/milestones/2.6-frontend-shell.md).
 
-Next milestone:
+Next phase:
 
-- [Milestone 2.5: Agent and guardrail contracts](../phases/phase-2/README.md#milestone-25-agent-and-guardrail-contracts).
+- Phase 3: Data ingestion.
 
 Phase 2 does not need full live ingestion or final agent intelligence.
 
