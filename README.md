@@ -137,9 +137,89 @@ The system should respect source terms, paywalls, and `robots.txt`.
 
 ## Status
 
-Phase 1 planning is complete. Phase 2 will start the application scaffold.
+Phase 1 planning is complete. Phase 2 application scaffold work is in progress.
+
+## Local Development
+
+Phase 2 uses a split local app:
+
+- `frontend/`: Next.js with TypeScript.
+- `backend/`: FastAPI in Python.
+
+Runtime requirements:
+
+- Node.js `>=20.9.0`
+- Python `>=3.11`
+
+This repo supports a project-local Node install at `.runtime/node-v22.23.2-darwin-arm64`. The `.runtime/` directory is ignored by git because it is machine-local.
+
+Install the project-local Node runtime:
+
+```bash
+make node-install
+```
+
+Use it in your shell with:
+
+```bash
+export PATH="$PWD/.runtime/node-v22.23.2-darwin-arm64/bin:$PATH"
+node --version
+npm --version
+```
+
+Copy the example environment file before running local services:
+
+```bash
+cp .env.example .env
+```
+
+Run the backend:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e backend[dev]
+make backend-dev
+```
+
+Run backend checks and migrations from the repo root:
+
+```bash
+make backend-test
+make backend-lint
+make db-upgrade
+```
+
+Run the frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+From the repo root, the Makefile automatically uses the project-local Node runtime:
+
+```bash
+make frontend-dev
+make frontend-build
+make frontend-typecheck
+```
+
+Or run both with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Local URLs:
+
+- Frontend: `http://localhost:3000`
+- Backend health: `http://localhost:8000/health`
+- Source catalog: `http://localhost:8000/api/v1/sources`
 
 ## Planning Docs
 
-- [Phase 1 Research](docs/phase-1-research.md)
-- [Implementation Phases](docs/implementation-phases.md)
+- [Documentation Index](docs/README.md)
+- [Implementation Phases](docs/roadmap/implementation-phases.md)
+- [Phase 1](docs/phases/phase-1/README.md)
+- [Phase 2](docs/phases/phase-2/README.md)
