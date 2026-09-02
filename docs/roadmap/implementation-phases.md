@@ -112,10 +112,11 @@ Deliverables:
 Completed milestones:
 
 - [Milestone 3.1: Ingestion data model](../phases/phase-3/milestones/3.1-ingestion-data-model.md).
+- [Milestone 3.2: RSS ingestion foundation](../phases/phase-3/milestones/3.2-rss-ingestion-foundation.md).
 
 Next milestone:
 
-- [Milestone 3.2: RSS ingestion foundation](../phases/phase-3/README.md#milestone-32-rss-ingestion-foundation).
+- [Milestone 3.3: Official API ingestion foundation](../phases/phase-3/README.md#milestone-33-official-api-ingestion-foundation).
 
 ## Phase 4: Agent Framework
 

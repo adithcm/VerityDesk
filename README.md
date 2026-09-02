@@ -189,6 +189,12 @@ make backend-lint
 make db-upgrade
 ```
 
+Run the configured RSS ingestion sources:
+
+```bash
+make rss-ingest
+```
+
 Run the frontend:
 
 ```bash

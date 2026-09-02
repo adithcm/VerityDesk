@@ -5,6 +5,7 @@ description = "FastAPI backend for InvestorAgent."
 requires-python = ">=3.11"
 dependencies = [
   "alembic>=1.13,<2",
+  "certifi>=2024.7",
   "fastapi>=0.111,<0.112",
   "sqlalchemy>=2.0,<3",
   "uvicorn[standard]>=0.30,<0.31",
