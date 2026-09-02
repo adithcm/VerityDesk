@@ -215,6 +215,7 @@ Local URLs:
 
 - Frontend: `http://localhost:3000`
 - Backend health: `http://localhost:8000/health`
+- Source catalog: `http://localhost:8000/api/v1/sources`
 
 ## Planning Docs
 

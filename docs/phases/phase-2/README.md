@@ -9,31 +9,22 @@ Phase 2 builds the runnable application scaffold: frontend, backend, database fo
 - [Milestone 2.1: Repo And Tooling Scaffold](milestones/2.1-repo-and-tooling-scaffold.md)
 - [Milestone 2.2: Backend Foundation](milestones/2.2-backend-foundation.md)
 - [Milestone 2.3: Database Foundation](milestones/2.3-database-foundation.md)
+- [Milestone 2.4: Source Catalog Foundation](milestones/2.4-source-catalog-foundation.md)
 
 ## Next Milestone
 
-### Milestone 2.4: Source Catalog Foundation
+### Milestone 2.5: Agent And Guardrail Contracts
 
-Goal: add the static v1 source catalog and expose it through the backend.
+Goal: add structured agent request/response schemas, placeholder coordinator/citation/guardrail services, and a safe `POST /api/v1/agents/query` endpoint.
 
 Expected deliverables:
 
-- Source catalog config file.
-- Pydantic schemas for source catalog responses.
-- Service for loading and validating configured sources.
-- `GET /api/v1/sources` endpoint.
-- Seed entries for:
-  - BBC RSS
-  - SEC data APIs
-  - SEC EDGAR RSS
-  - FRED
-  - U.S. Census Economic Indicators
-  - FHFA HPI
-  - Freddie Mac PMMS
-  - Company investor relations pages
-  - Optional Alpha Vantage
-  - Optional Finnhub
-  - Optional NewsAPI
-  - Optional GDELT
-- Tests for source loading and the sources endpoint.
-- Docs for source metadata fields and storage policies.
+- Agent request/response schemas.
+- Claim/citation/risk schema objects.
+- Placeholder `CoordinatorAgent` service.
+- Placeholder `CitationAgent` service.
+- `RiskGuardrailAgent` skeleton.
+- Shared financial disclaimer text.
+- Basic banned direct-advice phrase checks.
+- `POST /api/v1/agents/query` endpoint returning structured placeholder output.
+- Tests for safe agent output and guardrail behavior.

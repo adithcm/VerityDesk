@@ -69,10 +69,11 @@ Completed milestones:
 - [Milestone 2.1: Repo and tooling scaffold](../phases/phase-2/milestones/2.1-repo-and-tooling-scaffold.md).
 - [Milestone 2.2: Backend foundation](../phases/phase-2/milestones/2.2-backend-foundation.md).
 - [Milestone 2.3: Database foundation](../phases/phase-2/milestones/2.3-database-foundation.md).
+- [Milestone 2.4: Source catalog foundation](../phases/phase-2/milestones/2.4-source-catalog-foundation.md).
 
 Next milestone:
 
-- [Milestone 2.4: Source catalog foundation](../phases/phase-2/README.md#milestone-24-source-catalog-foundation).
+- [Milestone 2.5: Agent and guardrail contracts](../phases/phase-2/README.md#milestone-25-agent-and-guardrail-contracts).
 
 Phase 2 does not need full live ingestion or final agent intelligence.
 
