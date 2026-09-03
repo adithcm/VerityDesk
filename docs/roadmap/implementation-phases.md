@@ -144,9 +144,12 @@ Deliverables:
 - Agent routing based on user intent, domains, tickers, companies, and regions.
 - Structured agent outputs with citations and confidence levels.
 
-Planned milestones:
+Completed milestones:
 
 - [Milestone 4.1: Agent runtime foundation](../phases/phase-4/milestones/4.1-agent-runtime-foundation.md).
+
+Planned milestones:
+
 - [Milestone 4.2: Research data access layer](../phases/phase-4/milestones/4.2-research-data-access-layer.md).
 - [Milestone 4.3: Domain agent implementations](../phases/phase-4/milestones/4.3-domain-agent-implementations.md).
 - [Milestone 4.4: Coordinator routing and synthesis](../phases/phase-4/milestones/4.4-coordinator-routing-and-synthesis.md).

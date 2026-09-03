@@ -4,9 +4,45 @@ Status: In progress
 
 Phase 4 adds the multi-agent research system on top of the Phase 3 ingestion foundation. The goal is to turn collected source data into structured, cited, guardrail-safe research responses.
 
-## Planned Milestones
+## Architecture Flow
+
+```mermaid
+flowchart TD
+    user["User question"] --> api["Agent API"]
+    api --> coordinator["CoordinatorAgent"]
+    coordinator --> routing["Deterministic routing"]
+    routing --> news["NewsDigestAgent"]
+    routing --> company["CompanyAgent"]
+    routing --> market["MarketAgent"]
+    routing --> macro["MacroAgent"]
+    routing --> housing["HousingAgent"]
+    news --> synthesis["Synthesis layer"]
+    company --> synthesis
+    market --> synthesis
+    macro --> synthesis
+    housing --> synthesis
+    synthesis --> citations["CitationAgent"]
+    citations --> guardrails["RiskGuardrailAgent"]
+    guardrails --> response["Cited, risk-aware response"]
+```
+
+## Data Flow
+
+```mermaid
+flowchart LR
+    ingestion["Phase 3 ingested data"] --> access["Research data access layer"]
+    access --> agents["Domain agents"]
+    agents --> claims["Structured claims"]
+    claims --> cited["Citations and retrieved timestamps"]
+    cited --> guarded["Guardrail-checked answer"]
+```
+
+## Completed Milestones
 
 - [Milestone 4.1: Agent Runtime Foundation](milestones/4.1-agent-runtime-foundation.md)
+
+## Planned Milestones
+
 - [Milestone 4.2: Research Data Access Layer](milestones/4.2-research-data-access-layer.md)
 - [Milestone 4.3: Domain Agent Implementations](milestones/4.3-domain-agent-implementations.md)
 - [Milestone 4.4: Coordinator Routing And Synthesis](milestones/4.4-coordinator-routing-and-synthesis.md)

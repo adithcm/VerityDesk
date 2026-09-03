@@ -45,6 +45,29 @@ class AgentCitation(BaseModel):
     supports_claim: str
 
 
+class AgentContext(BaseModel):
+    request_id: str
+    user_query: str
+    intent: AgentIntent
+    domains: list[str] = Field(default_factory=list)
+    tickers: list[str] = Field(default_factory=list)
+    companies: list[str] = Field(default_factory=list)
+    regions: list[str] = Field(default_factory=list)
+    time_window: str | None = None
+    source_ids: list[str] = Field(default_factory=list)
+    safety_level: SafetyLevel = "investment_research"
+
+
+class AgentResult(BaseModel):
+    agent_name: str
+    summary: str
+    claims: list[AgentClaim] = Field(default_factory=list)
+    citations: list[AgentCitation] = Field(default_factory=list)
+    confidence: ConfidenceLevel = "low"
+    risks: list[str] = Field(default_factory=list)
+    follow_up_questions: list[str] = Field(default_factory=list)
+
+
 class GuardrailCheck(BaseModel):
     status: GuardrailStatus
     disclaimer: str
