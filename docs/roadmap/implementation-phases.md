@@ -147,10 +147,10 @@ Deliverables:
 Completed milestones:
 
 - [Milestone 4.1: Agent runtime foundation](../phases/phase-4/milestones/4.1-agent-runtime-foundation.md).
+- [Milestone 4.2: Research data access layer](../phases/phase-4/milestones/4.2-research-data-access-layer.md).
 
 Planned milestones:
 
-- [Milestone 4.2: Research data access layer](../phases/phase-4/milestones/4.2-research-data-access-layer.md).
 - [Milestone 4.3: Domain agent implementations](../phases/phase-4/milestones/4.3-domain-agent-implementations.md).
 - [Milestone 4.4: Coordinator routing and synthesis](../phases/phase-4/milestones/4.4-coordinator-routing-and-synthesis.md).
 - [Milestone 4.5: Citations and guardrail enforcement](../phases/phase-4/milestones/4.5-citations-and-guardrails.md).
