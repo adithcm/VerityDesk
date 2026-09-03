@@ -195,6 +195,12 @@ Run the configured RSS ingestion sources:
 make rss-ingest
 ```
 
+Run the configured official API and dataset ingestion sources:
+
+```bash
+make official-api-ingest
+```
+
 Run the frontend:
 
 ```bash
@@ -223,6 +229,7 @@ Local URLs:
 - Backend health: `http://localhost:8000/health`
 - Source catalog: `http://localhost:8000/api/v1/sources`
 - Agent query: `POST http://localhost:8000/api/v1/agents/query`
+- Ingestion run: `POST http://localhost:8000/api/v1/ingestion/run`
 
 ## Planning Docs
 

@@ -113,10 +113,12 @@ Completed milestones:
 
 - [Milestone 3.1: Ingestion data model](../phases/phase-3/milestones/3.1-ingestion-data-model.md).
 - [Milestone 3.2: RSS ingestion foundation](../phases/phase-3/milestones/3.2-rss-ingestion-foundation.md).
+- [Milestone 3.3: Official API ingestion foundation](../phases/phase-3/milestones/3.3-official-api-ingestion-foundation.md).
+- [Milestone 3.4: Source scheduler](../phases/phase-3/milestones/3.4-source-scheduler.md).
 
 Next milestone:
 
-- [Milestone 3.3: Official API ingestion foundation](../phases/phase-3/README.md#milestone-33-official-api-ingestion-foundation).
+- [Milestone 3.5: Source health and freshness API](../phases/phase-3/README.md#milestone-35-source-health-and-freshness-api).
 
 ## Phase 4: Agent Framework
 
