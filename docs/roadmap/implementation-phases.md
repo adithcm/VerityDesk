@@ -116,10 +116,11 @@ Completed milestones:
 - [Milestone 3.3: Official API ingestion foundation](../phases/phase-3/milestones/3.3-official-api-ingestion-foundation.md).
 - [Milestone 3.4: Source scheduler](../phases/phase-3/milestones/3.4-source-scheduler.md).
 - [Milestone 3.5: Source health and freshness API](../phases/phase-3/milestones/3.5-source-health-and-freshness-api.md).
+- [Milestone 3.6: Frontend ingestion visibility](../phases/phase-3/milestones/3.6-frontend-ingestion-visibility.md).
 
 Next milestone:
 
-- [Milestone 3.6: Frontend ingestion visibility](../phases/phase-3/README.md#milestone-36-frontend-ingestion-visibility).
+- [Milestone 3.7: Phase 3 validation and docs](../phases/phase-3/milestones/3.7-phase-3-validation-and-docs.md).
 
 ## Phase 4: Agent Framework
 
