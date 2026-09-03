@@ -230,6 +230,8 @@ Local URLs:
 - Source catalog: `http://localhost:8000/api/v1/sources`
 - Agent query: `POST http://localhost:8000/api/v1/agents/query`
 - Ingestion run: `POST http://localhost:8000/api/v1/ingestion/run`
+- Ingestion health: `http://localhost:8000/api/v1/ingestion/health`
+- Latest ingested items: `http://localhost:8000/api/v1/ingestion/latest-items`
 
 ## Planning Docs
 
