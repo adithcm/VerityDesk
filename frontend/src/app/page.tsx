@@ -120,6 +120,13 @@ type LatestItemsResponse = {
   total: number;
 };
 
+type DailyScheduleConfig = {
+  enabled: boolean;
+  local_time: string;
+  timezone: string;
+  mode: RunMode;
+};
+
 type IngestionRunResponse = {
   request_id: string;
   mode: RunMode;
@@ -170,6 +177,7 @@ export default function Home() {
   const [healthData, setHealthData] = useState<SourceHealthResponse | null>(null);
   const [runsData, setRunsData] = useState<IngestionRunHistoryResponse | null>(null);
   const [latestItemsData, setLatestItemsData] = useState<LatestItemsResponse | null>(null);
+  const [scheduleData, setScheduleData] = useState<DailyScheduleConfig | null>(null);
   const [ingestionError, setIngestionError] = useState<string | null>(null);
   const [ingestionLoading, setIngestionLoading] = useState(true);
   const [runMode, setRunMode] = useState<RunMode>("all");
@@ -204,19 +212,21 @@ export default function Home() {
     setIngestionError(null);
 
     try {
-      const [healthResponse, runsResponse, latestItemsResponse] = await Promise.all([
+      const [healthResponse, runsResponse, latestItemsResponse, scheduleResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/api/v1/ingestion/health`, { cache: "no-store" }),
         fetch(`${API_BASE_URL}/api/v1/ingestion/runs?limit=8`, { cache: "no-store" }),
         fetch(`${API_BASE_URL}/api/v1/ingestion/latest-items?limit=10`, { cache: "no-store" }),
+        fetch(`${API_BASE_URL}/api/v1/ingestion/schedule`, { cache: "no-store" }),
       ]);
 
-      if (!healthResponse.ok || !runsResponse.ok || !latestItemsResponse.ok) {
+      if (!healthResponse.ok || !runsResponse.ok || !latestItemsResponse.ok || !scheduleResponse.ok) {
         throw new Error("Could not load ingestion status");
       }
 
       setHealthData((await healthResponse.json()) as SourceHealthResponse);
       setRunsData((await runsResponse.json()) as IngestionRunHistoryResponse);
       setLatestItemsData((await latestItemsResponse.json()) as LatestItemsResponse);
+      setScheduleData((await scheduleResponse.json()) as DailyScheduleConfig);
     } catch (error) {
       setIngestionError(error instanceof Error ? error.message : "Could not load ingestion status");
     } finally {
@@ -300,7 +310,7 @@ export default function Home() {
               <h1 className="mt-1 text-xl font-semibold">Market Workspace</h1>
             </div>
             <div className="rounded-md border border-[#d7dee3] px-2 py-1 text-xs font-medium text-[#4b5563]">
-              Phase 3.6
+              Phase 3.7
             </div>
           </div>
 
@@ -343,6 +353,7 @@ export default function Home() {
                 healthData={healthData}
                 runsData={runsData}
                 latestItemsData={latestItemsData}
+                scheduleData={scheduleData}
                 ingestionError={ingestionError}
                 ingestionLoading={ingestionLoading}
                 runMode={runMode}
@@ -380,7 +391,7 @@ export default function Home() {
                 submitAgentQuery={submitAgentQuery}
               />
             )}
-            {activeView === "Settings" && <SettingsView healthData={healthData} />}
+            {activeView === "Settings" && <SettingsView healthData={healthData} scheduleData={scheduleData} />}
           </div>
         </section>
       </div>
@@ -426,6 +437,7 @@ function DashboardView({
   healthData,
   runsData,
   latestItemsData,
+  scheduleData,
   ingestionError,
   ingestionLoading,
   runMode,
@@ -441,6 +453,7 @@ function DashboardView({
   healthData: SourceHealthResponse | null;
   runsData: IngestionRunHistoryResponse | null;
   latestItemsData: LatestItemsResponse | null;
+  scheduleData: DailyScheduleConfig | null;
   ingestionError: string | null;
   ingestionLoading: boolean;
   runMode: RunMode;
@@ -491,6 +504,8 @@ function DashboardView({
         )}
       </section>
 
+      <SchedulerStatusCard scheduleData={scheduleData} runsData={runsData} loading={ingestionLoading} />
+
       <section className="rounded-md border border-[#d7dee3] bg-white p-4 xl:col-span-2">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold">Latest Items</h3>
@@ -538,6 +553,37 @@ function IngestionRunControl({
         {runLoading ? "Running" : "Run Ingestion"}
       </button>
     </div>
+  );
+}
+
+function SchedulerStatusCard({
+  scheduleData,
+  runsData,
+  loading,
+}: {
+  scheduleData: DailyScheduleConfig | null;
+  runsData: IngestionRunHistoryResponse | null;
+  loading: boolean;
+}) {
+  const lastRun = runsData?.runs.find((run) => run.completed_at || run.started_at);
+
+  return (
+    <section className="rounded-md border border-[#d7dee3] bg-white p-4 xl:col-span-2">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <h3 className="text-lg font-semibold">Daily Run</h3>
+        <StatusBadge status={scheduleData?.enabled ? "enabled" : "off"} />
+      </div>
+      {loading ? (
+        <p className="mt-4 rounded-md bg-[#f8fafb] p-3 text-sm text-[#5b6573]">Loading schedule.</p>
+      ) : (
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <SettingRow label="Daily Run" value={scheduleData?.enabled ? "On" : "Off"} />
+          <SettingRow label="Scheduled Time" value={formatScheduleTime(scheduleData)} />
+          <SettingRow label="Run Mode" value={formatRunMode(scheduleData?.mode)} />
+          <SettingRow label="Last Run" value={formatDateTime(lastRun?.completed_at ?? lastRun?.started_at)} />
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -757,7 +803,13 @@ function AgentChatView({
   );
 }
 
-function SettingsView({ healthData }: { healthData: SourceHealthResponse | null }) {
+function SettingsView({
+  healthData,
+  scheduleData,
+}: {
+  healthData: SourceHealthResponse | null;
+  scheduleData: DailyScheduleConfig | null;
+}) {
   return (
     <section className="rounded-md border border-[#d7dee3] bg-white p-4">
       <h3 className="text-lg font-semibold">Settings</h3>
@@ -766,6 +818,8 @@ function SettingsView({ healthData }: { healthData: SourceHealthResponse | null 
         <SettingRow label="Source Mode" value="Catalog and ingestion status" />
         <SettingRow label="Storage" value="Local SQLite" />
         <SettingRow label="Tracked Sources" value={String(healthData?.total ?? 0)} />
+        <SettingRow label="Daily Run" value={scheduleData?.enabled ? "On" : "Off"} />
+        <SettingRow label="Scheduled Time" value={formatScheduleTime(scheduleData)} />
       </div>
     </section>
   );
@@ -804,7 +858,10 @@ function LatestItemsList({
             <p className="mt-1 text-sm text-[#5b6573]">{item.summary ?? observationSummary(item)}</p>
           </div>
           <p className="text-sm text-[#374151]">{item.source_name ?? item.source_key}</p>
-          <p className="text-sm text-[#5b6573]">{formatDateTime(item.retrieved_at)}</p>
+          <div>
+            <p className="text-xs font-semibold uppercase text-[#5b6573]">Retrieved At</p>
+            <p className="mt-1 text-sm text-[#5b6573]">{formatDateTime(item.retrieved_at)}</p>
+          </div>
         </div>
       ))}
     </div>
@@ -837,7 +894,7 @@ function RecentRunsTable({
         <span>Status</span>
         <span>Inserted</span>
         <span>Updated</span>
-        <span>Completed</span>
+        <span>Completed At</span>
       </div>
       <div className="divide-y divide-[#e5eaf0]">
         {runsData.runs.map((run) => (
@@ -956,6 +1013,41 @@ function formatDateTime(value: string | null | undefined) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatScheduleTime(scheduleData: DailyScheduleConfig | null) {
+  if (!scheduleData) {
+    return "--";
+  }
+
+  return `${formatClockTime(scheduleData.local_time)} ${scheduleData.timezone}`;
+}
+
+function formatClockTime(value: string) {
+  const [hourPart, minutePart = "00"] = value.split(":");
+  const hour = Number(hourPart);
+  const minute = Number(minutePart);
+
+  if (Number.isNaN(hour) || Number.isNaN(minute)) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(2026, 0, 1, hour, minute));
+}
+
+function formatRunMode(mode: RunMode | undefined) {
+  if (mode === "rss") {
+    return "RSS only";
+  }
+
+  if (mode === "official_api") {
+    return "Official APIs only";
+  }
+
+  return "All sources";
 }
 
 function observationSummary(item: LatestIngestedItem) {

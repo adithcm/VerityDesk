@@ -82,7 +82,7 @@ Phase 2 does not need full live ingestion or final agent intelligence.
 
 ## Phase 3: Data Ingestion
 
-Status: In progress
+Status: Complete
 
 Purpose: connect the app to direct sources and begin collecting real data.
 
@@ -117,10 +117,11 @@ Completed milestones:
 - [Milestone 3.4: Source scheduler](../phases/phase-3/milestones/3.4-source-scheduler.md).
 - [Milestone 3.5: Source health and freshness API](../phases/phase-3/milestones/3.5-source-health-and-freshness-api.md).
 - [Milestone 3.6: Frontend ingestion visibility](../phases/phase-3/milestones/3.6-frontend-ingestion-visibility.md).
-
-Next milestone:
-
 - [Milestone 3.7: Phase 3 validation and docs](../phases/phase-3/milestones/3.7-phase-3-validation-and-docs.md).
+
+Next phase:
+
+- Phase 4: Agent Framework.
 
 ## Phase 4: Agent Framework
 
@@ -159,6 +160,18 @@ Deliverables:
 - Scenario framing.
 - Required risks and uncertainty sections.
 - Required disclaimer in investment-oriented reports.
+- Economic observation cleanup:
+  - Friendly labels for FRED series IDs such as `UNRATE`, `FEDFUNDS`, and `MORTGAGE30US`.
+  - Grouped economic observations so repeated FRED records do not dominate the UI or reports.
+  - Clear separation between article/news items and structured economic data points.
+- Source expansion:
+  - Finish Census Economic Indicators connector.
+  - Finish FHFA House Price Index connector.
+  - Finish Freddie Mac PMMS connector.
+  - Add optional API-key connectors for Alpha Vantage, Finnhub, NewsAPI, and GDELT.
+- Scheduler hardening:
+  - Persist scheduler settings.
+  - Enable true automatic daily background ingestion.
 
 ## Phase 6: Full UI Dashboard
 
@@ -178,6 +191,7 @@ Deliverables:
 - Agent chat workspace.
 - Settings and API-key status.
 - Domain filters for the ten news categories.
+- User-friendly source status explanations for skipped, not configured, placeholder, and missing API-key states.
 
 ## Phase 7: Local Desktop App
 
