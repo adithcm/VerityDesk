@@ -1,6 +1,6 @@
 # Phase 5
 
-Status: Planned
+Status: In Progress
 
 Phase 5 turns the Phase 3 ingestion foundation and Phase 4 agent framework into durable research outputs: daily briefings, company reports, market strategy notes, housing/macro reports, saved report history, and clearer evidence presentation.
 
@@ -19,11 +19,10 @@ flowchart TD
 
 ## Completed Milestones
 
-None yet.
+- [Milestone 5.1: Report Data Model And API Contracts](milestones/5.1-report-data-model-and-api-contracts.md)
 
 ## Planned Milestones
 
-- [Milestone 5.1: Report Data Model And API Contracts](milestones/5.1-report-data-model-and-api-contracts.md)
 - [Milestone 5.2: Evidence Cleanup And Source Data Quality](milestones/5.2-evidence-cleanup-and-source-data-quality.md)
 - [Milestone 5.3: Daily Briefing Generator](milestones/5.3-daily-briefing-generator.md)
 - [Milestone 5.4: Company Research Report Generator](milestones/5.4-company-research-report-generator.md)
