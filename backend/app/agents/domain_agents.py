@@ -170,6 +170,8 @@ def build_citations(
                 title=article.citation.title,
                 url=article.citation.url,
                 publisher=article.publisher or article.source_name,
+                published_at=article.published_at,
+                retrieved_at=article.retrieved_at,
                 supports_claim=article.citation.supports_claim,
             )
         )
@@ -180,6 +182,8 @@ def build_citations(
                 source_id=observation.source_id,
                 title=observation.citation.title,
                 publisher=observation.source_name,
+                published_at=observation.released_at,
+                retrieved_at=observation.retrieved_at,
                 supports_claim=observation.citation.supports_claim,
             )
         )

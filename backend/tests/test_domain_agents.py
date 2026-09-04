@@ -11,7 +11,7 @@ from app.agents.domain_agents import (
     NewsDigestAgent,
     build_domain_agents,
 )
-from app.agents.model_client import TemplateResearchSummarizer, extract_response_text
+from app.agents.model_client import TemplateResearchSummarizer, extract_response_text, output_item_types
 from app.db.base import Base
 from app.db.models import Article, EconomicObservation, Source
 from app.schemas.agent import AgentContext
@@ -253,3 +253,9 @@ def test_extract_response_text_handles_nested_output_content() -> None:
     body = {"output": [{"content": [{"text": "first"}, {"text": "second"}]}]}
 
     assert extract_response_text(body) == "first\nsecond"
+
+
+def test_output_item_types_summarizes_raw_response_shape() -> None:
+    body = {"output": [{"type": "reasoning"}, {"type": "message"}, {"content": []}, "ignored"]}
+
+    assert output_item_types(body) == ["reasoning", "message", "unknown"]

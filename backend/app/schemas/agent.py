@@ -42,6 +42,8 @@ class AgentCitation(BaseModel):
     title: str
     url: str | None = None
     publisher: str | None = None
+    published_at: str | None = None
+    retrieved_at: str | None = None
     supports_claim: str
 
 
@@ -74,6 +76,7 @@ class GuardrailCheck(BaseModel):
     issues: list[str] = Field(default_factory=list)
     banned_phrases_found: list[str] = Field(default_factory=list)
     required_sections: list[str] = Field(default_factory=list)
+    rewritten_text: str | None = None
 
 
 class AgentQueryResponse(BaseModel):
@@ -87,3 +90,18 @@ class AgentQueryResponse(BaseModel):
     follow_up_questions: list[str]
     guardrail: GuardrailCheck
     requires_guardrail_review: bool
+
+
+class AgentRunRecord(BaseModel):
+    id: int
+    request_id: str
+    agent_name: str
+    status: str
+    started_at: str | None = None
+    completed_at: str | None = None
+    error: str | None = None
+
+
+class AgentRunHistoryResponse(BaseModel):
+    runs: list[AgentRunRecord]
+    total: int

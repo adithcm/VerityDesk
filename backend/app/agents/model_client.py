@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import ssl
 from typing import Protocol
 from urllib.error import HTTPError, URLError
@@ -9,6 +10,9 @@ from urllib.request import Request, urlopen
 import certifi
 
 from app.core.config import Settings, get_settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class ResearchSummarizer(Protocol):
@@ -34,6 +38,7 @@ class OpenAIResearchSummarizer:
 
     def summarize(self, *, agent_name: str, instructions: str, evidence: str) -> str:
         if not self.settings.openai_api_key:
+            logger.info("OpenAI API key not configured; using template summarizer for %s", agent_name)
             return TemplateResearchSummarizer().summarize(
                 agent_name=agent_name,
                 instructions=instructions,
@@ -43,7 +48,8 @@ class OpenAIResearchSummarizer:
         payload = {
             "model": self.settings.openai_model,
             "store": False,
-            "max_output_tokens": 500,
+            "max_output_tokens": 1200,
+            "reasoning": {"effort": "minimal"},
             "input": build_prompt(agent_name, instructions, evidence),
         }
         request = Request(
@@ -57,21 +63,40 @@ class OpenAIResearchSummarizer:
         )
 
         try:
+            logger.info("Calling OpenAI model %s for %s", self.settings.openai_model, agent_name)
             context = ssl.create_default_context(cafile=certifi.where())
             with urlopen(request, timeout=30, context=context) as response:
                 body = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+        except HTTPError as error:
+            logger.warning("OpenAI request failed for %s with status %s; using template fallback", agent_name, error.code)
+            return TemplateResearchSummarizer().summarize(
+                agent_name=agent_name,
+                instructions=instructions,
+                evidence=evidence,
+            )
+        except (URLError, TimeoutError, json.JSONDecodeError) as error:
+            logger.warning("OpenAI request failed for %s: %s; using template fallback", agent_name, error)
             return TemplateResearchSummarizer().summarize(
                 agent_name=agent_name,
                 instructions=instructions,
                 evidence=evidence,
             )
 
-        return extract_response_text(body) or TemplateResearchSummarizer().summarize(
-            agent_name=agent_name,
-            instructions=instructions,
-            evidence=evidence,
+        text = extract_response_text(body)
+        if text:
+            logger.info("OpenAI response received for %s", agent_name)
+            return text
+
+        logger.warning(
+            "OpenAI response for %s did not contain text; status=%s incomplete_details=%s output_types=%s usage=%s; "
+            "using template fallback",
+            agent_name,
+            body.get("status"),
+            body.get("incomplete_details"),
+            output_item_types(body),
+            body.get("usage"),
         )
+        return TemplateResearchSummarizer().summarize(agent_name=agent_name, instructions=instructions, evidence=evidence)
 
 
 def build_default_summarizer(settings: Settings | None = None) -> ResearchSummarizer:
@@ -89,6 +114,10 @@ def build_prompt(agent_name: str, instructions: str, evidence: str) -> str:
         f"Agent instructions:\n{instructions}\n\n"
         f"Evidence:\n{evidence}"
     )
+
+
+def output_item_types(body: dict) -> list[str]:
+    return [item.get("type", "unknown") for item in body.get("output", []) if isinstance(item, dict)]
 
 
 def extract_response_text(body: dict) -> str | None:

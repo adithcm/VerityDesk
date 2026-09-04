@@ -45,6 +45,29 @@ SEC_ATOM_SAMPLE = b"""<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+DUPLICATE_EXTERNAL_ID_RSS_SAMPLE = b"""<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+  <channel>
+    <title>BBC News</title>
+    <item>
+      <title>Markets rise as investors assess rates</title>
+      <link>https://www.bbc.com/news/business-1</link>
+      <guid>bbc-business-duplicate</guid>
+      <pubDate>Wed, 02 Sep 2026 14:30:00 GMT</pubDate>
+      <description>Global markets moved higher.</description>
+    </item>
+    <item>
+      <title>Markets rise as investors assess rates again</title>
+      <link>https://www.bbc.com/news/business-1</link>
+      <guid>bbc-business-duplicate</guid>
+      <pubDate>Wed, 02 Sep 2026 15:00:00 GMT</pubDate>
+      <description>Global markets kept moving.</description>
+    </item>
+  </channel>
+</rss>
+"""
+
+
 def build_config(source_key: str = "bbc-news-rss") -> RSSFeedConfig:
     return RSSFeedConfig(
         source_key=source_key,
@@ -169,6 +192,33 @@ def test_ingest_rss_feed_deduplicates_existing_external_id(monkeypatch) -> None:
         assert len(articles) == 1
         assert len(snapshots) == 2
         assert len(runs) == 2
+
+
+def test_ingest_rss_feed_handles_duplicate_external_ids_in_same_feed(monkeypatch) -> None:
+    retrieved_at = datetime(2026, 9, 2, 16, 0, tzinfo=UTC)
+
+    def fake_fetch(config: RSSFeedConfig) -> FetchedFeed:
+        return FetchedFeed(
+            url=config.feed_url,
+            body=DUPLICATE_EXTERNAL_ID_RSS_SAMPLE,
+            response_headers={},
+            retrieved_at=retrieved_at,
+        )
+
+    monkeypatch.setattr(rss_ingestion, "fetch_rss_feed", fake_fetch)
+
+    with build_session() as session:
+        result = ingest_rss_feed(session, build_config())
+
+        articles = session.scalars(select(Article)).all()
+        external_ids = session.scalars(select(ExternalID)).all()
+
+        assert result.status == "success"
+        assert result.items_seen == 2
+        assert result.items_inserted == 1
+        assert result.items_updated == 1
+        assert len(articles) == 1
+        assert len(external_ids) == 1
 
 
 def test_ingest_rss_feed_logs_failure_and_health(monkeypatch) -> None:

@@ -188,9 +188,17 @@ def ingest_rss_feed(session: Session, config: RSSFeedConfig) -> IngestionResult:
     except Exception as error:
         completed_at = datetime.now(UTC)
         message = str(error)
-        run.status = "failed"
-        run.completed_at = completed_at
-        run.error = message
+        session.rollback()
+        run = IngestionRun(
+            source_key=config.source_key,
+            run_type="manual",
+            status="failed",
+            started_at=started_at,
+            completed_at=completed_at,
+            error=message,
+            run_metadata={"feed_url": config.feed_url},
+        )
+        session.add(run)
         update_source_health_failure(session, config, started_at, message)
         session.commit()
 
@@ -351,6 +359,36 @@ def upsert_article_from_entry(
 
 def find_existing_article(session: Session, entry: NormalizedFeedEntry) -> Article | None:
     if entry.external_id:
+        pending_external_id = find_pending_external_id(session, entry)
+        if pending_external_id and pending_external_id.article:
+            return pending_external_id.article
+
+        with session.no_autoflush:
+            existing_external_id = session.scalar(
+                select(ExternalID).where(
+                    ExternalID.source_key == entry.source_key,
+                    ExternalID.external_id == entry.external_id,
+                    ExternalID.entity_type == "article",
+                )
+            )
+        if existing_external_id and existing_external_id.article:
+            return existing_external_id.article
+
+    with session.no_autoflush:
+        return session.scalar(
+            select(Article).where(
+                (Article.url == entry.url) | (Article.canonical_url == entry.canonical_url)
+            )
+        )
+
+
+def ensure_external_id(session: Session, article: Article, entry: NormalizedFeedEntry) -> None:
+    pending_external_id = find_pending_external_id(session, entry)
+    if pending_external_id:
+        pending_external_id.article = article
+        return
+
+    with session.no_autoflush:
         existing_external_id = session.scalar(
             select(ExternalID).where(
                 ExternalID.source_key == entry.source_key,
@@ -358,24 +396,6 @@ def find_existing_article(session: Session, entry: NormalizedFeedEntry) -> Artic
                 ExternalID.entity_type == "article",
             )
         )
-        if existing_external_id and existing_external_id.article:
-            return existing_external_id.article
-
-    return session.scalar(
-        select(Article).where(
-            (Article.url == entry.url) | (Article.canonical_url == entry.canonical_url)
-        )
-    )
-
-
-def ensure_external_id(session: Session, article: Article, entry: NormalizedFeedEntry) -> None:
-    existing_external_id = session.scalar(
-        select(ExternalID).where(
-            ExternalID.source_key == entry.source_key,
-            ExternalID.external_id == entry.external_id,
-            ExternalID.entity_type == "article",
-        )
-    )
 
     if existing_external_id:
         existing_external_id.article = article
@@ -390,6 +410,20 @@ def ensure_external_id(session: Session, article: Article, entry: NormalizedFeed
             id_metadata={"canonical_url": entry.canonical_url},
         )
     )
+
+
+def find_pending_external_id(session: Session, entry: NormalizedFeedEntry) -> ExternalID | None:
+    for instance in session.new:
+        if not isinstance(instance, ExternalID):
+            continue
+        if (
+            instance.source_key == entry.source_key
+            and instance.external_id == entry.external_id
+            and instance.entity_type == "article"
+        ):
+            return instance
+
+    return None
 
 
 def add_retrieved_snapshot(
