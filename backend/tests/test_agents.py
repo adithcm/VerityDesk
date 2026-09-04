@@ -2,11 +2,13 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.agents.model_client import TemplateResearchSummarizer
-from app.schemas.agent import AgentContext, AgentResult
+from app.schemas.agent import AgentCitation, AgentContext, AgentQueryRequest, AgentResult
 from app.services import agents
+from app.services.citations import format_citation, format_sources_section
 from app.services.guardrails import (
     FINANCIAL_DISCLAIMER,
     check_investment_guardrails,
+    enforce_agent_guardrails,
     find_banned_direct_advice_phrases,
 )
 
@@ -111,3 +113,103 @@ def test_synthesis_preserves_specialist_outputs_and_risks() -> None:
     assert "Coordinator selected: MarketAgent." in result
     assert "MarketAgent: Rates are central to the setup." in result
     assert "Evidence is limited." in result
+
+
+def test_citation_format_includes_source_dates_and_url() -> None:
+    citation = AgentCitation(
+        source_id="bbc-news-rss",
+        title="Markets react",
+        url="https://example.com/markets",
+        publisher="BBC",
+        published_at="2026-09-04T12:00:00+00:00",
+        retrieved_at="2026-09-04T13:00:00+00:00",
+        supports_claim="Markets reacted to rate expectations.",
+    )
+
+    formatted = format_citation(citation)
+
+    assert "Markets react" in formatted
+    assert "BBC" in formatted
+    assert "published 2026-09-04T12:00:00+00:00" in formatted
+    assert "retrieved 2026-09-04T13:00:00+00:00" in formatted
+    assert "https://example.com/markets" in formatted
+
+
+def test_sources_section_handles_missing_citations() -> None:
+    assert format_sources_section([]) == "Sources:\n- No source citations were available for this response."
+
+
+def test_agent_guardrail_blocks_direct_investment_advice() -> None:
+    check = enforce_agent_guardrails(
+        f"{FINANCIAL_DISCLAIMER} You should buy this stock.",
+        request=AgentQueryRequest(user_query="Should I buy SPY?"),
+        citations=[
+            AgentCitation(
+                source_id="bbc-news-rss",
+                title="Markets react",
+                supports_claim="Markets moved.",
+            )
+        ],
+        confidence="medium",
+    )
+
+    assert check.status == "blocked"
+    assert "you should buy" in check.banned_phrases_found
+    assert check.rewritten_text is not None
+    assert "you should buy" not in check.rewritten_text.lower()
+
+
+def test_agent_guardrail_flags_low_confidence_without_citations() -> None:
+    check = enforce_agent_guardrails(
+        f"{FINANCIAL_DISCLAIMER} I do not have enough current source-backed evidence.",
+        request=AgentQueryRequest(user_query="What happens to stocks?", safety_level="investment_research"),
+        citations=[],
+        confidence="low",
+    )
+
+    assert check.status == "needs_revision"
+    assert "Investment-oriented response has no citations." in check.issues
+    assert "Response confidence is low; answer must clearly state uncertainty." in check.issues
+
+
+def test_agent_guardrail_flags_unsupported_price_targets() -> None:
+    check = enforce_agent_guardrails(
+        f"{FINANCIAL_DISCLAIMER} A price target could move to $500.",
+        request=AgentQueryRequest(user_query="What is the target?"),
+        citations=[
+            AgentCitation(
+                source_id="sec-edgar-rss",
+                title="Company filing",
+                supports_claim="Company filed annual report.",
+            )
+        ],
+        confidence="medium",
+    )
+
+    assert check.status == "needs_revision"
+    assert "Output contains an unsupported price-target style statement." in check.issues
+
+
+def test_build_agent_response_uses_rewritten_safe_summary() -> None:
+    response = agents.build_agent_response(
+        "request-1",
+        [
+            AgentResult(
+                agent_name="MarketAgent",
+                summary=f"{FINANCIAL_DISCLAIMER} You should sell this stock.",
+                confidence="medium",
+                citations=[
+                    AgentCitation(
+                        source_id="bbc-news-rss",
+                        title="Markets react",
+                        supports_claim="Markets moved.",
+                    )
+                ],
+            )
+        ],
+        AgentQueryRequest(user_query="Should I sell?"),
+    )
+
+    assert response.guardrail.status == "blocked"
+    assert "you should sell" not in response.summary.lower()
+    assert response.requires_guardrail_review is True

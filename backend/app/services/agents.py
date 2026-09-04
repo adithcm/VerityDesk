@@ -12,7 +12,8 @@ from app.agents.domain_agents import (
 from app.agents.model_client import build_default_summarizer
 from app.schemas.agent import AgentCitation, AgentContext, AgentQueryRequest, AgentQueryResponse, AgentResult
 from app.services.agent_runtime import AgentRegistry, AgentRunLogger, AgentRuntime, build_agent_context
-from app.services.guardrails import FINANCIAL_DISCLAIMER, check_investment_guardrails
+from app.services.citations import format_sources_section
+from app.services.guardrails import FINANCIAL_DISCLAIMER, enforce_agent_guardrails
 from app.services.research_evidence import ResearchEvidenceRepository
 
 
@@ -47,17 +48,29 @@ def build_default_registry(session: Session | None = None) -> AgentRegistry:
     return registry
 
 
-def build_agent_response(request_id: str, results: list[AgentResult]) -> AgentQueryResponse:
-    summary = synthesize_agent_results(results)
-    guardrail = check_investment_guardrails(summary)
+def build_agent_response(
+    request_id: str,
+    results: list[AgentResult],
+    request: AgentQueryRequest | None = None,
+) -> AgentQueryResponse:
+    citations = dedupe_citations([citation for result in results for citation in result.citations])
+    confidence = combined_confidence(results)
+    summary = synthesize_agent_results(results, citations)
+    guardrail = enforce_agent_guardrails(
+        summary,
+        request=request or AgentQueryRequest(user_query="unspecified agent request"),
+        citations=citations,
+        confidence=confidence,
+    )
+    safe_summary = guardrail.rewritten_text or summary
 
     return AgentQueryResponse(
         request_id=request_id,
-        summary=summary,
+        summary=safe_summary,
         agents_ran=[result.agent_name for result in results] + ["CitationAgent", "RiskGuardrailAgent"],
         claims=[claim for result in results for claim in result.claims],
-        citations=dedupe_citations([citation for result in results for citation in result.citations]),
-        confidence=combined_confidence(results),
+        citations=citations,
+        confidence=confidence,
         risks=dedupe_strings([risk for result in results for risk in result.risks]),
         follow_up_questions=dedupe_strings(
             [question for result in results for question in result.follow_up_questions]
@@ -67,7 +80,7 @@ def build_agent_response(request_id: str, results: list[AgentResult]) -> AgentQu
     )
 
 
-def synthesize_agent_results(results: list[AgentResult]) -> str:
+def synthesize_agent_results(results: list[AgentResult], citations: list[AgentCitation] | None = None) -> str:
     coordinator = next((result for result in results if result.agent_name == "CoordinatorAgent"), None)
     specialist_results = [result for result in results if result.agent_name != "CoordinatorAgent"]
     sections = [
@@ -92,6 +105,8 @@ def synthesize_agent_results(results: list[AgentResult]) -> str:
     if risks:
         sections.extend(["", "Key risks:"])
         sections.extend(f"- {risk}" for risk in risks[:5])
+
+    sections.extend(["", format_sources_section(citations or [])])
 
     return "\n".join(sections)
 
@@ -238,7 +253,7 @@ def run_agent_query(request: AgentQueryRequest, session: Session | None = None) 
         for agent_name in route_agent_names(context):
             results.append(runtime.run(agent_name, context))
 
-    response = build_agent_response(request_id, results)
+    response = build_agent_response(request_id, results, request)
 
     if session is not None:
         session.commit()
