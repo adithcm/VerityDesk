@@ -42,10 +42,10 @@ flowchart LR
 - [Milestone 4.1: Agent Runtime Foundation](milestones/4.1-agent-runtime-foundation.md)
 - [Milestone 4.2: Research Data Access Layer](milestones/4.2-research-data-access-layer.md)
 - [Milestone 4.3: Domain Agent Implementations](milestones/4.3-domain-agent-implementations.md)
+- [Milestone 4.4: Coordinator Routing And Synthesis](milestones/4.4-coordinator-routing-and-synthesis.md)
 
 ## Planned Milestones
 
-- [Milestone 4.4: Coordinator Routing And Synthesis](milestones/4.4-coordinator-routing-and-synthesis.md)
 - [Milestone 4.5: Citations And Guardrails](milestones/4.5-citations-and-guardrails.md)
 - [Milestone 4.6: Agent API And UI Integration](milestones/4.6-agent-api-and-ui-integration.md)
 - [Milestone 4.7: Phase 4 Validation And Docs](milestones/4.7-phase-4-validation-and-docs.md)
