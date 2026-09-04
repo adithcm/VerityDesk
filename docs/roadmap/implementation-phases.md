@@ -8,7 +8,8 @@ This document tracks the full InvestorAgent implementation roadmap from planning
 
 - Phase 1: Complete
 - Phase 2: Complete
-- Phase 3: In progress
+- Phase 3: Complete
+- Phase 4: In progress
 
 ## Phase 1: Research And Planning
 
@@ -125,7 +126,7 @@ Next phase:
 
 ## Phase 4: Agent Framework
 
-Status: Planned
+Status: In progress
 
 Purpose: add the multi-agent research system.
 
@@ -142,6 +143,19 @@ Deliverables:
 - Agent run logging.
 - Agent routing based on user intent, domains, tickers, companies, and regions.
 - Structured agent outputs with citations and confidence levels.
+
+Completed milestones:
+
+- [Milestone 4.1: Agent runtime foundation](../phases/phase-4/milestones/4.1-agent-runtime-foundation.md).
+- [Milestone 4.2: Research data access layer](../phases/phase-4/milestones/4.2-research-data-access-layer.md).
+- [Milestone 4.3: Domain agent implementations](../phases/phase-4/milestones/4.3-domain-agent-implementations.md).
+
+Planned milestones:
+
+- [Milestone 4.4: Coordinator routing and synthesis](../phases/phase-4/milestones/4.4-coordinator-routing-and-synthesis.md).
+- [Milestone 4.5: Citations and guardrail enforcement](../phases/phase-4/milestones/4.5-citations-and-guardrails.md).
+- [Milestone 4.6: Agent API and UI integration](../phases/phase-4/milestones/4.6-agent-api-and-ui-integration.md).
+- [Milestone 4.7: Phase 4 validation and docs](../phases/phase-4/milestones/4.7-phase-4-validation-and-docs.md).
 
 ## Phase 5: Research Output System
 

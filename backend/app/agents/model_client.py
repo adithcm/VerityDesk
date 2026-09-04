@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+import json
+import ssl
+from typing import Protocol
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+import certifi
+
+from app.core.config import Settings, get_settings
+
+
+class ResearchSummarizer(Protocol):
+    def summarize(self, *, agent_name: str, instructions: str, evidence: str) -> str:
+        """Summarize evidence for a domain agent."""
+
+
+class TemplateResearchSummarizer:
+    def summarize(self, *, agent_name: str, instructions: str, evidence: str) -> str:
+        if not evidence.strip():
+            return f"{agent_name} did not find enough evidence to produce a source-backed summary."
+
+        lines = [line for line in evidence.splitlines() if line.strip()]
+        preview = "\n".join(lines[:6])
+        return f"{agent_name} reviewed the available evidence:\n{preview}"
+
+
+class OpenAIResearchSummarizer:
+    endpoint = "https://api.openai.com/v1/responses"
+
+    def __init__(self, settings: Settings | None = None) -> None:
+        self.settings = settings or get_settings()
+
+    def summarize(self, *, agent_name: str, instructions: str, evidence: str) -> str:
+        if not self.settings.openai_api_key:
+            return TemplateResearchSummarizer().summarize(
+                agent_name=agent_name,
+                instructions=instructions,
+                evidence=evidence,
+            )
+
+        payload = {
+            "model": self.settings.openai_model,
+            "store": False,
+            "max_output_tokens": 500,
+            "input": build_prompt(agent_name, instructions, evidence),
+        }
+        request = Request(
+            self.endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.settings.openai_api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        try:
+            context = ssl.create_default_context(cafile=certifi.where())
+            with urlopen(request, timeout=30, context=context) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+            return TemplateResearchSummarizer().summarize(
+                agent_name=agent_name,
+                instructions=instructions,
+                evidence=evidence,
+            )
+
+        return extract_response_text(body) or TemplateResearchSummarizer().summarize(
+            agent_name=agent_name,
+            instructions=instructions,
+            evidence=evidence,
+        )
+
+
+def build_default_summarizer(settings: Settings | None = None) -> ResearchSummarizer:
+    settings = settings or get_settings()
+    if settings.openai_api_key:
+        return OpenAIResearchSummarizer(settings)
+    return TemplateResearchSummarizer()
+
+
+def build_prompt(agent_name: str, instructions: str, evidence: str) -> str:
+    return (
+        f"You are {agent_name}, a careful research agent for a local market intelligence app.\n"
+        "Use only the provided evidence. Do not invent facts. Do not give direct buy, sell, or hold instructions. "
+        "Keep the answer concise and include uncertainty when evidence is thin.\n\n"
+        f"Agent instructions:\n{instructions}\n\n"
+        f"Evidence:\n{evidence}"
+    )
+
+
+def extract_response_text(body: dict) -> str | None:
+    output_text = body.get("output_text")
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text.strip()
+
+    text_parts: list[str] = []
+    for item in body.get("output", []):
+        if not isinstance(item, dict):
+            continue
+        for content in item.get("content", []):
+            if isinstance(content, dict) and isinstance(content.get("text"), str):
+                text_parts.append(content["text"])
+
+    text = "\n".join(text_parts).strip()
+    return text or None

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     investoragent_user_agent: str = "InvestorAgent/0.1 contact@example.com"
     openai_api_key: str | None = None
+    openai_model: str = "gpt-5-mini"
     fred_api_key: str | None = None
     census_api_key: str | None = None
     alpha_vantage_api_key: str | None = None
