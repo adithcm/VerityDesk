@@ -32,6 +32,12 @@ const navigation = [
 type View = (typeof navigation)[number];
 type RunMode = "all" | "rss" | "official_api";
 type FreshnessStatus = "fresh" | "stale" | "failed" | "skipped" | "not_configured";
+type AgentIntent =
+  | "daily_briefing"
+  | "company_research"
+  | "market_research"
+  | "housing_macro_research"
+  | "general_research";
 
 type SourceEntry = {
   id: string;
@@ -150,6 +156,22 @@ type AgentResponse = {
   request_id: string;
   summary: string;
   agents_ran: string[];
+  claims: Array<{
+    claim: string;
+    claim_type: string;
+    source_ids: string[];
+    confidence: "low" | "medium" | "high";
+    as_of: string | null;
+  }>;
+  citations: Array<{
+    source_id: string | null;
+    title: string;
+    url: string | null;
+    publisher: string | null;
+    published_at: string | null;
+    retrieved_at: string | null;
+    supports_claim: string;
+  }>;
   confidence: "low" | "medium" | "high";
   risks: string[];
   follow_up_questions: string[];
@@ -159,8 +181,24 @@ type AgentResponse = {
     issues: string[];
     banned_phrases_found: string[];
     required_sections: string[];
+    rewritten_text: string | null;
   };
   requires_guardrail_review: boolean;
+};
+
+type AgentRunRecord = {
+  id: number;
+  request_id: string;
+  agent_name: string;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+};
+
+type AgentRunHistoryResponse = {
+  runs: AgentRunRecord[];
+  total: number;
 };
 
 const watchlistRows = [
@@ -184,8 +222,11 @@ export default function Home() {
   const [runLoading, setRunLoading] = useState(false);
   const [lastRunResponse, setLastRunResponse] = useState<IngestionRunResponse | null>(null);
   const [agentQuery, setAgentQuery] = useState("What should I watch in markets today?");
+  const [agentIntent, setAgentIntent] = useState<AgentIntent>("market_research");
   const [agentTicker, setAgentTicker] = useState("SPY");
   const [agentDomain, setAgentDomain] = useState("Markets and Rates");
+  const [agentRunsData, setAgentRunsData] = useState<AgentRunHistoryResponse | null>(null);
+  const [agentRunsLoading, setAgentRunsLoading] = useState(true);
   const [agentResponse, setAgentResponse] = useState<AgentResponse | null>(null);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [agentLoading, setAgentLoading] = useState(false);
@@ -237,12 +278,29 @@ export default function Home() {
   useEffect(() => {
     loadSources();
     loadIngestionStatus();
+    loadAgentRuns();
   }, []);
 
   const primarySources = useMemo(
     () => sourceData?.sources.filter((source) => source.reliability_tier === "primary") ?? [],
     [sourceData],
   );
+
+  async function loadAgentRuns() {
+    setAgentRunsLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/agents/runs?limit=12`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Agent run request failed with status ${response.status}`);
+      }
+      setAgentRunsData((await response.json()) as AgentRunHistoryResponse);
+    } catch {
+      setAgentRunsData(null);
+    } finally {
+      setAgentRunsLoading(false);
+    }
+  }
 
   async function triggerIngestionRun() {
     setRunLoading(true);
@@ -279,7 +337,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_query: agentQuery,
-          intent: "market_research",
+          intent: agentIntent,
           domains: [agentDomain],
           tickers: agentTicker
             .split(",")
@@ -293,6 +351,7 @@ export default function Home() {
       }
 
       setAgentResponse((await response.json()) as AgentResponse);
+      await loadAgentRuns();
     } catch (error) {
       setAgentError(error instanceof Error ? error.message : "Could not run agent query");
     } finally {
@@ -310,7 +369,7 @@ export default function Home() {
               <h1 className="mt-1 text-xl font-semibold">Market Workspace</h1>
             </div>
             <div className="rounded-md border border-[#d7dee3] px-2 py-1 text-xs font-medium text-[#4b5563]">
-              Phase 3.7
+              Phase 4.6
             </div>
           </div>
 
@@ -380,12 +439,16 @@ export default function Home() {
             {activeView === "Agent Chat" && (
               <AgentChatView
                 agentQuery={agentQuery}
+                agentIntent={agentIntent}
                 agentTicker={agentTicker}
                 agentDomain={agentDomain}
                 agentLoading={agentLoading}
+                agentRunsData={agentRunsData}
+                agentRunsLoading={agentRunsLoading}
                 agentResponse={agentResponse}
                 agentError={agentError}
                 setAgentQuery={setAgentQuery}
+                setAgentIntent={setAgentIntent}
                 setAgentTicker={setAgentTicker}
                 setAgentDomain={setAgentDomain}
                 submitAgentQuery={submitAgentQuery}
@@ -695,23 +758,31 @@ function WatchlistView() {
 
 function AgentChatView({
   agentQuery,
+  agentIntent,
   agentTicker,
   agentDomain,
   agentLoading,
+  agentRunsData,
+  agentRunsLoading,
   agentResponse,
   agentError,
   setAgentQuery,
+  setAgentIntent,
   setAgentTicker,
   setAgentDomain,
   submitAgentQuery,
 }: {
   agentQuery: string;
+  agentIntent: AgentIntent;
   agentTicker: string;
   agentDomain: string;
   agentLoading: boolean;
+  agentRunsData: AgentRunHistoryResponse | null;
+  agentRunsLoading: boolean;
   agentResponse: AgentResponse | null;
   agentError: string | null;
   setAgentQuery: (value: string) => void;
+  setAgentIntent: (value: AgentIntent) => void;
   setAgentTicker: (value: string) => void;
   setAgentDomain: (value: string) => void;
   submitAgentQuery: (event: FormEvent<HTMLFormElement>) => void;
@@ -729,6 +800,22 @@ function AgentChatView({
           onChange={(event) => setAgentQuery(event.target.value)}
           className="mt-2 min-h-32 w-full rounded-md border border-[#cbd5dc] px-3 py-2 text-sm outline-none focus:border-[#25636b]"
         />
+
+        <label className="mt-4 block text-sm font-medium" htmlFor="agent-intent">
+          Intent
+        </label>
+        <select
+          id="agent-intent"
+          value={agentIntent}
+          onChange={(event) => setAgentIntent(event.target.value as AgentIntent)}
+          className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
+        >
+          <option value="market_research">Market research</option>
+          <option value="company_research">Company research</option>
+          <option value="housing_macro_research">Housing and macro</option>
+          <option value="daily_briefing">Daily briefing</option>
+          <option value="general_research">General research</option>
+        </select>
 
         <label className="mt-4 block text-sm font-medium" htmlFor="agent-ticker">
           Tickers
@@ -763,6 +850,11 @@ function AgentChatView({
         >
           {agentLoading ? "Running" : "Run Query"}
         </button>
+
+        <section className="mt-5 border-t border-[#e5eaf0] pt-4">
+          <h4 className="text-sm font-semibold">Recent Agent Runs</h4>
+          <AgentRunsList agentRunsData={agentRunsData} loading={agentRunsLoading} />
+        </section>
       </form>
 
       <section className="rounded-md border border-[#d7dee3] bg-white p-4">
@@ -781,24 +873,164 @@ function AgentChatView({
         )}
         {agentResponse && (
           <div className="mt-4 space-y-4">
-            <p className="whitespace-pre-line text-sm leading-6 text-[#374151]">{agentResponse.summary}</p>
-            <div>
-              <p className="text-sm font-semibold">Agents</p>
-              <p className="mt-1 text-sm text-[#5b6573]">{agentResponse.agents_ran.join(", ")}</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SettingRow label="Confidence" value={agentResponse.confidence} />
+              <SettingRow label="Sources" value={String(agentResponse.citations.length)} />
+              <SettingRow label="Review Needed" value={agentResponse.requires_guardrail_review ? "Yes" : "No"} />
             </div>
-            <div>
-              <p className="text-sm font-semibold">Risks</p>
-              <ul className="mt-2 space-y-2">
-                {agentResponse.risks.map((risk) => (
-                  <li key={risk} className="rounded-md border border-[#e5eaf0] px-3 py-2 text-sm text-[#5b6573]">
-                    {risk}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <p className="whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
+              {agentResponse.summary}
+            </p>
+            <InlineList title="Agents Run" values={agentResponse.agents_ran} />
+            <ClaimsList claims={agentResponse.claims} />
+            <CitationList citations={agentResponse.citations} />
+            <InlineList title="Risks" values={agentResponse.risks} />
+            <InlineList title="Follow-up Questions" values={agentResponse.follow_up_questions} />
+            <GuardrailDetails response={agentResponse} />
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function AgentRunsList({
+  agentRunsData,
+  loading,
+}: {
+  agentRunsData: AgentRunHistoryResponse | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return <p className="mt-3 rounded-md bg-[#f8fafb] p-3 text-sm text-[#5b6573]">Loading runs.</p>;
+  }
+
+  if (!agentRunsData || agentRunsData.runs.length === 0) {
+    return (
+      <div className="mt-3 rounded-md border border-dashed border-[#cbd5dc] p-3 text-sm text-[#5b6573]">
+        No agent runs yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      {agentRunsData.runs.slice(0, 6).map((run) => (
+        <div key={run.id} className="rounded-md border border-[#e5eaf0] px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium">{run.agent_name}</p>
+            <StatusBadge status={run.status} />
+          </div>
+          <p className="mt-1 text-xs text-[#5b6573]">{formatDateTime(run.completed_at ?? run.started_at)}</p>
+          {run.error && <p className="mt-1 text-xs text-[#b42318]">{run.error}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InlineList({ title, values }: { title: string; values: string[] }) {
+  return (
+    <div>
+      <p className="text-sm font-semibold">{title}</p>
+      {values.length === 0 ? (
+        <p className="mt-2 text-sm text-[#5b6573]">None reported.</p>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {values.map((value) => (
+            <span key={value} className="rounded-md border border-[#e5eaf0] px-2 py-1 text-sm text-[#4b5563]">
+              {value}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClaimsList({ claims }: { claims: AgentResponse["claims"] }) {
+  return (
+    <div>
+      <p className="text-sm font-semibold">Claims</p>
+      {claims.length === 0 ? (
+        <p className="mt-2 text-sm text-[#5b6573]">No structured claims returned.</p>
+      ) : (
+        <div className="mt-2 space-y-2">
+          {claims.map((claim, index) => (
+            <div key={`${claim.claim}-${index}`} className="rounded-md border border-[#e5eaf0] p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge status={claim.confidence} />
+                <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-medium text-[#4b5563]">
+                  {claim.claim_type}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-[#374151]">{claim.claim}</p>
+              {claim.source_ids.length > 0 && (
+                <p className="mt-2 text-xs text-[#5b6573]">Sources: {claim.source_ids.join(", ")}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CitationList({ citations }: { citations: AgentResponse["citations"] }) {
+  return (
+    <div>
+      <p className="text-sm font-semibold">Citations</p>
+      {citations.length === 0 ? (
+        <p className="mt-2 rounded-md border border-dashed border-[#cbd5dc] p-3 text-sm text-[#5b6573]">
+          No citations returned for this response.
+        </p>
+      ) : (
+        <div className="mt-2 space-y-2">
+          {citations.map((citation, index) => (
+            <div key={`${citation.source_id}-${citation.title}-${index}`} className="rounded-md border border-[#e5eaf0] p-3">
+              <p className="text-sm font-medium">
+                {citation.url ? <a href={citation.url}>{citation.title}</a> : citation.title}
+              </p>
+              <p className="mt-1 text-xs text-[#5b6573]">
+                {[citation.publisher, citation.source_id].filter(Boolean).join(" | ")}
+              </p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <SettingRow label="Published" value={formatDateTime(citation.published_at)} />
+                <SettingRow label="Retrieved" value={formatDateTime(citation.retrieved_at)} />
+              </div>
+              <p className="mt-2 text-sm text-[#5b6573]">{citation.supports_claim}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GuardrailDetails({ response }: { response: AgentResponse }) {
+  const issues = response.guardrail.issues;
+  const bannedPhrases = response.guardrail.banned_phrases_found;
+
+  return (
+    <div>
+      <p className="text-sm font-semibold">Guardrail Review</p>
+      <div className="mt-2 rounded-md border border-[#e5eaf0] p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={response.guardrail.status} />
+          {response.requires_guardrail_review && (
+            <span className="rounded-md bg-[#fff7e8] px-2 py-1 text-xs font-medium text-[#8a4b08]">
+              Review needed
+            </span>
+          )}
+        </div>
+        {issues.length > 0 && <InlineList title="Issues" values={issues} />}
+        {bannedPhrases.length > 0 && <InlineList title="Blocked Phrases" values={bannedPhrases} />}
+        {response.guardrail.rewritten_text && (
+          <p className="mt-3 rounded-md bg-[#f8fafb] p-3 text-sm text-[#5b6573]">
+            Safer wording was applied to the final response.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

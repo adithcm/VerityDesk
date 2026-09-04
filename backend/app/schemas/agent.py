@@ -90,3 +90,18 @@ class AgentQueryResponse(BaseModel):
     follow_up_questions: list[str]
     guardrail: GuardrailCheck
     requires_guardrail_review: bool
+
+
+class AgentRunRecord(BaseModel):
+    id: int
+    request_id: str
+    agent_name: str
+    status: str
+    started_at: str | None = None
+    completed_at: str | None = None
+    error: str | None = None
+
+
+class AgentRunHistoryResponse(BaseModel):
+    runs: list[AgentRunRecord]
+    total: int

@@ -151,10 +151,10 @@ Completed milestones:
 - [Milestone 4.3: Domain agent implementations](../phases/phase-4/milestones/4.3-domain-agent-implementations.md).
 - [Milestone 4.4: Coordinator routing and synthesis](../phases/phase-4/milestones/4.4-coordinator-routing-and-synthesis.md).
 - [Milestone 4.5: Citations and guardrail enforcement](../phases/phase-4/milestones/4.5-citations-and-guardrails.md).
+- [Milestone 4.6: Agent API and UI integration](../phases/phase-4/milestones/4.6-agent-api-and-ui-integration.md).
 
 Planned milestones:
 
-- [Milestone 4.6: Agent API and UI integration](../phases/phase-4/milestones/4.6-agent-api-and-ui-integration.md).
 - [Milestone 4.7: Phase 4 validation and docs](../phases/phase-4/milestones/4.7-phase-4-validation-and-docs.md).
 
 ## Phase 5: Research Output System

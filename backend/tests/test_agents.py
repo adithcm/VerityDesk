@@ -1,7 +1,11 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.main import app
 from app.agents.model_client import TemplateResearchSummarizer
+from app.db.base import Base
+from app.db.models import AgentRun
 from app.schemas.agent import AgentCitation, AgentContext, AgentQueryRequest, AgentResult
 from app.services import agents
 from app.services.citations import format_citation, format_sources_section
@@ -14,6 +18,13 @@ from app.services.guardrails import (
 
 
 client = TestClient(app)
+
+
+def build_session():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    return TestingSessionLocal()
 
 
 def test_agent_query_endpoint_runs_coordinator_and_domain_agents(monkeypatch) -> None:
@@ -51,6 +62,15 @@ def test_agent_query_endpoint_rejects_empty_query() -> None:
     response = client.post("/api/v1/agents/query", json={"user_query": ""})
 
     assert response.status_code == 422
+
+
+def test_agent_runs_endpoint_returns_history() -> None:
+    response = client.get("/api/v1/agents/runs?limit=5")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "runs" in payload
+    assert "total" in payload
 
 
 def test_guardrail_detects_direct_advice_phrases() -> None:
@@ -213,3 +233,31 @@ def test_build_agent_response_uses_rewritten_safe_summary() -> None:
     assert response.guardrail.status == "blocked"
     assert "you should sell" not in response.summary.lower()
     assert response.requires_guardrail_review is True
+
+
+def test_list_agent_runs_orders_latest_first() -> None:
+    with build_session() as session:
+        session.add_all(
+            [
+                AgentRun(
+                    request_id="request-old",
+                    agent_name="MarketAgent",
+                    status="success",
+                    started_at=None,
+                ),
+                AgentRun(
+                    request_id="request-new",
+                    agent_name="MacroAgent",
+                    status="failed",
+                    error="failed",
+                ),
+            ]
+        )
+        session.commit()
+
+        history = agents.list_agent_runs(session, limit=10)
+
+    assert history.total == 2
+    assert [run.request_id for run in history.runs] == ["request-new", "request-old"]
+    assert history.runs[0].agent_name == "MacroAgent"
+    assert history.runs[0].status == "failed"

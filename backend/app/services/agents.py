@@ -1,5 +1,7 @@
+from datetime import datetime
 from uuid import uuid4
 
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.agents.domain_agents import (
@@ -10,7 +12,16 @@ from app.agents.domain_agents import (
     NewsDigestAgent,
 )
 from app.agents.model_client import build_default_summarizer
-from app.schemas.agent import AgentCitation, AgentContext, AgentQueryRequest, AgentQueryResponse, AgentResult
+from app.db.models import AgentRun
+from app.schemas.agent import (
+    AgentCitation,
+    AgentContext,
+    AgentQueryRequest,
+    AgentQueryResponse,
+    AgentResult,
+    AgentRunHistoryResponse,
+    AgentRunRecord,
+)
 from app.services.agent_runtime import AgentRegistry, AgentRunLogger, AgentRuntime, build_agent_context
 from app.services.citations import format_sources_section
 from app.services.guardrails import FINANCIAL_DISCLAIMER, enforce_agent_guardrails
@@ -259,3 +270,29 @@ def run_agent_query(request: AgentQueryRequest, session: Session | None = None) 
         session.commit()
 
     return response
+
+
+def list_agent_runs(session: Session, *, limit: int = 25) -> AgentRunHistoryResponse:
+    runs = session.scalars(
+        select(AgentRun).order_by(desc(AgentRun.started_at), desc(AgentRun.id)).limit(limit)
+    ).all()
+
+    return AgentRunHistoryResponse(
+        runs=[
+            AgentRunRecord(
+                id=run.id,
+                request_id=run.request_id,
+                agent_name=run.agent_name,
+                status=run.status,
+                started_at=format_datetime(run.started_at),
+                completed_at=format_datetime(run.completed_at),
+                error=run.error,
+            )
+            for run in runs
+        ],
+        total=len(runs),
+    )
+
+
+def format_datetime(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
