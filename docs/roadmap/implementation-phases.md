@@ -9,7 +9,7 @@ This document tracks the full InvestorAgent implementation roadmap from planning
 - Phase 1: Complete
 - Phase 2: Complete
 - Phase 3: Complete
-- Phase 4: In progress
+- Phase 4: Complete
 
 ## Phase 1: Research And Planning
 
@@ -126,7 +126,7 @@ Next phase:
 
 ## Phase 4: Agent Framework
 
-Status: In progress
+Status: Complete
 
 Purpose: add the multi-agent research system.
 
@@ -143,6 +143,7 @@ Deliverables:
 - Agent run logging.
 - Agent routing based on user intent, domains, tickers, companies, and regions.
 - Structured agent outputs with citations and confidence levels.
+- Natural-language final synthesis layered over structured specialist findings.
 
 Completed milestones:
 
@@ -152,10 +153,11 @@ Completed milestones:
 - [Milestone 4.4: Coordinator routing and synthesis](../phases/phase-4/milestones/4.4-coordinator-routing-and-synthesis.md).
 - [Milestone 4.5: Citations and guardrail enforcement](../phases/phase-4/milestones/4.5-citations-and-guardrails.md).
 - [Milestone 4.6: Agent API and UI integration](../phases/phase-4/milestones/4.6-agent-api-and-ui-integration.md).
-
-Planned milestones:
-
 - [Milestone 4.7: Phase 4 validation and docs](../phases/phase-4/milestones/4.7-phase-4-validation-and-docs.md).
+
+Next phase:
+
+- Phase 5: Research Output System.
 
 ## Phase 5: Research Output System
 
@@ -174,6 +176,7 @@ Deliverables:
 - Scenario framing.
 - Required risks and uncertainty sections.
 - Required disclaimer in investment-oriented reports.
+- Proactive daily context and suggested follow-up questions based on saved preferences, watchlists, and recent ingested data.
 - Economic observation cleanup:
   - Friendly labels for FRED series IDs such as `UNRATE`, `FEDFUNDS`, and `MORTGAGE30US`.
   - Grouped economic observations so repeated FRED records do not dominate the UI or reports.
@@ -206,6 +209,7 @@ Deliverables:
 - Settings and API-key status.
 - Domain filters for the ten news categories.
 - User-friendly source status explanations for skipped, not configured, placeholder, and missing API-key states.
+- More automated agent experience: saved preferences, watchlist-aware defaults, proactive briefings, and suggested questions so users do not always need to start from a blank query box.
 
 ## Phase 7: Local Desktop App
 

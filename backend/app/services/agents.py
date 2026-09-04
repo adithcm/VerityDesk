@@ -66,7 +66,7 @@ def build_agent_response(
 ) -> AgentQueryResponse:
     citations = dedupe_citations([citation for result in results for citation in result.citations])
     confidence = combined_confidence(results)
-    summary = synthesize_agent_results(results, citations)
+    summary = synthesize_agent_results(results, citations, request)
     guardrail = enforce_agent_guardrails(
         summary,
         request=request or AgentQueryRequest(user_query="unspecified agent request"),
@@ -91,7 +91,11 @@ def build_agent_response(
     )
 
 
-def synthesize_agent_results(results: list[AgentResult], citations: list[AgentCitation] | None = None) -> str:
+def synthesize_agent_results(
+    results: list[AgentResult],
+    citations: list[AgentCitation] | None = None,
+    request: AgentQueryRequest | None = None,
+) -> str:
     coordinator = next((result for result in results if result.agent_name == "CoordinatorAgent"), None)
     specialist_results = [result for result in results if result.agent_name != "CoordinatorAgent"]
     sections = [
@@ -108,9 +112,13 @@ def synthesize_agent_results(results: list[AgentResult], citations: list[AgentCi
         sections.append("No specialist agents were run for this request.")
         return "\n".join(sections)
 
-    sections.append("Specialist findings:")
-    for result in specialist_results:
-        sections.append(f"- {result.agent_name}: {result.summary}")
+    sections.append(
+        build_natural_language_answer(
+            specialist_results,
+            citations or [],
+            request or AgentQueryRequest(user_query="unspecified agent request"),
+        )
+    )
 
     risks = dedupe_strings([risk for result in specialist_results for risk in result.risks])
     if risks:
@@ -120,6 +128,57 @@ def synthesize_agent_results(results: list[AgentResult], citations: list[AgentCi
     sections.extend(["", format_sources_section(citations or [])])
 
     return "\n".join(sections)
+
+
+def build_natural_language_answer(
+    specialist_results: list[AgentResult],
+    citations: list[AgentCitation],
+    request: AgentQueryRequest,
+) -> str:
+    evidence = format_synthesis_evidence(specialist_results, citations, request)
+    if not evidence.strip():
+        return "I do not have enough current source-backed evidence to answer this yet. Run ingestion first, then ask again."
+
+    return build_default_summarizer().summarize(
+        agent_name="SynthesisAgent",
+        instructions=(
+            "Write a direct, natural-language answer to the user's question in 2-4 short paragraphs. "
+            "Use only the provided specialist summaries and citations. Mention uncertainty clearly when evidence is thin. "
+            "Do not give direct buy, sell, or hold instructions, and do not present price targets as recommendations."
+        ),
+        evidence=evidence,
+    )
+
+
+def format_synthesis_evidence(
+    specialist_results: list[AgentResult],
+    citations: list[AgentCitation],
+    request: AgentQueryRequest,
+) -> str:
+    lines = [
+        f"User question: {request.user_query}",
+        f"Intent: {request.intent}",
+    ]
+
+    if request.domains:
+        lines.append(f"Requested domains: {', '.join(request.domains)}")
+    if request.tickers:
+        lines.append(f"Requested tickers: {', '.join(request.tickers)}")
+
+    lines.append("")
+    lines.append("Specialist summaries:")
+    for result in specialist_results:
+        lines.append(f"- {result.agent_name} ({result.confidence} confidence): {result.summary}")
+
+    if citations:
+        lines.append("")
+        lines.append("Citations:")
+        for citation in citations[:10]:
+            date = citation.published_at or citation.retrieved_at or "unknown date"
+            publisher = citation.publisher or citation.source_id or "unknown source"
+            lines.append(f"- {citation.title} ({publisher}, {date}): {citation.supports_claim}")
+
+    return "\n".join(lines)
 
 
 def route_agent_names(context: AgentContext) -> list[str]:

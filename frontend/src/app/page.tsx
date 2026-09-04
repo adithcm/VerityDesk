@@ -859,7 +859,7 @@ function AgentChatView({
 
       <section className="rounded-md border border-[#d7dee3] bg-white p-4">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-lg font-semibold">Response</h3>
+          <h3 className="text-lg font-semibold">Answer</h3>
           {agentResponse && <StatusBadge status={agentResponse.guardrail.status} />}
         </div>
         <p className="mt-3 rounded-md border border-[#d7dee3] bg-[#f8fafb] p-3 text-sm text-[#4b5563]">
@@ -878,9 +878,12 @@ function AgentChatView({
               <SettingRow label="Sources" value={String(agentResponse.citations.length)} />
               <SettingRow label="Review Needed" value={agentResponse.requires_guardrail_review ? "Yes" : "No"} />
             </div>
-            <p className="whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
-              {agentResponse.summary}
-            </p>
+            <div>
+              <p className="text-sm font-semibold">Natural Language Response</p>
+              <p className="mt-2 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
+                {agentResponse.summary}
+              </p>
+            </div>
             <InlineList title="Agents Run" values={agentResponse.agents_ran} />
             <ClaimsList claims={agentResponse.claims} />
             <CitationList citations={agentResponse.citations} />

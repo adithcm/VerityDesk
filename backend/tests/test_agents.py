@@ -117,6 +117,8 @@ def test_route_agent_names_for_general_update_defaults_to_news_and_market() -> N
 
 
 def test_synthesis_preserves_specialist_outputs_and_risks() -> None:
+    request = AgentQueryRequest(user_query="What matters for markets?")
+
     result = agents.synthesize_agent_results(
         [
             AgentResult(agent_name="CoordinatorAgent", summary="Coordinator selected: MarketAgent."),
@@ -126,13 +128,47 @@ def test_synthesis_preserves_specialist_outputs_and_risks() -> None:
                 confidence="medium",
                 risks=["Evidence is limited."],
             ),
-        ]
+        ],
+        request=request,
     )
 
     assert "not financial advice" in result.lower()
     assert "Coordinator selected: MarketAgent." in result
-    assert "MarketAgent: Rates are central to the setup." in result
+    assert "SynthesisAgent reviewed the available evidence" in result
+    assert "MarketAgent (medium confidence): Rates are central to the setup." in result
     assert "Evidence is limited." in result
+
+
+def test_format_synthesis_evidence_includes_user_query_and_citations() -> None:
+    evidence = agents.format_synthesis_evidence(
+        [
+            AgentResult(
+                agent_name="MarketAgent",
+                summary="Rates are central to the setup.",
+                confidence="medium",
+            )
+        ],
+        [
+            AgentCitation(
+                source_id="fred-api",
+                title="Federal Funds Rate",
+                publisher="FRED",
+                retrieved_at="2026-09-04T12:00:00+00:00",
+                supports_claim="Economic observation evidence retrieved for the agent query.",
+            )
+        ],
+        AgentQueryRequest(
+            user_query="What should I watch?",
+            intent="market_research",
+            domains=["Markets and Rates"],
+            tickers=["SPY"],
+        ),
+    )
+
+    assert "User question: What should I watch?" in evidence
+    assert "Requested domains: Markets and Rates" in evidence
+    assert "Requested tickers: SPY" in evidence
+    assert "Federal Funds Rate" in evidence
 
 
 def test_citation_format_includes_source_dates_and_url() -> None:
