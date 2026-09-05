@@ -272,6 +272,16 @@ type PersonalizationProfile = {
   briefingTime: string;
 };
 
+type InferredAgentContext = {
+  intent: AgentIntent;
+  domain: string;
+  tickers: string[];
+  companies: string[];
+  location: string | null;
+  timeWindow: string;
+  explanation: string;
+};
+
 const PERSONALIZATION_STORAGE_KEY = "investoragent.personalization.v1";
 
 const topicOptions = [
@@ -330,6 +340,7 @@ export default function Home() {
   const [agentIntent, setAgentIntent] = useState<AgentIntent>("market_research");
   const [agentTicker, setAgentTicker] = useState("SPY");
   const [agentDomain, setAgentDomain] = useState("Markets and Rates");
+  const [manualAgentContext, setManualAgentContext] = useState(false);
   const [agentRunsData, setAgentRunsData] = useState<AgentRunHistoryResponse | null>(null);
   const [agentRunsLoading, setAgentRunsLoading] = useState(true);
   const [agentResponse, setAgentResponse] = useState<AgentResponse | null>(null);
@@ -506,6 +517,7 @@ export default function Home() {
       setAgentIntent(suggestion.domains.some((domain) => domain.includes("Housing")) ? "housing_macro_research" : "market_research");
       setAgentDomain(suggestion.domains[0] ?? "Markets and Rates");
       setAgentTicker(suggestion.tickers.join(", "));
+      setManualAgentContext(true);
       setActiveView("Agent Chat");
       return;
     }
@@ -628,6 +640,19 @@ export default function Home() {
     event.preventDefault();
     setAgentLoading(true);
     setAgentError(null);
+    const inferredContext = inferAgentContext(agentQuery, personalizationProfile);
+    const requestContext = manualAgentContext
+      ? {
+          ...inferredContext,
+          intent: agentIntent,
+          domain: agentDomain,
+          tickers: splitList(agentTicker).map((ticker) => ticker.toUpperCase()),
+          explanation: "Using your Advanced overrides for this request.",
+        }
+      : inferredContext;
+    setAgentIntent(requestContext.intent);
+    setAgentDomain(requestContext.domain);
+    setAgentTicker(requestContext.tickers.join(", "));
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/agents/query`, {
@@ -635,12 +660,9 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_query: agentQuery,
-          intent: agentIntent,
-          domains: [agentDomain],
-          tickers: agentTicker
-            .split(",")
-            .map((ticker) => ticker.trim().toUpperCase())
-            .filter(Boolean),
+          intent: requestContext.intent,
+          domains: [requestContext.domain],
+          tickers: requestContext.tickers,
         }),
       });
 
@@ -851,7 +873,11 @@ export default function Home() {
                 loadSuggestions={loadSuggestions}
                 applySuggestion={applySuggestion}
                 setActiveView={setActiveView}
+                agentQuery={agentQuery}
+                agentLoading={agentLoading}
                 setAgentQuery={setAgentQuery}
+                setManualAgentContext={setManualAgentContext}
+                submitAgentQuery={submitAgentQuery}
                 personalizationProfile={personalizationProfile}
               />
             )}
@@ -918,10 +944,13 @@ export default function Home() {
                 agentRunsLoading={agentRunsLoading}
                 agentResponse={agentResponse}
                 agentError={agentError}
+                personalizationProfile={personalizationProfile}
+                manualAgentContext={manualAgentContext}
                 setAgentQuery={setAgentQuery}
                 setAgentIntent={setAgentIntent}
                 setAgentTicker={setAgentTicker}
                 setAgentDomain={setAgentDomain}
+                setManualAgentContext={setManualAgentContext}
                 submitAgentQuery={submitAgentQuery}
               />
             )}
@@ -988,7 +1017,11 @@ function DashboardView({
   loadSuggestions,
   applySuggestion,
   setActiveView,
+  agentQuery,
+  agentLoading,
   setAgentQuery,
+  setManualAgentContext,
+  submitAgentQuery,
   personalizationProfile,
 }: {
   healthData: SourceHealthResponse | null;
@@ -1004,7 +1037,11 @@ function DashboardView({
   loadSuggestions: () => Promise<void>;
   applySuggestion: (suggestion: ProactiveSuggestion) => void;
   setActiveView: (view: View) => void;
+  agentQuery: string;
+  agentLoading: boolean;
   setAgentQuery: (value: string) => void;
+  setManualAgentContext: (value: boolean) => void;
+  submitAgentQuery: (event: FormEvent<HTMLFormElement>) => void;
   personalizationProfile: PersonalizationProfile;
 }) {
   const latestReport = reportListData?.reports[0] ?? null;
@@ -1016,6 +1053,7 @@ function DashboardView({
     if (question) {
       setAgentQuery(question);
     }
+    setManualAgentContext(false);
     setActiveView("Agent Chat");
   }
 
@@ -1023,19 +1061,37 @@ function DashboardView({
     <div className="space-y-4">
       <section className="rounded-md border border-[#cbd5dc] bg-white p-5">
         <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-          <div>
+          <form
+            onSubmit={(event) => {
+              setActiveView("Agent Chat");
+              submitAgentQuery(event);
+            }}
+          >
             <p className="text-sm font-semibold text-[#25636b]">Start here</p>
             <h3 className="mt-2 text-2xl font-semibold">Ask one question. InvestorAgent will handle the routing.</h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5b6573]">
               Use plain language for market, company, housing, macro, or world news questions. Detailed controls stay out of the way unless you need them.
             </p>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <label className="mt-4 block text-sm font-medium" htmlFor="dashboard-question">
+              What do you want to know?
+              <textarea
+                id="dashboard-question"
+                value={agentQuery}
+                onChange={(event) => {
+                  setAgentQuery(event.target.value);
+                  setManualAgentContext(false);
+                }}
+                placeholder="Example: What are mortgage rates doing in Arizona and how could that affect housing?"
+                className="mt-2 min-h-28 w-full rounded-md border border-[#cbd5dc] px-3 py-2 text-sm outline-none focus:border-[#25636b]"
+              />
+            </label>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <button
-                type="button"
-                onClick={() => askQuestion()}
-                className="min-h-11 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white"
+                type="submit"
+                disabled={agentLoading || !agentQuery.trim()}
+                className="min-h-11 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
               >
-                Ask A Question
+                {agentLoading ? "Thinking" : "Ask InvestorAgent"}
               </button>
               <button
                 type="button"
@@ -1052,7 +1108,7 @@ function DashboardView({
                 View Saved Reports
               </button>
             </div>
-          </div>
+          </form>
           <div className="rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-4">
             <p className="text-sm font-semibold">Today At A Glance</p>
             <div className="mt-3 space-y-3">
@@ -1955,10 +2011,13 @@ function AgentChatView({
   agentRunsLoading,
   agentResponse,
   agentError,
+  personalizationProfile,
+  manualAgentContext,
   setAgentQuery,
   setAgentIntent,
   setAgentTicker,
   setAgentDomain,
+  setManualAgentContext,
   submitAgentQuery,
 }: {
   agentQuery: string;
@@ -1970,80 +2029,125 @@ function AgentChatView({
   agentRunsLoading: boolean;
   agentResponse: AgentResponse | null;
   agentError: string | null;
+  personalizationProfile: PersonalizationProfile;
+  manualAgentContext: boolean;
   setAgentQuery: (value: string) => void;
   setAgentIntent: (value: AgentIntent) => void;
   setAgentTicker: (value: string) => void;
   setAgentDomain: (value: string) => void;
+  setManualAgentContext: (value: boolean) => void;
   submitAgentQuery: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const inferredContext = inferAgentContext(agentQuery, personalizationProfile);
+  const displayedContext = manualAgentContext
+    ? {
+        ...inferredContext,
+        intent: agentIntent,
+        domain: agentDomain,
+        tickers: splitList(agentTicker).map((ticker) => ticker.toUpperCase()),
+        explanation: "Using your Advanced overrides for this request.",
+      }
+    : inferredContext;
+
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
       <form onSubmit={submitAgentQuery} className="rounded-md border border-[#d7dee3] bg-white p-4">
-        <h3 className="text-lg font-semibold">Agent Query</h3>
+        <h3 className="text-lg font-semibold">Ask InvestorAgent</h3>
         <label className="mt-4 block text-sm font-medium" htmlFor="agent-query">
-          Query
+          Question
         </label>
         <textarea
           id="agent-query"
           value={agentQuery}
-          onChange={(event) => setAgentQuery(event.target.value)}
+          onChange={(event) => {
+            setAgentQuery(event.target.value);
+            setManualAgentContext(false);
+          }}
           className="mt-2 min-h-32 w-full rounded-md border border-[#cbd5dc] px-3 py-2 text-sm outline-none focus:border-[#25636b]"
         />
 
-        <label className="mt-4 block text-sm font-medium" htmlFor="agent-intent">
-          Intent
-        </label>
-        <select
-          id="agent-intent"
-          value={agentIntent}
-          onChange={(event) => setAgentIntent(event.target.value as AgentIntent)}
-          className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
-        >
-          <option value="market_research">Market research</option>
-          <option value="company_research">Company research</option>
-          <option value="housing_macro_research">Housing and macro</option>
-          <option value="daily_briefing">Daily briefing</option>
-          <option value="general_research">General research</option>
-        </select>
+        <InferredContextPanel inferredContext={displayedContext} manualAgentContext={manualAgentContext} />
 
-        <label className="mt-4 block text-sm font-medium" htmlFor="agent-ticker">
-          Tickers
-        </label>
-        <input
-          id="agent-ticker"
-          value={agentTicker}
-          onChange={(event) => setAgentTicker(event.target.value)}
-          className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
-        />
+        <details className="mt-4 rounded-md border border-[#e5eaf0] p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-[#143642]">Advanced</summary>
+          <p className="mt-2 text-sm text-[#5b6573]">
+            InvestorAgent fills these in automatically. Adjust them only when you want to override the default routing.
+          </p>
 
-        <label className="mt-4 block text-sm font-medium" htmlFor="agent-domain">
-          Domain
-        </label>
-        <select
-          id="agent-domain"
-          value={agentDomain}
-          onChange={(event) => setAgentDomain(event.target.value)}
-          className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
-        >
-          {domains.map((domain) => (
-            <option key={domain} value={domain}>
-              {domain}
-            </option>
-          ))}
-        </select>
+          <label className="mt-4 block text-sm font-medium" htmlFor="agent-intent">
+            Intent
+          </label>
+          <select
+            id="agent-intent"
+            value={agentIntent}
+            onChange={(event) => {
+              setAgentIntent(event.target.value as AgentIntent);
+              setManualAgentContext(true);
+            }}
+            className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
+          >
+            <option value="market_research">Market research</option>
+            <option value="company_research">Company research</option>
+            <option value="housing_macro_research">Housing and macro</option>
+            <option value="daily_briefing">Daily briefing</option>
+            <option value="general_research">General research</option>
+          </select>
+
+          <label className="mt-4 block text-sm font-medium" htmlFor="agent-ticker">
+            Tickers
+          </label>
+          <input
+            id="agent-ticker"
+            value={agentTicker}
+            onChange={(event) => {
+              setAgentTicker(event.target.value);
+              setManualAgentContext(true);
+            }}
+            className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+          />
+
+          <label className="mt-4 block text-sm font-medium" htmlFor="agent-domain">
+            Domain
+          </label>
+          <select
+            id="agent-domain"
+            value={agentDomain}
+            onChange={(event) => {
+              setAgentDomain(event.target.value);
+              setManualAgentContext(true);
+            }}
+            className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
+          >
+            {domains.map((domain) => (
+              <option key={domain} value={domain}>
+                {domain}
+              </option>
+            ))}
+          </select>
+          {manualAgentContext && (
+            <button
+              type="button"
+              onClick={() => setManualAgentContext(false)}
+              className="mt-4 min-h-10 rounded-md border border-[#cbd5dc] px-3 py-2 text-sm font-semibold text-[#143642]"
+            >
+              Return To Auto
+            </button>
+          )}
+        </details>
 
         <button
           type="submit"
           disabled={agentLoading || !agentQuery.trim()}
           className="mt-5 min-h-10 w-full rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
         >
-          {agentLoading ? "Running" : "Run Query"}
+          {agentLoading ? "Thinking" : "Ask InvestorAgent"}
         </button>
 
-        <section className="mt-5 border-t border-[#e5eaf0] pt-4">
+        <details className="mt-5 border-t border-[#e5eaf0] pt-4">
+          <summary className="cursor-pointer text-sm font-semibold text-[#143642]">Recent agent runs</summary>
           <h4 className="text-sm font-semibold">Recent Agent Runs</h4>
           <AgentRunsList agentRunsData={agentRunsData} loading={agentRunsLoading} />
-        </section>
+        </details>
       </form>
 
       <section className="rounded-md border border-[#d7dee3] bg-white p-4">
@@ -2118,6 +2222,34 @@ function AgentRunsList({
         </div>
       ))}
     </div>
+  );
+}
+
+function InferredContextPanel({
+  inferredContext,
+  manualAgentContext,
+}: {
+  inferredContext: InferredAgentContext;
+  manualAgentContext: boolean;
+}) {
+  return (
+    <section className="mt-4 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-sm font-semibold">InvestorAgent understood this as</p>
+          <p className="mt-1 text-sm leading-5 text-[#5b6573]">{inferredContext.explanation}</p>
+        </div>
+        <StatusBadge status={manualAgentContext ? "manual" : "auto"} />
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <QuietStatusRow label="Topic" value={formatAgentIntent(inferredContext.intent)} />
+        <QuietStatusRow label="Area" value={inferredContext.domain} />
+        <QuietStatusRow label="Tickers" value={compactListLabel(inferredContext.tickers)} />
+        <QuietStatusRow label="Location" value={inferredContext.location ?? "Not needed"} />
+        <QuietStatusRow label="Time window" value={inferredContext.timeWindow} />
+        <QuietStatusRow label="Companies" value={compactListLabel(inferredContext.companies)} />
+      </div>
+    </section>
   );
 }
 
@@ -2888,6 +3020,157 @@ function buildPersonalizedQuestions(profile: PersonalizationProfile) {
   ];
 }
 
+function inferAgentContext(query: string, profile: PersonalizationProfile): InferredAgentContext {
+  const normalizedQuery = query.toLowerCase();
+  const queryTickers = inferTickers(query);
+  const profileTickers = splitList(profile.watchlist).map((ticker) => ticker.toUpperCase());
+  const tickers = queryTickers.length > 0 ? queryTickers : profileTickers;
+  const companies = inferCompanies(query, profile);
+  const location = inferLocation(query, profile);
+  const intent = inferIntent(normalizedQuery, queryTickers, companies);
+  const domain = inferDomain(intent, normalizedQuery);
+  const timeWindow = inferTimeWindow(normalizedQuery);
+  const explanation = buildInferenceExplanation(intent, domain, tickers, companies, location, timeWindow);
+
+  return {
+    intent,
+    domain,
+    tickers,
+    companies,
+    location,
+    timeWindow,
+    explanation,
+  };
+}
+
+function inferIntent(normalizedQuery: string, tickers: string[], companies: string[]): AgentIntent {
+  if (containsAny(normalizedQuery, ["briefing", "summary", "today's update", "daily update"])) {
+    return "daily_briefing";
+  }
+
+  if (containsAny(normalizedQuery, ["housing", "mortgage", "rent", "home price", "real estate", "inventory", "affordability"])) {
+    return "housing_macro_research";
+  }
+
+  if (containsAny(normalizedQuery, ["inflation", "cpi", "jobs", "unemployment", "fed", "rates", "gdp", "recession", "yield"])) {
+    return "market_research";
+  }
+
+  if (tickers.length > 0 || companies.length > 0 || containsAny(normalizedQuery, ["earnings", "company", "stock", "shares"])) {
+    return "company_research";
+  }
+
+  if (containsAny(normalizedQuery, ["market", "portfolio", "watchlist", "stocks", "s&p", "nasdaq"])) {
+    return "market_research";
+  }
+
+  return "general_research";
+}
+
+function inferDomain(intent: AgentIntent, normalizedQuery: string) {
+  if (intent === "daily_briefing") {
+    return "World and Geopolitics";
+  }
+
+  if (intent === "housing_macro_research") {
+    return "Housing and Real Estate";
+  }
+
+  if (containsAny(normalizedQuery, ["inflation", "cpi", "jobs", "unemployment", "fed", "gdp", "recession"])) {
+    return "U.S. Economy and Policy";
+  }
+
+  if (intent === "company_research") {
+    return "Companies and Earnings";
+  }
+
+  if (containsAny(normalizedQuery, ["oil", "gas", "energy", "gold", "commodity", "commodities"])) {
+    return "Commodities and Energy";
+  }
+
+  if (containsAny(normalizedQuery, ["ai", "chip", "semiconductor", "software", "technology", "tech"])) {
+    return "Technology and AI";
+  }
+
+  if (containsAny(normalizedQuery, ["bank", "credit", "loan", "lending"])) {
+    return "Banking and Credit";
+  }
+
+  if (containsAny(normalizedQuery, ["market", "rate", "yield", "stock", "watchlist", "portfolio"])) {
+    return "Markets and Rates";
+  }
+
+  return "World and Geopolitics";
+}
+
+function inferTickers(query: string) {
+  const matches = query.match(/\b[A-Z]{1,5}\b/g) ?? [];
+  const ignoredWords = new Set(["I", "A", "US", "USA", "AZ", "CA", "NY", "UK", "EU", "AI", "GDP", "CPI"]);
+  return uniqueList(matches.filter((match) => !ignoredWords.has(match)));
+}
+
+function inferCompanies(query: string, profile: PersonalizationProfile) {
+  const normalizedQuery = query.toLowerCase();
+  return splitList(profile.companies).filter((company) => normalizedQuery.includes(company.toLowerCase()));
+}
+
+function inferLocation(query: string, profile: PersonalizationProfile) {
+  const stateMatches = query.match(/\b(AZ|CA|NY|TX|FL|WA|NV|CO|UT|IL|GA|NC|MA|NJ|PA)\b/i);
+  if (stateMatches?.[0]) {
+    return stateMatches[0].toUpperCase();
+  }
+
+  if (containsAny(query.toLowerCase(), ["near me", "my area", "my city", "my state", "local", "housing", "mortgage"])) {
+    return profile.location || null;
+  }
+
+  return null;
+}
+
+function inferTimeWindow(normalizedQuery: string) {
+  if (containsAny(normalizedQuery, ["today", "this morning", "daily", "now", "right now"])) {
+    return "Today";
+  }
+
+  if (containsAny(normalizedQuery, ["this week", "weekly", "week"])) {
+    return "This week";
+  }
+
+  if (containsAny(normalizedQuery, ["this month", "monthly", "month", "earnings"])) {
+    return "This month";
+  }
+
+  if (containsAny(normalizedQuery, ["quarter", "q1", "q2", "q3", "q4"])) {
+    return "This quarter";
+  }
+
+  return "Recent";
+}
+
+function buildInferenceExplanation(
+  intent: AgentIntent,
+  domain: string,
+  tickers: string[],
+  companies: string[],
+  location: string | null,
+  timeWindow: string,
+) {
+  const context = [
+    `topic: ${formatAgentIntent(intent)}`,
+    `area: ${domain}`,
+    tickers.length > 0 ? `tickers: ${compactListLabel(tickers)}` : null,
+    companies.length > 0 ? `companies: ${compactListLabel(companies)}` : null,
+    location ? `location: ${location}` : null,
+    `time: ${timeWindow.toLowerCase()}`,
+  ].filter(Boolean);
+
+  return `Auto-selected ${context.join(", ")}.`;
+}
+
+function containsAny(value: string, terms: string[]) {
+  return terms.some((term) => value.includes(term));
+}
+
 function profileSummary(profile: PersonalizationProfile) {
   const location = profile.location || "no location yet";
   const watchlist = compactListLabel(splitList(profile.watchlist));
@@ -2895,6 +3178,22 @@ function profileSummary(profile: PersonalizationProfile) {
   const ignoredTopics = compactListLabel(splitList(profile.ignoredTopics));
 
   return `Location: ${location}. Watchlist: ${watchlist}. Priority topics: ${topics}. Ignored topics: ${ignoredTopics}. Briefing style: ${profile.briefingStyle}.`;
+}
+
+function formatAgentIntent(intent: AgentIntent) {
+  if (intent === "daily_briefing") {
+    return "Daily briefing";
+  }
+  if (intent === "company_research") {
+    return "Company research";
+  }
+  if (intent === "market_research") {
+    return "Market research";
+  }
+  if (intent === "housing_macro_research") {
+    return "Housing and macro";
+  }
+  return "General research";
 }
 
 function formatMetadataKey(key: string) {

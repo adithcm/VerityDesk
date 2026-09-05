@@ -74,6 +74,8 @@ Status: Complete
 
 ### 6.3 One-Question Primary Workflow
 
+Status: Complete
+
 - Make one natural-language question box the main app entry point.
 - Auto-detect intent/domain/ticker/company/region/time window.
 - Hide intent/domain/ticker dropdowns behind Advanced.
