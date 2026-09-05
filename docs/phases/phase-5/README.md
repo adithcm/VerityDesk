@@ -27,10 +27,10 @@ flowchart TD
 - [Milestone 5.6: Housing And Macro Reports](milestones/5.6-housing-and-macro-reports.md)
 - [Milestone 5.7: Report Persistence And Citation Panels](milestones/5.7-report-persistence-and-citation-panels.md)
 - [Milestone 5.8: Proactive Briefing Suggestions](milestones/5.8-proactive-briefing-suggestions.md)
+- [Milestone 5.9: Scheduler Hardening And Automatic Report Runs](milestones/5.9-scheduler-hardening-and-automatic-report-runs.md)
 
 ## Planned Milestones
 
-- [Milestone 5.9: Scheduler Hardening And Automatic Report Runs](milestones/5.9-scheduler-hardening-and-automatic-report-runs.md)
 - [Milestone 5.10: Phase 5 Validation And Docs](milestones/5.10-phase-5-validation-and-docs.md)
 
 ## Phase 5 Scope

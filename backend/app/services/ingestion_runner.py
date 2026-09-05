@@ -1,16 +1,21 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from threading import Lock
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.models import UserSettings
 from app.schemas.ingestion import DailyScheduleConfig, IngestionRunRequest, IngestionRunResponse
+from app.schemas.report import DailyBriefingRequest
 from app.services.official_api_ingestion import (
     OfficialAPIConfig,
     ingest_official_api_source,
     get_configured_official_api_sources,
 )
+from app.services.reports import generate_daily_briefing
 from app.services.rss_ingestion import RSSFeedConfig, get_configured_rss_feeds, ingest_rss_feed
 
 
@@ -27,7 +32,6 @@ class RunnerSourceResult:
 
 
 run_lock = Lock()
-daily_schedule_config = DailyScheduleConfig()
 
 
 def run_ingestion(session: Session, request: IngestionRunRequest) -> IngestionRunResponse:
@@ -145,11 +149,163 @@ def build_run_message(results: list[RunnerSourceResult]) -> str:
     )
 
 
-def get_daily_schedule_config() -> DailyScheduleConfig:
-    return daily_schedule_config
+def get_daily_schedule_config(session: Session, now: datetime | None = None) -> DailyScheduleConfig:
+    settings = get_or_create_user_settings(session)
+    next_run_at = settings.daily_next_run_at or calculate_next_run_at(
+        settings.daily_briefing_time or "08:00",
+        settings.daily_schedule_timezone,
+        now or datetime.now(UTC),
+    )
+    if settings.daily_next_run_at != next_run_at:
+        settings.daily_next_run_at = next_run_at
+        session.commit()
+        session.refresh(settings)
+
+    return settings_to_schedule_config(settings)
 
 
-def update_daily_schedule_config(config: DailyScheduleConfig) -> DailyScheduleConfig:
-    global daily_schedule_config
-    daily_schedule_config = config
-    return daily_schedule_config
+def update_daily_schedule_config(
+    session: Session,
+    config: DailyScheduleConfig,
+    now: datetime | None = None,
+) -> DailyScheduleConfig:
+    settings = get_or_create_user_settings(session)
+    settings.daily_schedule_enabled = config.enabled
+    settings.daily_briefing_time = config.local_time
+    settings.daily_schedule_timezone = config.timezone
+    settings.daily_schedule_mode = config.mode
+    settings.daily_report_enabled = config.generate_daily_briefing
+    settings.daily_next_run_at = calculate_next_run_at(config.local_time, config.timezone, now or datetime.now(UTC))
+    session.commit()
+    session.refresh(settings)
+    return settings_to_schedule_config(settings)
+
+
+def run_due_daily_workflow(session: Session, now: datetime | None = None) -> DailyScheduleConfig:
+    current_time = now or datetime.now(UTC)
+    settings = get_or_create_user_settings(session)
+    if not settings.daily_schedule_enabled:
+        settings.daily_next_run_at = calculate_next_run_at(
+            settings.daily_briefing_time or "08:00",
+            settings.daily_schedule_timezone,
+            current_time,
+        )
+        session.commit()
+        session.refresh(settings)
+        return settings_to_schedule_config(settings)
+
+    next_run_at = settings.daily_next_run_at or calculate_next_run_at(
+        settings.daily_briefing_time or "08:00",
+        settings.daily_schedule_timezone,
+        current_time,
+    )
+    if current_time < as_aware_utc(next_run_at):
+        settings.daily_next_run_at = next_run_at
+        session.commit()
+        session.refresh(settings)
+        return settings_to_schedule_config(settings)
+
+    request = IngestionRunRequest(mode=settings.daily_schedule_mode, source_keys=[])
+    response = run_ingestion(session, request)
+    report_id: int | None = None
+    message = response.message
+
+    if response.status != "already_running" and settings.daily_report_enabled:
+        report = generate_daily_briefing(
+            session,
+            DailyBriefingRequest(
+                title=f"Automatic Daily Briefing ({current_time.date().isoformat()})",
+                time_window="day",
+            ),
+        )
+        report_id = report.id
+        message = f"{message} Generated daily briefing report {report.id}."
+
+    completed_at = datetime.now(UTC)
+    settings = get_or_create_user_settings(session)
+    settings.daily_last_run_at = completed_at
+    settings.daily_last_status = response.status
+    settings.daily_last_message = message
+    settings.daily_last_report_id = report_id
+    settings.daily_next_run_at = calculate_next_run_at(
+        settings.daily_briefing_time or "08:00",
+        settings.daily_schedule_timezone,
+        current_time + timedelta(days=1),
+    )
+    session.commit()
+    session.refresh(settings)
+    return settings_to_schedule_config(settings)
+
+
+def get_or_create_user_settings(session: Session) -> UserSettings:
+    settings = session.scalar(select(UserSettings).order_by(UserSettings.id).limit(1))
+    if settings is not None:
+        return settings
+
+    settings = UserSettings(
+        watchlist_tickers=[],
+        preferred_regions=[],
+        enabled_sources=[],
+        daily_briefing_time="08:00",
+        daily_schedule_enabled=False,
+        daily_schedule_timezone="local",
+        daily_schedule_mode="all",
+        daily_report_enabled=False,
+    )
+    session.add(settings)
+    session.commit()
+    session.refresh(settings)
+    return settings
+
+
+def settings_to_schedule_config(settings: UserSettings) -> DailyScheduleConfig:
+    return DailyScheduleConfig(
+        enabled=settings.daily_schedule_enabled,
+        local_time=settings.daily_briefing_time or "08:00",
+        timezone=settings.daily_schedule_timezone,
+        mode=settings.daily_schedule_mode,
+        generate_daily_briefing=settings.daily_report_enabled,
+        last_run_at=format_datetime(settings.daily_last_run_at),
+        next_run_at=format_datetime(settings.daily_next_run_at),
+        last_status=settings.daily_last_status,
+        last_message=settings.daily_last_message,
+        last_report_id=settings.daily_last_report_id,
+    )
+
+
+def calculate_next_run_at(local_time: str, timezone: str, now: datetime) -> datetime:
+    hour, minute = parse_local_time(local_time)
+    tzinfo = schedule_zoneinfo(timezone)
+    local_now = as_aware_utc(now).astimezone(tzinfo)
+    candidate = local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if candidate <= local_now:
+        candidate += timedelta(days=1)
+    return candidate.astimezone(UTC)
+
+
+def parse_local_time(value: str) -> tuple[int, int]:
+    hour_text, _, minute_text = value.partition(":")
+    hour = int(hour_text)
+    minute = int(minute_text or "0")
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        raise ValueError("local_time must be a 24-hour HH:MM value")
+    return hour, minute
+
+
+def schedule_zoneinfo(timezone: str) -> ZoneInfo:
+    if timezone == "local":
+        return datetime.now().astimezone().tzinfo or UTC
+    try:
+        return ZoneInfo(timezone)
+    except ZoneInfoNotFoundError:
+        return UTC
+
+
+def as_aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def format_datetime(value: datetime | None) -> str | None:
+    return as_aware_utc(value).isoformat() if value else None

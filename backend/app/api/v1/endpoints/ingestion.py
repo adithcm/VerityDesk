@@ -12,6 +12,7 @@ from app.schemas.ingestion import (
 )
 from app.services.ingestion_runner import (
     get_daily_schedule_config,
+    run_due_daily_workflow,
     run_ingestion,
     update_daily_schedule_config,
 )
@@ -51,10 +52,15 @@ def read_latest_items(
 
 
 @router.get("/schedule", response_model=DailyScheduleConfig)
-def get_ingestion_schedule() -> DailyScheduleConfig:
-    return get_daily_schedule_config()
+def get_ingestion_schedule(db: Session = Depends(get_db)) -> DailyScheduleConfig:
+    return get_daily_schedule_config(db)
 
 
 @router.post("/schedule", response_model=DailyScheduleConfig)
-def update_ingestion_schedule(config: DailyScheduleConfig) -> DailyScheduleConfig:
-    return update_daily_schedule_config(config)
+def update_ingestion_schedule(config: DailyScheduleConfig, db: Session = Depends(get_db)) -> DailyScheduleConfig:
+    return update_daily_schedule_config(db, config)
+
+
+@router.post("/schedule/run-due", response_model=DailyScheduleConfig)
+def run_due_ingestion_schedule(db: Session = Depends(get_db)) -> DailyScheduleConfig:
+    return run_due_daily_workflow(db)

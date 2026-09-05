@@ -200,10 +200,10 @@ Completed milestones:
 - [Milestone 5.6: Housing and macro reports](../phases/phase-5/milestones/5.6-housing-and-macro-reports.md).
 - [Milestone 5.7: Report persistence and citation panels](../phases/phase-5/milestones/5.7-report-persistence-and-citation-panels.md).
 - [Milestone 5.8: Proactive briefing suggestions](../phases/phase-5/milestones/5.8-proactive-briefing-suggestions.md).
+- [Milestone 5.9: Scheduler hardening and automatic report runs](../phases/phase-5/milestones/5.9-scheduler-hardening-and-automatic-report-runs.md).
 
 Planned milestones:
 
-- [Milestone 5.9: Scheduler hardening and automatic report runs](../phases/phase-5/milestones/5.9-scheduler-hardening-and-automatic-report-runs.md).
 - [Milestone 5.10: Phase 5 validation and docs](../phases/phase-5/milestones/5.10-phase-5-validation-and-docs.md).
 
 ## Phase 6: Full UI Dashboard

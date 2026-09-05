@@ -133,6 +133,12 @@ type DailyScheduleConfig = {
   local_time: string;
   timezone: string;
   mode: RunMode;
+  generate_daily_briefing: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  last_status: string | null;
+  last_message: string | null;
+  last_report_id: number | null;
 };
 
 type IngestionRunResponse = {
@@ -271,6 +277,8 @@ export default function Home() {
   const [scheduleData, setScheduleData] = useState<DailyScheduleConfig | null>(null);
   const [ingestionError, setIngestionError] = useState<string | null>(null);
   const [ingestionLoading, setIngestionLoading] = useState(true);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [runMode, setRunMode] = useState<RunMode>("all");
   const [runLoading, setRunLoading] = useState(false);
   const [lastRunResponse, setLastRunResponse] = useState<IngestionRunResponse | null>(null);
@@ -525,6 +533,28 @@ export default function Home() {
       setIngestionError(error instanceof Error ? error.message : "Could not run ingestion");
     } finally {
       setRunLoading(false);
+    }
+  }
+
+  async function saveSchedule(nextSchedule: DailyScheduleConfig) {
+    setScheduleSaving(true);
+    setScheduleError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/ingestion/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextSchedule),
+      });
+      if (!response.ok) {
+        throw new Error(`Schedule update failed with status ${response.status}`);
+      }
+      setScheduleData((await response.json()) as DailyScheduleConfig);
+      await loadIngestionStatus();
+    } catch (error) {
+      setScheduleError(error instanceof Error ? error.message : "Could not save schedule");
+    } finally {
+      setScheduleSaving(false);
     }
   }
 
@@ -838,7 +868,15 @@ export default function Home() {
                 submitAgentQuery={submitAgentQuery}
               />
             )}
-            {activeView === "Settings" && <SettingsView healthData={healthData} scheduleData={scheduleData} />}
+            {activeView === "Settings" && (
+              <SettingsView
+                healthData={healthData}
+                scheduleData={scheduleData}
+                scheduleSaving={scheduleSaving}
+                scheduleError={scheduleError}
+                saveSchedule={saveSchedule}
+              />
+            )}
           </div>
         </section>
       </div>
@@ -1323,8 +1361,17 @@ function SchedulerStatusCard({
           <SettingRow label="Daily Run" value={scheduleData?.enabled ? "On" : "Off"} />
           <SettingRow label="Scheduled Time" value={formatScheduleTime(scheduleData)} />
           <SettingRow label="Run Mode" value={formatRunMode(scheduleData?.mode)} />
-          <SettingRow label="Last Run" value={formatDateTime(lastRun?.completed_at ?? lastRun?.started_at)} />
+          <SettingRow label="Auto Briefing" value={scheduleData?.generate_daily_briefing ? "On" : "Off"} />
+          <SettingRow label="Last Run" value={formatDateTime(scheduleData?.last_run_at ?? lastRun?.completed_at ?? lastRun?.started_at)} />
+          <SettingRow label="Next Run" value={formatDateTime(scheduleData?.next_run_at)} />
+          <SettingRow label="Last Status" value={scheduleData?.last_status ?? "--"} />
+          <SettingRow label="Last Report" value={scheduleData?.last_report_id ? `#${scheduleData.last_report_id}` : "--"} />
         </div>
+      )}
+      {scheduleData?.last_message && (
+        <p className="mt-4 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm text-[#5b6573]">
+          {scheduleData.last_message}
+        </p>
       )}
     </section>
   );
@@ -2042,22 +2089,98 @@ function GuardrailDetails({ response }: { response: AgentResponse }) {
 function SettingsView({
   healthData,
   scheduleData,
+  scheduleSaving,
+  scheduleError,
+  saveSchedule,
 }: {
   healthData: SourceHealthResponse | null;
   scheduleData: DailyScheduleConfig | null;
+  scheduleSaving: boolean;
+  scheduleError: string | null;
+  saveSchedule: (nextSchedule: DailyScheduleConfig) => Promise<void>;
 }) {
+  const schedule = scheduleData ?? defaultScheduleConfig();
+
+  function updateSchedule(patch: Partial<DailyScheduleConfig>) {
+    saveSchedule({ ...schedule, ...patch });
+  }
+
   return (
-    <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-      <h3 className="text-lg font-semibold">Settings</h3>
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <SettingRow label="Backend URL" value={API_BASE_URL} />
-        <SettingRow label="Source Mode" value="Catalog and ingestion status" />
-        <SettingRow label="Storage" value="Local SQLite" />
-        <SettingRow label="Tracked Sources" value={String(healthData?.total ?? 0)} />
-        <SettingRow label="Daily Run" value={scheduleData?.enabled ? "On" : "Off"} />
-        <SettingRow label="Scheduled Time" value={formatScheduleTime(scheduleData)} />
-      </div>
-    </section>
+    <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <h3 className="text-lg font-semibold">Settings</h3>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+          <SettingRow label="Backend URL" value={API_BASE_URL} />
+          <SettingRow label="Source Mode" value="Catalog and ingestion status" />
+          <SettingRow label="Storage" value="Local SQLite" />
+          <SettingRow label="Tracked Sources" value={String(healthData?.total ?? 0)} />
+        </div>
+      </section>
+
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Daily Automation</h3>
+            <p className="mt-1 text-sm text-[#5b6573]">
+              Runs while the local backend is open. Schedule settings are saved locally.
+            </p>
+          </div>
+          <StatusBadge status={schedule.enabled ? "enabled" : "off"} />
+        </div>
+        {scheduleError && <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{scheduleError}</p>}
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <label className="flex items-center gap-3 rounded-md border border-[#e5eaf0] p-3 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={schedule.enabled}
+              disabled={scheduleSaving}
+              onChange={(event) => updateSchedule({ enabled: event.target.checked })}
+            />
+            Daily run
+          </label>
+          <label className="flex items-center gap-3 rounded-md border border-[#e5eaf0] p-3 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={schedule.generate_daily_briefing}
+              disabled={scheduleSaving}
+              onChange={(event) => updateSchedule({ generate_daily_briefing: event.target.checked })}
+            />
+            Generate daily briefing
+          </label>
+          <label className="block text-sm font-medium" htmlFor="schedule-time">
+            Scheduled Time
+            <input
+              id="schedule-time"
+              type="time"
+              value={schedule.local_time}
+              disabled={scheduleSaving}
+              onChange={(event) => updateSchedule({ local_time: event.target.value })}
+              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+            />
+          </label>
+          <label className="block text-sm font-medium" htmlFor="schedule-mode">
+            Run Mode
+            <select
+              id="schedule-mode"
+              value={schedule.mode}
+              disabled={scheduleSaving}
+              onChange={(event) => updateSchedule({ mode: event.target.value as RunMode })}
+              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
+            >
+              <option value="all">All sources</option>
+              <option value="rss">RSS only</option>
+              <option value="official_api">Official APIs only</option>
+            </select>
+          </label>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <SettingRow label="Next Run" value={formatDateTime(schedule.next_run_at)} />
+          <SettingRow label="Last Run" value={formatDateTime(schedule.last_run_at)} />
+          <SettingRow label="Last Status" value={schedule.last_status ?? "--"} />
+        </div>
+        {scheduleSaving && <p className="mt-4 text-sm text-[#5b6573]">Saving schedule.</p>}
+      </section>
+    </div>
   );
 }
 
@@ -2305,6 +2428,21 @@ function formatSuggestionKind(kind: ProactiveSuggestion["kind"]) {
     return "Evidence Gap";
   }
   return kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
+function defaultScheduleConfig(): DailyScheduleConfig {
+  return {
+    enabled: false,
+    local_time: "08:00",
+    timezone: "local",
+    mode: "all",
+    generate_daily_briefing: false,
+    last_run_at: null,
+    next_run_at: null,
+    last_status: null,
+    last_message: null,
+    last_report_id: null,
+  };
 }
 
 function formatMetadataKey(key: string) {
