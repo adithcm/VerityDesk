@@ -110,6 +110,12 @@ InvestorAgent should support two main deployment paths:
    - Opens in a browser.
    - Can be shared with someone else to run on their own system.
 
+Deployment timing:
+
+- Phase 9 is the final UI, prompting, and product polish pass after source and agent functionality are stronger.
+- Phase 10 packages the app as a local macOS desktop app.
+- Phase 11 focuses on portable deployment for other systems.
+
 ## Source Principles
 
 The project should prioritize reputable and compliant sources:
@@ -137,7 +143,7 @@ The system should respect source terms, paywalls, and `robots.txt`.
 
 ## Status
 
-Phases 1-5 are complete. Next planned work is Phase 6: simpler UI and personalization.
+Phases 1-6 are complete. Next planned work is Phase 7: source expansion and parser completion.
 
 ## Local Development
 
@@ -183,12 +189,13 @@ This applies database migrations, starts the backend at `http://localhost:8000`,
 
 In the app:
 
-- Use **Dashboard** to review source health, latest evidence, market/housing/macro report actions, and suggested next steps.
-- Use **Daily Briefing** to generate a saved briefing from current evidence.
-- Use **Reports** to reopen saved reports after restart, inspect citations, regenerate reports, archive reports, or delete reports.
+- Use **Dashboard** to ask one question, open the latest briefing, view saved reports, and review suggested next steps.
+- Use **Daily Briefing** to generate and read a saved briefing from current evidence.
+- Use **Reports** to reopen saved reports after restart, refresh reports, archive reports, delete reports, and inspect citations/details when needed.
+- Use **Sources** to review source/API status, run manual ingestion, inspect latest retrieved items, and see recent ingestion runs.
 - Use **Watchlist** to generate company research.
-- Use **Agent Chat** for custom research questions.
-- Use **Settings** to enable daily automation, set the scheduled time, choose ingestion mode, and optionally generate an automatic daily briefing after ingestion.
+- Use **Agent Chat** for custom research questions with automatic context detection and optional Advanced controls.
+- Use **Settings** to save personalization, enable daily automation, set the scheduled time, choose ingestion mode, and optionally generate an automatic daily briefing after ingestion.
 
 Daily automation only runs while the local backend is open. The schedule is saved in the local database and the startup command applies migrations automatically.
 

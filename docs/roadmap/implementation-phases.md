@@ -11,6 +11,7 @@ This document tracks the full InvestorAgent implementation roadmap from planning
 - Phase 3: Complete
 - Phase 4: Complete
 - Phase 5: Complete
+- Phase 6: Complete
 
 ## Phase 1: Research And Planning
 
@@ -210,7 +211,7 @@ None.
 
 ## Phase 6: Simpler UI And Personalization
 
-Status: Planned
+Status: Complete
 
 Purpose: turn the working research system into a simpler, personalized user experience where the user mostly asks one natural-language question and the app figures out the rest.
 
@@ -248,13 +249,24 @@ Deliverables:
 - Fewer manual dropdowns in the main workflow.
 - Tests for automatic query parsing, preference defaults, and simplified UI data contracts.
 
+Completed milestones:
+
+- [Milestone 6.1: UI information architecture cleanup](../phases/phase-6/milestones/6.1-ui-information-architecture-cleanup.md).
+- [Milestone 6.2: Personalization profile](../phases/phase-6/milestones/6.2-personalization-profile.md).
+- [Milestone 6.3: One-question primary workflow](../phases/phase-6/milestones/6.3-one-question-primary-workflow.md).
+- [Milestone 6.4: Cleaner report and briefing views](../phases/phase-6/milestones/6.4-cleaner-report-and-briefing-views.md).
+- [Milestone 6.5: Source/API status UX](../phases/phase-6/milestones/6.5-source-api-status-ux.md).
+- [Milestone 6.6: Phase 6 validation and docs](../phases/phase-6/milestones/6.6-phase-6-validation-and-docs.md).
+
 Not in scope:
 
 - Major new external data connectors.
 - Native desktop packaging.
 - Broad live web search/retrieval.
 
-Detailed plan: [Phase 6](../phases/phase-6/README.md).
+Next phase:
+
+- Phase 7: Source Expansion And Parser Completion.
 
 ## Phase 7: Source Expansion And Parser Completion
 
@@ -337,11 +349,44 @@ Not in scope:
 
 Detailed plan: [Phase 8](../phases/phase-8/README.md).
 
-## Phase 9: Local Desktop App
+## Phase 9: Final UI, Prompting, And Product Polish
 
 Status: Planned
 
-Purpose: package the local web app as a native-feeling macOS desktop app after the UI, source coverage, and agent workflows are reliable.
+Purpose: do a final product-quality pass after source coverage and agent flexibility are stronger, so the UI and prompts are polished around real working functionality rather than temporary data gaps.
+
+User feedback driving this phase:
+
+- The UI still does not feel simple or polished enough.
+- The user is not fully happy with what the app returns yet.
+- Some of the output quality issue is caused by missing data, scaffolded sources, incomplete parsers, and limited retrieval.
+- The app should feel more personal, less cluttered, and less like a dashboard.
+- Daily briefings should avoid feeling sparse or filled with empty sections once the data layer improves.
+- Prompting should be tuned after the app has enough source coverage to answer richer questions.
+
+Deliverables:
+
+- Full UX review after Phase 7 source work and Phase 8 agent automation.
+- Final Dashboard layout cleanup.
+- Cleaner briefing and report presentation.
+- Prompt improvements for daily briefings and natural-language answers.
+- Better handling of no-data, sparse-data, stale-data, and uncertainty language.
+- Navigation and workflow simplification before packaging.
+- Final readiness check before desktop app work.
+
+Not in scope:
+
+- New source connector implementation.
+- Major agent retrieval architecture changes.
+- Desktop packaging.
+
+Detailed plan: [Phase 9](../phases/phase-9/README.md).
+
+## Phase 10: Local Desktop App
+
+Status: Planned
+
+Purpose: package the local web app as a native-feeling macOS desktop app after the UI, source coverage, agent workflows, and final polish pass are reliable.
 
 Deliverables:
 
@@ -353,7 +398,7 @@ Deliverables:
 - Desktop menu basics.
 - Local storage path handling.
 
-## Phase 10: Portable Deployment
+## Phase 11: Portable Deployment
 
 Status: Planned
 
@@ -369,7 +414,7 @@ Deliverables:
 - Clear install/run documentation.
 - Basic troubleshooting notes.
 
-## Phase 11: Quality, Safety, And Evaluation
+## Phase 12: Quality, Safety, And Evaluation
 
 Status: Planned
 
@@ -388,7 +433,7 @@ Deliverables:
 - Failed-source monitoring.
 - Staleness checks.
 
-## Phase 12: Advanced Features
+## Phase 13: Advanced Features
 
 Status: Planned
 

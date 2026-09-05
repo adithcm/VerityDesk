@@ -89,3 +89,7 @@ If Arizona-specific mortgage rates are unavailable, the app should explain that 
 - The agent can use local data first and approved live retrieval when needed.
 - Regional questions have clear answers or clear missing-data explanations.
 - Financial guardrails still prevent direct buy/sell/hold instructions.
+
+## Handoff To Phase 9
+
+After the source layer and flexible retrieval behavior are working, Phase 9 should do a dedicated UI, prompting, and product polish pass. That phase should address remaining dissatisfaction with layout, briefing quality, empty sections, wording, and overall user friendliness before the app is packaged for desktop use.
