@@ -84,6 +84,8 @@ Status: Complete
 
 ### 6.4 Cleaner Report And Briefing Views
 
+Status: Complete
+
 - Simplify Daily Briefing and Reports screens.
 - Make report actions easier to understand.
 - Separate summary, key points, citations, and raw metadata.

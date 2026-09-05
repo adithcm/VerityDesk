@@ -1527,12 +1527,12 @@ function DailyBriefingView({
   generateDailyBriefing: () => void;
 }) {
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+    <div className="space-y-4">
       <section className="rounded-md border border-[#d7dee3] bg-white p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h3 className="text-lg font-semibold">Daily Briefing</h3>
-            <p className="mt-1 text-sm text-[#5b6573]">Generate a saved briefing from current ingested evidence.</p>
+            <p className="mt-1 text-sm text-[#5b6573]">A readable summary built from the latest saved evidence.</p>
           </div>
           <button
             type="button"
@@ -1552,31 +1552,15 @@ function DailyBriefingView({
           </div>
         )}
         {dailyBriefingReport && (
-          <div className="mt-4 space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <SettingRow label="Status" value={dailyBriefingReport.status} />
-              <SettingRow label="Confidence" value={dailyBriefingReport.confidence} />
-              <SettingRow label="Sources" value={String(dailyBriefingReport.citations.length)} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold">{dailyBriefingReport.title}</p>
-              <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(dailyBriefingReport.as_of)}</p>
-              <p className="mt-3 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
-                {dailyBriefingReport.body}
-              </p>
-            </div>
-            <CitationList citations={dailyBriefingReport.citations} />
-          </div>
+          <ReportReadingPanel report={dailyBriefingReport} variant="briefing" />
         )}
       </section>
 
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <h3 className="text-lg font-semibold">Briefing Inputs</h3>
-          <span className="text-sm text-[#5b6573]">Latest ingested source material</span>
-        </div>
+      <details className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-[#143642]">Source material used for briefings</summary>
+        <p className="mt-2 text-sm text-[#5b6573]">Latest retrieved items are available here when you want to inspect the raw inputs.</p>
         <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
-      </section>
+      </details>
     </div>
   );
 }
@@ -1601,12 +1585,12 @@ function ReportsView({
   runReportAction: (reportId: number, action: "regenerate" | "archive" | "delete") => Promise<void>;
 }) {
   return (
-    <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+    <div className="grid gap-4 xl:grid-cols-[340px_1fr]">
       <section className="rounded-md border border-[#d7dee3] bg-white p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold">Saved Reports</h3>
-            <p className="mt-1 text-sm text-[#5b6573]">{reportListData?.total ?? 0} active reports</p>
+            <h3 className="text-lg font-semibold">Report Library</h3>
+            <p className="mt-1 text-sm text-[#5b6573]">{reportListData?.total ?? 0} saved reports</p>
           </div>
           <button
             type="button"
@@ -1640,11 +1624,16 @@ function ReportsView({
                   <span className="text-xs font-semibold uppercase text-[#25636b]">
                     {formatReportType(report.report_type)}
                   </span>
-                  <StatusBadge status={report.status} />
+                  <span className="text-xs text-[#5b6573]">{formatDateTime(report.as_of ?? report.created_at)}</span>
                 </div>
                 <p className="mt-2 text-sm font-semibold">{report.title}</p>
-                <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(report.as_of)}</p>
                 <p className="mt-2 line-clamp-2 text-sm text-[#5b6573]">{report.summary ?? report.body}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <StatusBadge status={report.confidence} />
+                  <span className="rounded-md border border-[#e5eaf0] px-2 py-1 text-xs font-semibold text-[#5b6573]">
+                    {report.citations.length} sources
+                  </span>
+                </div>
               </button>
             ))}
           </div>
@@ -1654,7 +1643,7 @@ function ReportsView({
       <section className="rounded-md border border-[#d7dee3] bg-white p-4">
         {!selectedReport ? (
           <div className="rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
-            Select a report to review details and citations.
+            Select a report to read it.
           </div>
         ) : (
           <ReportDetailPanel
@@ -1694,7 +1683,7 @@ function ReportDetailPanel({
             disabled={isBusy}
             className="min-h-10 rounded-md bg-[#143642] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
           >
-            {reportActionLoading === `regenerate-${report.id}` ? "Regenerating" : "Regenerate"}
+            {reportActionLoading === `regenerate-${report.id}` ? "Refreshing" : "Refresh Report"}
           </button>
           <button
             type="button"
@@ -1715,34 +1704,66 @@ function ReportDetailPanel({
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <SettingRow label="Status" value={report.status} />
-        <SettingRow label="Confidence" value={report.confidence} />
-        <SettingRow label="Guardrail" value={report.guardrail_status} />
-        <SettingRow label="Sources" value={String(report.citations.length)} />
-        <SettingRow label="Generated At" value={formatDateTime(report.as_of)} />
-        <SettingRow label="Created At" value={formatDateTime(report.created_at)} />
-        <SettingRow label="Updated At" value={formatDateTime(report.updated_at)} />
-        <SettingRow label="Disclaimer" value={report.disclaimer_version} />
-      </div>
+      <ReportReadingPanel report={report} variant="report" />
 
       {(report.domains.length > 0 || report.tickers.length > 0 || report.companies.length > 0) && (
-        <div className="grid gap-3 md:grid-cols-3">
-          <InlineList title="Domains" values={report.domains} />
-          <InlineList title="Tickers" values={report.tickers} />
-          <InlineList title="Companies" values={report.companies} />
+        <details className="rounded-md border border-[#e5eaf0] p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-[#143642]">Report focus</summary>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <InlineList title="Domains" values={report.domains} />
+            <InlineList title="Tickers" values={report.tickers} />
+            <InlineList title="Companies" values={report.companies} />
+          </div>
+        </details>
+      )}
+
+      <details className="rounded-md border border-[#e5eaf0] p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-[#143642]">Report details</summary>
+        <div className="mt-3 grid gap-3 md:grid-cols-4">
+          <SettingRow label="Status" value={report.status} />
+          <SettingRow label="Guardrail" value={report.guardrail_status} />
+          <SettingRow label="Created At" value={formatDateTime(report.created_at)} />
+          <SettingRow label="Updated At" value={formatDateTime(report.updated_at)} />
+          <SettingRow label="Disclaimer" value={report.disclaimer_version} />
+        </div>
+        <ReportMetadataPanel metadata={report.metadata} />
+      </details>
+    </div>
+  );
+}
+
+function ReportReadingPanel({ report, variant }: { report: ReportResponse; variant: "briefing" | "report" }) {
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex flex-wrap gap-2">
+        <StatusBadge status={report.confidence} />
+        <span className="rounded-md border border-[#e5eaf0] px-2 py-1 text-xs font-semibold text-[#5b6573]">
+          {report.citations.length} sources
+        </span>
+        <span className="rounded-md border border-[#e5eaf0] px-2 py-1 text-xs font-semibold text-[#5b6573]">
+          Retrieved At {formatDateTime(report.as_of ?? report.created_at)}
+        </span>
+      </div>
+
+      {variant === "briefing" && (
+        <div>
+          <p className="text-sm font-semibold">{report.title}</p>
+          {report.summary && <p className="mt-2 text-sm leading-6 text-[#5b6573]">{report.summary}</p>}
         </div>
       )}
 
-      <div>
-        <p className="text-sm font-semibold">Report</p>
-        <p className="mt-2 max-h-[520px] overflow-auto whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-4 text-sm leading-6 text-[#374151]">
-          {report.body}
-        </p>
-      </div>
+      <article className="whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-4 text-sm leading-7 text-[#374151]">
+        {report.body}
+      </article>
 
-      <ReportMetadataPanel metadata={report.metadata} />
-      <CitationList citations={report.citations} />
+      <p className="rounded-md border border-[#e5eaf0] bg-white p-3 text-xs leading-5 text-[#5b6573]">
+        {FINANCIAL_DISCLAIMER}
+      </p>
+
+      <details className="rounded-md border border-[#e5eaf0] p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-[#143642]">Sources and citations</summary>
+        <CitationList citations={report.citations} />
+      </details>
     </div>
   );
 }
