@@ -202,6 +202,26 @@ type AgentRunHistoryResponse = {
   total: number;
 };
 
+type ReportResponse = {
+  id: number;
+  report_type: string;
+  status: string;
+  title: string;
+  summary: string | null;
+  body: string;
+  domains: string[];
+  tickers: string[];
+  companies: string[];
+  as_of: string | null;
+  confidence: "low" | "medium" | "high";
+  disclaimer_version: string;
+  guardrail_status: "passed" | "needs_revision" | "blocked";
+  metadata: Record<string, unknown>;
+  citations: AgentResponse["citations"];
+  created_at: string;
+  updated_at: string;
+};
+
 const watchlistRows = [
   { symbol: "SPY", focus: "Broad market risk", state: "Monitor" },
   { symbol: "QQQ", focus: "Growth and AI exposure", state: "Monitor" },
@@ -231,6 +251,9 @@ export default function Home() {
   const [agentResponse, setAgentResponse] = useState<AgentResponse | null>(null);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [agentLoading, setAgentLoading] = useState(false);
+  const [dailyBriefingReport, setDailyBriefingReport] = useState<ReportResponse | null>(null);
+  const [dailyBriefingLoading, setDailyBriefingLoading] = useState(false);
+  const [dailyBriefingError, setDailyBriefingError] = useState<string | null>(null);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -360,6 +383,30 @@ export default function Home() {
     }
   }
 
+  async function generateDailyBriefing() {
+    setDailyBriefingLoading(true);
+    setDailyBriefingError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/daily-briefing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ time_window: "week" }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Daily briefing request failed with status ${response.status}`);
+      }
+
+      setDailyBriefingReport((await response.json()) as ReportResponse);
+      await loadAgentRuns();
+    } catch (error) {
+      setDailyBriefingError(error instanceof Error ? error.message : "Could not generate daily briefing");
+    } finally {
+      setDailyBriefingLoading(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f5f7f8] text-[#111827]">
       <div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
@@ -370,7 +417,7 @@ export default function Home() {
               <h1 className="mt-1 text-xl font-semibold">Market Workspace</h1>
             </div>
             <div className="rounded-md border border-[#d7dee3] px-2 py-1 text-xs font-medium text-[#4b5563]">
-              Phase 4.6
+              Phase 5.3
             </div>
           </div>
 
@@ -424,7 +471,14 @@ export default function Home() {
               />
             )}
             {activeView === "Daily Briefing" && (
-              <DailyBriefingView latestItemsData={latestItemsData} ingestionLoading={ingestionLoading} />
+              <DailyBriefingView
+                latestItemsData={latestItemsData}
+                ingestionLoading={ingestionLoading}
+                dailyBriefingReport={dailyBriefingReport}
+                dailyBriefingLoading={dailyBriefingLoading}
+                dailyBriefingError={dailyBriefingError}
+                generateDailyBriefing={generateDailyBriefing}
+              />
             )}
             {activeView === "Sources" && (
               <SourcesView
@@ -654,18 +708,70 @@ function SchedulerStatusCard({
 function DailyBriefingView({
   latestItemsData,
   ingestionLoading,
+  dailyBriefingReport,
+  dailyBriefingLoading,
+  dailyBriefingError,
+  generateDailyBriefing,
 }: {
   latestItemsData: LatestItemsResponse | null;
   ingestionLoading: boolean;
+  dailyBriefingReport: ReportResponse | null;
+  dailyBriefingLoading: boolean;
+  dailyBriefingError: string | null;
+  generateDailyBriefing: () => void;
 }) {
   return (
-    <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <h3 className="text-lg font-semibold">Daily Briefing Inputs</h3>
-        <span className="text-sm text-[#5b6573]">Latest ingested source material</span>
-      </div>
-      <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
-    </section>
+    <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Daily Briefing</h3>
+            <p className="mt-1 text-sm text-[#5b6573]">Generate a saved briefing from current ingested evidence.</p>
+          </div>
+          <button
+            type="button"
+            onClick={generateDailyBriefing}
+            disabled={dailyBriefingLoading}
+            className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
+          >
+            {dailyBriefingLoading ? "Generating" : "Generate Daily Briefing"}
+          </button>
+        </div>
+        {dailyBriefingError && (
+          <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{dailyBriefingError}</p>
+        )}
+        {!dailyBriefingReport && !dailyBriefingError && (
+          <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+            No briefing generated in this session yet.
+          </div>
+        )}
+        {dailyBriefingReport && (
+          <div className="mt-4 space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SettingRow label="Status" value={dailyBriefingReport.status} />
+              <SettingRow label="Confidence" value={dailyBriefingReport.confidence} />
+              <SettingRow label="Sources" value={String(dailyBriefingReport.citations.length)} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">{dailyBriefingReport.title}</p>
+              <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(dailyBriefingReport.as_of)}</p>
+              <p className="mt-3 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
+                {dailyBriefingReport.body}
+              </p>
+            </div>
+            <CitationList citations={dailyBriefingReport.citations} />
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <h3 className="text-lg font-semibold">Briefing Inputs</h3>
+          <span className="text-sm text-[#5b6573]">Latest ingested source material</span>
+        </div>
+        <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
+      </section>
+    </div>
   );
 }
 

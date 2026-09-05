@@ -6,9 +6,16 @@ from fastapi import HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import Citation, Report
-from app.schemas.agent import AgentCitation
-from app.schemas.report import ReportCreateRequest, ReportDeleteResponse, ReportListResponse, ReportResponse
+from app.db.models import Citation, Report, Source
+from app.schemas.agent import AgentCitation, AgentQueryRequest, AgentQueryResponse
+from app.schemas.report import (
+    DailyBriefingRequest,
+    ReportCreateRequest,
+    ReportDeleteResponse,
+    ReportListResponse,
+    ReportResponse,
+)
+from app.services.agents import run_agent_query
 from app.services.guardrails import FINANCIAL_DISCLAIMER
 
 
@@ -19,6 +26,19 @@ REPORT_TYPE_LABELS = {
     "housing": "Housing Report",
     "macro": "Macro Report",
 }
+
+DAILY_BRIEFING_DOMAINS = [
+    "World and Geopolitics",
+    "U.S. Economy and Policy",
+    "Markets and Rates",
+    "Companies and Earnings",
+    "Housing and Real Estate",
+    "Commodities and Energy",
+    "Technology and AI",
+    "Banking and Credit",
+    "Consumer and Labor",
+    "Regulation and Legal",
+]
 
 
 def create_report(session: Session, request: ReportCreateRequest) -> ReportResponse:
@@ -47,6 +67,56 @@ def create_report(session: Session, request: ReportCreateRequest) -> ReportRespo
     session.commit()
     session.refresh(report)
     return report_to_response(report)
+
+
+def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> ReportResponse:
+    now = datetime.now(UTC)
+    domains = request.domains or DAILY_BRIEFING_DOMAINS
+    query = request.user_query or (
+        "Generate a concise daily briefing covering the most important current world, market, macro, company, "
+        "housing, policy, credit, commodity, technology, consumer, and legal signals from the ingested evidence."
+    )
+    agent_request = AgentQueryRequest(
+        user_query=query,
+        intent="daily_briefing",
+        domains=domains,
+        regions=request.regions,
+        time_window=request.time_window,
+        safety_level="investment_research",
+    )
+    agent_response = run_agent_query(agent_request, session)
+
+    report = Report(
+        report_type="daily_briefing",
+        status="generated",
+        title=request.title or default_report_title(ReportCreateRequest(report_type="daily_briefing"), now),
+        summary=build_report_summary(agent_response),
+        body=agent_response.summary,
+        domains=domains,
+        tickers=[],
+        companies=[],
+        as_of=now,
+        confidence=agent_response.confidence,
+        disclaimer_version="v1",
+        guardrail_status=agent_response.guardrail.status,
+        report_metadata={
+            "user_query": query,
+            "regions": request.regions,
+            "time_window": request.time_window,
+            "generation_stage": "daily_briefing",
+            "agent_request_id": agent_response.request_id,
+            "agents_ran": agent_response.agents_ran,
+            "requires_guardrail_review": agent_response.requires_guardrail_review,
+            "follow_up_questions": agent_response.follow_up_questions,
+            "risks": agent_response.risks,
+        },
+    )
+    session.add(report)
+    session.flush()
+    add_report_citations(session, report, agent_response.citations)
+    session.commit()
+    session.refresh(report)
+    return get_report(session, report.id)
 
 
 def list_reports(session: Session, *, limit: int = 25, report_type: str | None = None) -> ReportListResponse:
@@ -79,6 +149,25 @@ def delete_report(session: Session, report_id: int) -> ReportDeleteResponse:
     session.delete(report)
     session.commit()
     return ReportDeleteResponse(id=report_id, deleted=True)
+
+
+def add_report_citations(session: Session, report: Report, citations: list[AgentCitation]) -> None:
+    source_by_key = {source.name: source for source in session.scalars(select(Source)).all()}
+    for citation in citations:
+        source = source_for_citation(session, source_by_key, citation)
+        if source is None:
+            continue
+        report.citations.append(
+            Citation(
+                source=source,
+                url=citation.url or "",
+                title=citation.title,
+                publisher=citation.publisher,
+                published_at=parse_datetime(citation.published_at),
+                retrieved_at=parse_datetime(citation.retrieved_at),
+                supports_claim=citation.supports_claim,
+            )
+        )
 
 
 def report_to_response(report: Report) -> ReportResponse:
@@ -116,6 +205,36 @@ def citation_to_agent_citation(citation: Citation) -> AgentCitation:
     )
 
 
+def source_for_citation(
+    session: Session,
+    source_by_key: dict[str, Source],
+    citation: AgentCitation,
+) -> Source | None:
+    candidates = [
+        citation.source_id,
+        citation.publisher,
+    ]
+    for candidate in candidates:
+        if candidate and candidate in source_by_key:
+            return source_by_key[candidate]
+
+    if not citation.source_id:
+        return None
+
+    source = Source(
+        name=citation.source_id,
+        base_url=None,
+        source_type="citation",
+        domains=[],
+        access_method="generated_report",
+        enabled=True,
+    )
+    session.add(source)
+    session.flush()
+    source_by_key[source.name] = source
+    return source
+
+
 def default_report_title(request: ReportCreateRequest, as_of: datetime) -> str:
     label = REPORT_TYPE_LABELS[request.report_type]
     date = as_of.date().isoformat()
@@ -144,6 +263,21 @@ def build_report_shell_body(request: ReportCreateRequest) -> str:
         context_lines.append(f"Companies: {', '.join(request.companies)}")
 
     return "\n".join(context_lines)
+
+
+def build_report_summary(agent_response: AgentQueryResponse) -> str:
+    lines = [line.strip() for line in agent_response.summary.splitlines() if line.strip()]
+    for line in lines:
+        if "financial advice" in line.lower() or "not a recommendation" in line.lower():
+            continue
+        return line[:500]
+    return "Daily briefing generated from current ingested evidence."
+
+
+def parse_datetime(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    return datetime.fromisoformat(value)
 
 
 def normalize_symbols(symbols: list[str]) -> list[str]:

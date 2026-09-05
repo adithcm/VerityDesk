@@ -6,11 +6,13 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
-from app.db.models import Report
+from app.db.models import Report, Source
 from app.db.session import get_db
 from app.main import app
+from app.schemas.agent import AgentCitation, AgentQueryResponse, GuardrailCheck
 from app.schemas.report import ReportCreateRequest
-from app.services.reports import create_report, delete_report, get_report, list_reports
+from app.services import reports
+from app.services.reports import create_report, delete_report, generate_daily_briefing, get_report, list_reports
 
 
 def build_session_factory():
@@ -112,6 +114,102 @@ def test_report_endpoints_create_list_read_delete() -> None:
         assert missing_response.status_code == 404
     finally:
         app.dependency_overrides.clear()
+
+
+def test_generate_daily_briefing_saves_agent_response_and_citations(monkeypatch) -> None:
+    def fake_run_agent_query(request, session):
+        return AgentQueryResponse(
+            request_id="agent-request-1",
+            summary=(
+                "This is not financial advice. InvestorAgent is for research and educational purposes only.\n\n"
+                "Markets are focused on rates and labor data today."
+            ),
+            agents_ran=["CoordinatorAgent", "NewsDigestAgent", "MarketAgent", "SynthesisAgent"],
+            claims=[],
+            citations=[
+                AgentCitation(
+                    source_id="BBC News RSS",
+                    title="Markets watch rates",
+                    url="https://example.test/markets",
+                    publisher="BBC",
+                    published_at="2026-09-04T12:00:00+00:00",
+                    retrieved_at="2026-09-04T13:00:00+00:00",
+                    supports_claim="Markets focused on rates.",
+                )
+            ],
+            confidence="medium",
+            risks=["Evidence may be incomplete."],
+            follow_up_questions=["Should we narrow this by sector?"],
+            guardrail=GuardrailCheck(
+                status="passed",
+                disclaimer="This is not financial advice.",
+                issues=[],
+                banned_phrases_found=[],
+                required_sections=[],
+            ),
+            requires_guardrail_review=False,
+        )
+
+    monkeypatch.setattr(reports, "run_agent_query", fake_run_agent_query)
+
+    with build_session() as session:
+        session.add(
+            Source(
+                name="BBC News RSS",
+                base_url="https://www.bbc.com/news",
+                source_type="official_rss",
+                domains=["Markets and Rates"],
+                access_method="rss",
+            )
+        )
+        session.commit()
+
+        response = generate_daily_briefing(session, reports.DailyBriefingRequest())
+
+        assert response.report_type == "daily_briefing"
+        assert response.status == "generated"
+        assert response.confidence == "medium"
+        assert response.guardrail_status == "passed"
+        assert response.metadata["generation_stage"] == "daily_briefing"
+        assert response.metadata["agent_request_id"] == "agent-request-1"
+        assert response.summary == "Markets are focused on rates and labor data today."
+        assert len(response.citations) == 1
+        assert response.citations[0].title == "Markets watch rates"
+
+
+def test_daily_briefing_endpoint_returns_generated_report(monkeypatch) -> None:
+    def fake_generate_daily_briefing(session, request):
+        return reports.ReportResponse(
+            id=1,
+            report_type="daily_briefing",
+            status="generated",
+            title=request.title or "Daily Briefing",
+            summary="Briefing summary.",
+            body="Briefing body.",
+            domains=request.domains,
+            tickers=[],
+            companies=[],
+            as_of="2026-09-04T12:00:00+00:00",
+            confidence="medium",
+            disclaimer_version="v1",
+            guardrail_status="passed",
+            metadata={"generation_stage": "daily_briefing"},
+            citations=[],
+            created_at="2026-09-04T12:00:00+00:00",
+            updated_at="2026-09-04T12:00:00+00:00",
+        )
+
+    monkeypatch.setattr("app.api.v1.endpoints.reports.generate_daily_briefing", fake_generate_daily_briefing)
+
+    response = TestClient(app).post(
+        "/api/v1/reports/daily-briefing",
+        json={"title": "Morning Briefing", "domains": ["Markets and Rates"]},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["title"] == "Morning Briefing"
+    assert payload["status"] == "generated"
 
 
 def test_report_endpoint_validates_report_type() -> None:

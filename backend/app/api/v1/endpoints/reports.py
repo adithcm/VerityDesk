@@ -2,8 +2,15 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.report import ReportCreateRequest, ReportDeleteResponse, ReportListResponse, ReportResponse, ReportType
-from app.services.reports import create_report, delete_report, get_report, list_reports
+from app.schemas.report import (
+    DailyBriefingRequest,
+    ReportCreateRequest,
+    ReportDeleteResponse,
+    ReportListResponse,
+    ReportResponse,
+    ReportType,
+)
+from app.services.reports import create_report, delete_report, generate_daily_briefing, get_report, list_reports
 
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -15,6 +22,14 @@ def create_research_report(
     db: Session = Depends(get_db),
 ) -> ReportResponse:
     return create_report(db, request)
+
+
+@router.post("/daily-briefing", response_model=ReportResponse, status_code=201)
+def create_daily_briefing(
+    request: DailyBriefingRequest,
+    db: Session = Depends(get_db),
+) -> ReportResponse:
+    return generate_daily_briefing(db, request)
 
 
 @router.get("", response_model=ReportListResponse)

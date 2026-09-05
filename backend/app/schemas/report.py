@@ -27,6 +27,14 @@ class ReportCreateRequest(BaseModel):
     time_window: str | None = None
 
 
+class DailyBriefingRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+    domains: list[str] = Field(default_factory=list)
+    regions: list[str] = Field(default_factory=list)
+    time_window: str = "week"
+    user_query: str | None = Field(default=None, max_length=4000)
+
+
 class ReportResponse(BaseModel):
     id: int
     report_type: ReportType
@@ -55,4 +63,3 @@ class ReportListResponse(BaseModel):
 class ReportDeleteResponse(BaseModel):
     id: int
     deleted: bool
-
