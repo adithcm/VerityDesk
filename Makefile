@@ -1,9 +1,12 @@
-.PHONY: node-install backend-dev backend-test backend-lint db-upgrade db-downgrade rss-ingest official-api-ingest frontend-dev frontend-build frontend-typecheck compose-up compose-down
+.PHONY: node-install app-dev backend-dev backend-test backend-lint db-upgrade db-downgrade rss-ingest official-api-ingest frontend-dev frontend-build frontend-typecheck compose-up compose-down
 
 LOCAL_NODE_BIN := $(CURDIR)/.runtime/node-v22.23.2-darwin-arm64/bin
 
 node-install:
 	bash scripts/install-local-node.sh
+
+app-dev:
+	bash scripts/start-local.sh
 
 backend-dev:
 	cd backend && ../.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

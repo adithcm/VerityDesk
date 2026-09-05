@@ -190,8 +190,8 @@ def test_market_agent_uses_market_observations() -> None:
         result = agent.run(build_context(domains=["Markets and Rates"], regions=["US"]))
 
     assert result.agent_name == "MarketAgent"
-    assert "FEDFUNDS" in summarizer.evidence
-    assert "UNRATE" in summarizer.evidence
+    assert "Federal Funds Rate (FEDFUNDS)" in summarizer.evidence
+    assert "Unemployment Rate (UNRATE)" in summarizer.evidence
     assert result.citations
 
 
@@ -204,8 +204,8 @@ def test_macro_agent_uses_macro_series() -> None:
         result = agent.run(build_context(regions=["US"]))
 
     assert result.agent_name == "MacroAgent"
-    assert "FEDFUNDS" in summarizer.evidence
-    assert "UNRATE" in summarizer.evidence
+    assert "Federal Funds Rate (FEDFUNDS)" in summarizer.evidence
+    assert "Unemployment Rate (UNRATE)" in summarizer.evidence
 
 
 def test_housing_agent_uses_housing_article_and_mortgage_series() -> None:
@@ -218,7 +218,7 @@ def test_housing_agent_uses_housing_article_and_mortgage_series() -> None:
 
     assert result.agent_name == "HousingAgent"
     assert "Housing affordability" in summarizer.evidence
-    assert "MORTGAGE30US" in summarizer.evidence
+    assert "30-Year Fixed Mortgage Rate (MORTGAGE30US)" in summarizer.evidence
 
 
 def test_domain_agent_returns_missing_data_result() -> None:

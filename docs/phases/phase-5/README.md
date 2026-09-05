@@ -20,10 +20,10 @@ flowchart TD
 ## Completed Milestones
 
 - [Milestone 5.1: Report Data Model And API Contracts](milestones/5.1-report-data-model-and-api-contracts.md)
+- [Milestone 5.2: Evidence Cleanup And Source Data Quality](milestones/5.2-evidence-cleanup-and-source-data-quality.md)
 
 ## Planned Milestones
 
-- [Milestone 5.2: Evidence Cleanup And Source Data Quality](milestones/5.2-evidence-cleanup-and-source-data-quality.md)
 - [Milestone 5.3: Daily Briefing Generator](milestones/5.3-daily-briefing-generator.md)
 - [Milestone 5.4: Company Research Report Generator](milestones/5.4-company-research-report-generator.md)
 - [Milestone 5.5: Market Strategy And Scenario Reports](milestones/5.5-market-strategy-and-scenario-reports.md)

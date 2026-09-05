@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -133,9 +134,40 @@ def test_economic_observations_filter_by_series_and_region() -> None:
 
     assert len(results) == 1
     assert results[0].series_id == "UNRATE"
+    assert results[0].display_name == "Unemployment Rate"
+    assert results[0].description == "Share of the U.S. labor force that is unemployed."
     assert results[0].value == 4.3
     assert results[0].source_id == "fred-api"
-    assert results[0].citation.title == "UNRATE"
+    assert results[0].citation.title == "Unemployment Rate"
+
+
+def test_economic_observations_group_to_latest_per_series_and_region() -> None:
+    now = datetime.now(UTC)
+
+    with build_session() as session:
+        seed_evidence(session)
+        fred = session.scalar(select(Source).where(Source.name == "FRED API"))
+        assert fred is not None
+        session.add(
+            EconomicObservation(
+                source=fred,
+                series_id="UNRATE",
+                series_name="UNRATE",
+                value=4.1,
+                unit="percent",
+                period="2026-07-01",
+                released_at=now - timedelta(days=40),
+                retrieved_at=now - timedelta(days=39),
+                region="US",
+            )
+        )
+        session.commit()
+        repository = ResearchEvidenceRepository(session)
+
+        results = repository.economic_observations(EvidenceQuery(series_ids=["UNRATE"], regions=["US"], limit=5))
+
+    assert len(results) == 1
+    assert results[0].period == "2026-08-01"
 
 
 def test_source_health_returns_citation_ready_status() -> None:

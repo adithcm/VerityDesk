@@ -110,6 +110,7 @@ type LatestIngestedItem = {
   item_type: "article" | "economic_observation";
   source_key: string;
   source_name: string | null;
+  series_id: string | null;
   title: string;
   url: string | null;
   published_at: string | null;
@@ -1089,11 +1090,18 @@ function LatestItemsList({
               <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-medium text-[#25636b]">
                 {item.item_type === "article" ? "Article" : "Observation"}
               </span>
+              {item.series_id && (
+                <span className="rounded-md border border-[#d7dee3] px-2 py-1 text-xs font-medium text-[#5b6573]">
+                  {item.series_id}
+                </span>
+              )}
             </div>
             <p className="mt-1 text-sm text-[#5b6573]">{item.summary ?? observationSummary(item)}</p>
           </div>
           <p className="text-sm text-[#374151]">{item.source_name ?? item.source_key}</p>
           <div>
+            <p className="text-xs font-semibold uppercase text-[#5b6573]">{item.item_type === "article" ? "Published At" : "Released At"}</p>
+            <p className="mt-1 text-sm text-[#5b6573]">{formatDateTime(item.published_at)}</p>
             <p className="text-xs font-semibold uppercase text-[#5b6573]">Retrieved At</p>
             <p className="mt-1 text-sm text-[#5b6573]">{formatDateTime(item.retrieved_at)}</p>
           </div>

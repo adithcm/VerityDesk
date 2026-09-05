@@ -173,6 +173,14 @@ Copy the example environment file before running local services:
 cp .env.example .env
 ```
 
+Start the local app with one command:
+
+```bash
+make app-dev
+```
+
+This applies database migrations, starts the backend at `http://localhost:8000`, and starts the frontend at `http://localhost:3000`. Press `Ctrl+C` in that terminal to stop both services.
+
 Run the backend:
 
 ```bash

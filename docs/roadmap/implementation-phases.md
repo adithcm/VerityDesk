@@ -193,10 +193,10 @@ Deliverables:
 Completed milestones:
 
 - [Milestone 5.1: Report data model and API contracts](../phases/phase-5/milestones/5.1-report-data-model-and-api-contracts.md).
+- [Milestone 5.2: Evidence cleanup and source data quality](../phases/phase-5/milestones/5.2-evidence-cleanup-and-source-data-quality.md).
 
 Planned milestones:
 
-- [Milestone 5.2: Evidence cleanup and source data quality](../phases/phase-5/milestones/5.2-evidence-cleanup-and-source-data-quality.md).
 - [Milestone 5.3: Daily briefing generator](../phases/phase-5/milestones/5.3-daily-briefing-generator.md).
 - [Milestone 5.4: Company research report generator](../phases/phase-5/milestones/5.4-company-research-report-generator.md).
 - [Milestone 5.5: Market strategy and scenario reports](../phases/phase-5/milestones/5.5-market-strategy-and-scenario-reports.md).
