@@ -228,6 +228,32 @@ type ReportListResponse = {
   total: number;
 };
 
+type ProactiveSuggestion = {
+  id: string;
+  kind: "question" | "report" | "evidence_gap";
+  title: string;
+  prompt: string;
+  action:
+    | "run_agent_query"
+    | "generate_daily_briefing"
+    | "generate_company_research"
+    | "generate_market_strategy"
+    | "generate_housing_report"
+    | "generate_macro_report"
+    | "review_sources";
+  priority: number;
+  domains: string[];
+  tickers: string[];
+  reasons: string[];
+  guardrail_note: string;
+};
+
+type ProactiveSuggestionsResponse = {
+  suggestions: ProactiveSuggestion[];
+  total: number;
+  generated_at: string;
+};
+
 const watchlistRows = [
   { symbol: "SPY", focus: "Broad market risk", state: "Monitor" },
   { symbol: "QQQ", focus: "Growth and AI exposure", state: "Monitor" },
@@ -279,6 +305,9 @@ export default function Home() {
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [selectedReport, setSelectedReport] = useState<ReportResponse | null>(null);
   const [reportActionLoading, setReportActionLoading] = useState<string | null>(null);
+  const [suggestionsData, setSuggestionsData] = useState<ProactiveSuggestionsResponse | null>(null);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -329,6 +358,7 @@ export default function Home() {
     loadIngestionStatus();
     loadAgentRuns();
     loadReports();
+    loadSuggestions();
   }, []);
 
   const primarySources = useMemo(
@@ -375,6 +405,58 @@ export default function Home() {
       setReportListData(null);
     } finally {
       setReportsLoading(false);
+    }
+  }
+
+  async function loadSuggestions() {
+    setSuggestionsLoading(true);
+    setSuggestionsError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/suggestions/proactive?limit=7`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Suggestions request failed with status ${response.status}`);
+      }
+      setSuggestionsData((await response.json()) as ProactiveSuggestionsResponse);
+    } catch (error) {
+      setSuggestionsError(error instanceof Error ? error.message : "Could not load suggestions");
+      setSuggestionsData(null);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }
+
+  function applySuggestion(suggestion: ProactiveSuggestion) {
+    if (suggestion.action === "run_agent_query") {
+      setAgentQuery(suggestion.prompt);
+      setAgentIntent(suggestion.domains.some((domain) => domain.includes("Housing")) ? "housing_macro_research" : "market_research");
+      setAgentDomain(suggestion.domains[0] ?? "Markets and Rates");
+      setAgentTicker(suggestion.tickers.join(", "));
+      setActiveView("Agent Chat");
+      return;
+    }
+    if (suggestion.action === "generate_daily_briefing") {
+      generateDailyBriefing();
+      setActiveView("Daily Briefing");
+      return;
+    }
+    if (suggestion.action === "generate_market_strategy") {
+      generateMarketStrategy();
+      setActiveView("Dashboard");
+      return;
+    }
+    if (suggestion.action === "generate_housing_report") {
+      generateHousingReport();
+      setActiveView("Dashboard");
+      return;
+    }
+    if (suggestion.action === "generate_macro_report") {
+      generateMacroReport();
+      setActiveView("Dashboard");
+      return;
+    }
+    if (suggestion.action === "review_sources") {
+      setActiveView("Sources");
     }
   }
 
@@ -438,6 +520,7 @@ export default function Home() {
 
       setLastRunResponse((await response.json()) as IngestionRunResponse);
       await loadIngestionStatus();
+      await loadSuggestions();
     } catch (error) {
       setIngestionError(error instanceof Error ? error.message : "Could not run ingestion");
     } finally {
@@ -496,6 +579,7 @@ export default function Home() {
       setDailyBriefingReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
       await loadReports();
+      await loadSuggestions();
     } catch (error) {
       setDailyBriefingError(error instanceof Error ? error.message : "Could not generate daily briefing");
     } finally {
@@ -526,6 +610,7 @@ export default function Home() {
       setCompanyReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
       await loadReports();
+      await loadSuggestions();
     } catch (error) {
       setCompanyReportError(error instanceof Error ? error.message : "Could not generate company report");
     } finally {
@@ -551,6 +636,7 @@ export default function Home() {
       setMarketReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
       await loadReports();
+      await loadSuggestions();
     } catch (error) {
       setMarketReportError(error instanceof Error ? error.message : "Could not generate market strategy report");
     } finally {
@@ -576,6 +662,7 @@ export default function Home() {
       setHousingReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
       await loadReports();
+      await loadSuggestions();
     } catch (error) {
       setHousingReportError(error instanceof Error ? error.message : "Could not generate housing report");
     } finally {
@@ -601,6 +688,7 @@ export default function Home() {
       setMacroReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
       await loadReports();
+      await loadSuggestions();
     } catch (error) {
       setMacroReportError(error instanceof Error ? error.message : "Could not generate macro report");
     } finally {
@@ -681,6 +769,11 @@ export default function Home() {
                 macroReportLoading={macroReportLoading}
                 macroReportError={macroReportError}
                 generateMacroReport={generateMacroReport}
+                suggestionsData={suggestionsData}
+                suggestionsLoading={suggestionsLoading}
+                suggestionsError={suggestionsError}
+                loadSuggestions={loadSuggestions}
+                applySuggestion={applySuggestion}
               />
             )}
             {activeView === "Daily Briefing" && (
@@ -811,6 +904,11 @@ function DashboardView({
   macroReportLoading,
   macroReportError,
   generateMacroReport,
+  suggestionsData,
+  suggestionsLoading,
+  suggestionsError,
+  loadSuggestions,
+  applySuggestion,
 }: {
   sourceData: SourceCatalogResponse | null;
   sourceError: string | null;
@@ -839,9 +937,22 @@ function DashboardView({
   macroReportLoading: boolean;
   macroReportError: string | null;
   generateMacroReport: () => void;
+  suggestionsData: ProactiveSuggestionsResponse | null;
+  suggestionsLoading: boolean;
+  suggestionsError: string | null;
+  loadSuggestions: () => Promise<void>;
+  applySuggestion: (suggestion: ProactiveSuggestion) => void;
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+      <ProactiveSuggestionsCard
+        suggestionsData={suggestionsData}
+        suggestionsLoading={suggestionsLoading}
+        suggestionsError={suggestionsError}
+        loadSuggestions={loadSuggestions}
+        applySuggestion={applySuggestion}
+      />
+
       <section className="rounded-md border border-[#d7dee3] bg-white p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <h3 className="text-lg font-semibold">Ingestion Health</h3>
@@ -915,6 +1026,75 @@ function DashboardView({
         <RecentRunsTable runsData={runsData} loading={ingestionLoading} />
       </section>
     </div>
+  );
+}
+
+function ProactiveSuggestionsCard({
+  suggestionsData,
+  suggestionsLoading,
+  suggestionsError,
+  loadSuggestions,
+  applySuggestion,
+}: {
+  suggestionsData: ProactiveSuggestionsResponse | null;
+  suggestionsLoading: boolean;
+  suggestionsError: string | null;
+  loadSuggestions: () => Promise<void>;
+  applySuggestion: (suggestion: ProactiveSuggestion) => void;
+}) {
+  return (
+    <section className="rounded-md border border-[#d7dee3] bg-white p-4 xl:col-span-2">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Suggested Next Steps</h3>
+          <p className="mt-1 text-sm text-[#5b6573]">
+            Recommended questions and reports based on recent evidence and saved report history.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => loadSuggestions()}
+          disabled={suggestionsLoading}
+          className="min-h-10 rounded-md border border-[#cbd5dc] px-3 py-2 text-sm font-semibold text-[#143642] disabled:cursor-not-allowed disabled:text-[#9aa8b2]"
+        >
+          {suggestionsLoading ? "Loading" : "Refresh"}
+        </button>
+      </div>
+      <StatusBlock loading={suggestionsLoading} error={suggestionsError} />
+      {!suggestionsLoading && !suggestionsError && (!suggestionsData || suggestionsData.suggestions.length === 0) && (
+        <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+          No suggestions available yet.
+        </div>
+      )}
+      {suggestionsData && suggestionsData.suggestions.length > 0 && (
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          {suggestionsData.suggestions.slice(0, 6).map((suggestion) => (
+            <button
+              key={suggestion.id}
+              type="button"
+              onClick={() => applySuggestion(suggestion)}
+              className="rounded-md border border-[#e5eaf0] p-3 text-left transition hover:border-[#b7c7ce] hover:bg-[#f8fafb]"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-semibold uppercase text-[#25636b]">
+                  {formatSuggestionKind(suggestion.kind)}
+                </span>
+                <span className="text-xs font-semibold text-[#5b6573]">Priority {suggestion.priority}</span>
+              </div>
+              <p className="mt-3 text-sm font-semibold">{suggestion.title}</p>
+              <p className="mt-2 text-sm leading-5 text-[#374151]">{suggestion.prompt}</p>
+              {suggestion.reasons.length > 0 && (
+                <p className="mt-3 text-xs leading-5 text-[#5b6573]">{suggestion.reasons[0]}</p>
+              )}
+              <p className="mt-3 text-xs font-medium text-[#8a4b08]">{suggestion.guardrail_note}</p>
+            </button>
+          ))}
+        </div>
+      )}
+      {suggestionsData && (
+        <p className="mt-3 text-xs text-[#5b6573]">Updated {formatDateTime(suggestionsData.generated_at)}</p>
+      )}
+    </section>
   );
 }
 
@@ -2118,6 +2298,13 @@ function formatReportType(reportType: string) {
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+function formatSuggestionKind(kind: ProactiveSuggestion["kind"]) {
+  if (kind === "evidence_gap") {
+    return "Evidence Gap";
+  }
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 function formatMetadataKey(key: string) {
