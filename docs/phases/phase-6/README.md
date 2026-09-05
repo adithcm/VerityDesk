@@ -48,6 +48,8 @@ The app should infer:
 
 ### 6.1 UI Information Architecture Cleanup
 
+Status: Complete
+
 - Reduce first-screen clutter.
 - Group operational details under Sources/System Status.
 - Make Dashboard focus on today's briefing, suggested next steps, and saved reports.

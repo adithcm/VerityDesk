@@ -369,11 +369,6 @@ export default function Home() {
     loadSuggestions();
   }, []);
 
-  const primarySources = useMemo(
-    () => sourceData?.sources.filter((source) => source.reliability_tier === "primary") ?? [],
-    [sourceData],
-  );
-
   async function loadAgentRuns() {
     setAgentRunsLoading(true);
 
@@ -772,38 +767,20 @@ export default function Home() {
           <div className="mt-5">
             {activeView === "Dashboard" && (
               <DashboardView
-                sourceData={sourceData}
-                sourceError={sourceError}
-                sourcesLoading={sourcesLoading}
-                primarySources={primarySources}
                 healthData={healthData}
-                runsData={runsData}
-                latestItemsData={latestItemsData}
                 scheduleData={scheduleData}
                 ingestionError={ingestionError}
                 ingestionLoading={ingestionLoading}
-                runMode={runMode}
-                runLoading={runLoading}
-                lastRunResponse={lastRunResponse}
-                setRunMode={setRunMode}
-                triggerIngestionRun={triggerIngestionRun}
-                marketReport={marketReport}
-                marketReportLoading={marketReportLoading}
-                marketReportError={marketReportError}
-                generateMarketStrategy={generateMarketStrategy}
-                housingReport={housingReport}
-                housingReportLoading={housingReportLoading}
-                housingReportError={housingReportError}
-                generateHousingReport={generateHousingReport}
-                macroReport={macroReport}
-                macroReportLoading={macroReportLoading}
-                macroReportError={macroReportError}
-                generateMacroReport={generateMacroReport}
+                reportListData={reportListData}
+                reportsLoading={reportsLoading}
+                reportsError={reportsError}
                 suggestionsData={suggestionsData}
                 suggestionsLoading={suggestionsLoading}
                 suggestionsError={suggestionsError}
                 loadSuggestions={loadSuggestions}
                 applySuggestion={applySuggestion}
+                setActiveView={setActiveView}
+                setAgentQuery={setAgentQuery}
               />
             )}
             {activeView === "Daily Briefing" && (
@@ -834,8 +811,16 @@ export default function Home() {
                 sourceError={sourceError}
                 sourcesLoading={sourcesLoading}
                 healthData={healthData}
+                runsData={runsData}
+                latestItemsData={latestItemsData}
+                scheduleData={scheduleData}
                 ingestionError={ingestionError}
                 ingestionLoading={ingestionLoading}
+                runMode={runMode}
+                runLoading={runLoading}
+                lastRunResponse={lastRunResponse}
+                setRunMode={setRunMode}
+                triggerIngestionRun={triggerIngestionRun}
               />
             )}
             {activeView === "Watchlist" && (
@@ -915,74 +900,164 @@ function AppHeader({
 }
 
 function DashboardView({
-  sourceData,
-  sourceError,
-  sourcesLoading,
-  primarySources,
   healthData,
-  runsData,
-  latestItemsData,
   scheduleData,
   ingestionError,
   ingestionLoading,
-  runMode,
-  runLoading,
-  lastRunResponse,
-  setRunMode,
-  triggerIngestionRun,
-  marketReport,
-  marketReportLoading,
-  marketReportError,
-  generateMarketStrategy,
-  housingReport,
-  housingReportLoading,
-  housingReportError,
-  generateHousingReport,
-  macroReport,
-  macroReportLoading,
-  macroReportError,
-  generateMacroReport,
+  reportListData,
+  reportsLoading,
+  reportsError,
   suggestionsData,
   suggestionsLoading,
   suggestionsError,
   loadSuggestions,
   applySuggestion,
+  setActiveView,
+  setAgentQuery,
 }: {
-  sourceData: SourceCatalogResponse | null;
-  sourceError: string | null;
-  sourcesLoading: boolean;
-  primarySources: SourceEntry[];
   healthData: SourceHealthResponse | null;
-  runsData: IngestionRunHistoryResponse | null;
-  latestItemsData: LatestItemsResponse | null;
   scheduleData: DailyScheduleConfig | null;
   ingestionError: string | null;
   ingestionLoading: boolean;
-  runMode: RunMode;
-  runLoading: boolean;
-  lastRunResponse: IngestionRunResponse | null;
-  setRunMode: (mode: RunMode) => void;
-  triggerIngestionRun: () => void;
-  marketReport: ReportResponse | null;
-  marketReportLoading: boolean;
-  marketReportError: string | null;
-  generateMarketStrategy: () => void;
-  housingReport: ReportResponse | null;
-  housingReportLoading: boolean;
-  housingReportError: string | null;
-  generateHousingReport: () => void;
-  macroReport: ReportResponse | null;
-  macroReportLoading: boolean;
-  macroReportError: string | null;
-  generateMacroReport: () => void;
+  reportListData: ReportListResponse | null;
+  reportsLoading: boolean;
+  reportsError: string | null;
   suggestionsData: ProactiveSuggestionsResponse | null;
   suggestionsLoading: boolean;
   suggestionsError: string | null;
   loadSuggestions: () => Promise<void>;
   applySuggestion: (suggestion: ProactiveSuggestion) => void;
+  setActiveView: (view: View) => void;
+  setAgentQuery: (value: string) => void;
 }) {
+  const latestReport = reportListData?.reports[0] ?? null;
+  const dailyReport = reportListData?.reports.find((report) => report.report_type === "daily_briefing") ?? latestReport;
+  const sourceStatusText = summarizeSourceStatus(healthData, ingestionLoading, ingestionError);
+
+  function askQuestion(question?: string) {
+    if (question) {
+      setAgentQuery(question);
+    }
+    setActiveView("Agent Chat");
+  }
+
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+    <div className="space-y-4">
+      <section className="rounded-md border border-[#cbd5dc] bg-white p-5">
+        <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
+          <div>
+            <p className="text-sm font-semibold text-[#25636b]">Start here</p>
+            <h3 className="mt-2 text-2xl font-semibold">Ask one question. InvestorAgent will handle the routing.</h3>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5b6573]">
+              Use plain language for market, company, housing, macro, or world news questions. Detailed controls stay out of the way unless you need them.
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => askQuestion()}
+                className="min-h-11 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white"
+              >
+                Ask A Question
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView("Daily Briefing")}
+                className="min-h-11 rounded-md border border-[#cbd5dc] px-4 py-2 text-sm font-semibold text-[#143642]"
+              >
+                Open Daily Briefing
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView("Reports")}
+                className="min-h-11 rounded-md border border-[#cbd5dc] px-4 py-2 text-sm font-semibold text-[#143642]"
+              >
+                View Saved Reports
+              </button>
+            </div>
+          </div>
+          <div className="rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-4">
+            <p className="text-sm font-semibold">Today At A Glance</p>
+            <div className="mt-3 space-y-3">
+              <QuietStatusRow label="Sources" value={sourceStatusText} />
+              <QuietStatusRow label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
+              <QuietStatusRow label="Next run" value={formatDateTime(scheduleData?.next_run_at)} />
+              <QuietStatusRow label="Last run" value={formatDateTime(scheduleData?.last_run_at)} />
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveView("Sources")}
+              className="mt-4 text-sm font-semibold text-[#25636b]"
+            >
+              Source details
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Latest Briefing</h3>
+              <p className="mt-1 text-sm text-[#5b6573]">A short entry point into the most recent saved intelligence.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveView("Daily Briefing")}
+              className="min-h-10 rounded-md border border-[#cbd5dc] px-3 py-2 text-sm font-semibold text-[#143642]"
+            >
+              Open
+            </button>
+          </div>
+          <StatusBlock loading={reportsLoading} error={reportsError} />
+          {!reportsLoading && !reportsError && !dailyReport && (
+            <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+              No briefing saved yet.
+            </div>
+          )}
+          {dailyReport && (
+            <div className="mt-4">
+              <p className="text-sm font-semibold">{dailyReport.title}</p>
+              <p className="mt-1 text-xs text-[#5b6573]">Retrieved At {formatDateTime(dailyReport.as_of ?? dailyReport.created_at)}</p>
+              <p className="mt-3 line-clamp-5 text-sm leading-6 text-[#374151]">
+                {dailyReport.summary ?? dailyReport.body}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <StatusBadge status={dailyReport.confidence} />
+                <span className="rounded-md border border-[#e5eaf0] px-2 py-1 text-xs font-semibold text-[#5b6573]">
+                  {dailyReport.citations.length} sources
+                </span>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Quick Questions</h3>
+              <p className="mt-1 text-sm text-[#5b6573]">Useful starting points without changing dropdowns.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {[
+              "What matters for my watchlist today?",
+              "What should I watch in markets this morning?",
+              "How are rates affecting housing right now?",
+            ].map((question) => (
+              <button
+                key={question}
+                type="button"
+                onClick={() => askQuestion(question)}
+                className="min-h-10 rounded-md border border-[#e5eaf0] px-3 py-2 text-left text-sm font-medium text-[#143642] transition hover:border-[#b7c7ce] hover:bg-[#f8fafb]"
+              >
+                {question}
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
+
       <ProactiveSuggestionsCard
         suggestionsData={suggestionsData}
         suggestionsLoading={suggestionsLoading}
@@ -990,79 +1065,6 @@ function DashboardView({
         loadSuggestions={loadSuggestions}
         applySuggestion={applySuggestion}
       />
-
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <h3 className="text-lg font-semibold">Ingestion Health</h3>
-          <IngestionRunControl
-            runMode={runMode}
-            runLoading={runLoading}
-            setRunMode={setRunMode}
-            triggerIngestionRun={triggerIngestionRun}
-          />
-        </div>
-        <StatusBlock loading={ingestionLoading} error={ingestionError} />
-        {healthData && (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <HealthMetric label="Fresh" value={healthData.fresh_count} status="fresh" />
-            <HealthMetric label="Stale" value={healthData.stale_count} status="stale" />
-            <HealthMetric label="Failed" value={healthData.failed_count} status="failed" />
-            <HealthMetric label="Skipped" value={healthData.skipped_count} status="skipped" />
-            <HealthMetric label="Not Configured" value={healthData.not_configured_count} status="not_configured" />
-          </div>
-        )}
-        {lastRunResponse && (
-          <p className="mt-4 rounded-md border border-[#d7dee3] bg-[#f8fafb] p-3 text-sm text-[#374151]">
-            {lastRunResponse.message}
-          </p>
-        )}
-      </section>
-
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-        <h3 className="text-lg font-semibold">Source Coverage</h3>
-        <StatusBlock loading={sourcesLoading} error={sourceError} />
-        {!sourcesLoading && !sourceError && (
-          <div className="mt-4 space-y-2">
-            <p className="text-sm text-[#5b6573]">
-              {sourceData?.enabled_by_default_count ?? 0} default sources configured.
-            </p>
-            <p className="text-sm text-[#5b6573]">{primarySources.length} primary sources ready for ingestion.</p>
-          </div>
-        )}
-      </section>
-
-      <SchedulerStatusCard scheduleData={scheduleData} runsData={runsData} loading={ingestionLoading} />
-
-      <MarketStrategyCard
-        marketReport={marketReport}
-        marketReportLoading={marketReportLoading}
-        marketReportError={marketReportError}
-        generateMarketStrategy={generateMarketStrategy}
-      />
-
-      <MacroHousingReportsCard
-        housingReport={housingReport}
-        housingReportLoading={housingReportLoading}
-        housingReportError={housingReportError}
-        generateHousingReport={generateHousingReport}
-        macroReport={macroReport}
-        macroReportLoading={macroReportLoading}
-        macroReportError={macroReportError}
-        generateMacroReport={generateMacroReport}
-      />
-
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4 xl:col-span-2">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-lg font-semibold">Latest Items</h3>
-          <span className="text-sm text-[#5b6573]">{latestItemsData?.total ?? 0} shown</span>
-        </div>
-        <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
-      </section>
-
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4 xl:col-span-2">
-        <h3 className="text-lg font-semibold">Recent Runs</h3>
-        <RecentRunsTable runsData={runsData} loading={ingestionLoading} />
-      </section>
     </div>
   );
 }
@@ -1637,15 +1639,31 @@ function SourcesView({
   sourceError,
   sourcesLoading,
   healthData,
+  runsData,
+  latestItemsData,
+  scheduleData,
   ingestionError,
   ingestionLoading,
+  runMode,
+  runLoading,
+  lastRunResponse,
+  setRunMode,
+  triggerIngestionRun,
 }: {
   sourceData: SourceCatalogResponse | null;
   sourceError: string | null;
   sourcesLoading: boolean;
   healthData: SourceHealthResponse | null;
+  runsData: IngestionRunHistoryResponse | null;
+  latestItemsData: LatestItemsResponse | null;
+  scheduleData: DailyScheduleConfig | null;
   ingestionError: string | null;
   ingestionLoading: boolean;
+  runMode: RunMode;
+  runLoading: boolean;
+  lastRunResponse: IngestionRunResponse | null;
+  setRunMode: (mode: RunMode) => void;
+  triggerIngestionRun: () => void;
 }) {
   const healthBySourceKey = useMemo(
     () => new Map(healthData?.sources.map((source) => [source.source_key, source]) ?? []),
@@ -1653,49 +1671,96 @@ function SourcesView({
   );
 
   return (
-    <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <h3 className="text-lg font-semibold">Sources</h3>
-        <span className="text-sm text-[#5b6573]">Catalog plus freshness status</span>
-      </div>
-      <StatusBlock loading={sourcesLoading || ingestionLoading} error={sourceError || ingestionError} />
-      {!sourcesLoading && !sourceError && (
-        <div className="mt-4 overflow-hidden rounded-md border border-[#e5eaf0]">
-          <div className="hidden grid-cols-[1.05fr_0.75fr_0.65fr_0.65fr_0.8fr] bg-[#eef3f5] px-3 py-2 text-xs font-semibold uppercase text-[#5b6573] md:grid">
-            <span>Name</span>
-            <span>Status</span>
-            <span>Last Checked</span>
-            <span>Last Success</span>
-            <span>Latest Item</span>
+    <div className="space-y-4">
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Source Status</h3>
+            <p className="mt-1 text-sm text-[#5b6573]">Detailed source checks and manual refresh controls.</p>
           </div>
-          <div className="divide-y divide-[#e5eaf0]">
-            {sourceData?.sources.map((source) => {
-              const health = healthBySourceKey.get(source.id);
-              return (
-                <div
-                  key={source.id}
-                  className="grid gap-2 px-3 py-3 md:grid-cols-[1.05fr_0.75fr_0.65fr_0.65fr_0.8fr]"
-                >
-                  <div>
-                    <p className="font-medium">{source.name}</p>
-                    <p className="mt-1 text-xs text-[#5b6573]">{source.access_method}</p>
-                  </div>
-                  <div>
-                    <StatusBadge status={health?.status ?? "not_configured"} />
-                    {health?.last_error && (
-                      <p className="mt-1 text-xs leading-4 text-[#8a4b08]">{health.last_error}</p>
-                    )}
-                  </div>
-                  <p className="text-sm text-[#374151]">{formatDateTime(health?.last_attempt_at)}</p>
-                  <p className="text-sm text-[#374151]">{formatDateTime(health?.last_success_at)}</p>
-                  <p className="text-sm text-[#374151]">{health?.latest_item_title ?? "--"}</p>
-                </div>
-              );
-            })}
-          </div>
+          <IngestionRunControl
+            runMode={runMode}
+            runLoading={runLoading}
+            setRunMode={setRunMode}
+            triggerIngestionRun={triggerIngestionRun}
+          />
         </div>
-      )}
-    </section>
+        <StatusBlock loading={ingestionLoading} error={ingestionError} />
+        {healthData && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <HealthMetric label="Fresh" value={healthData.fresh_count} status="fresh" />
+            <HealthMetric label="Stale" value={healthData.stale_count} status="stale" />
+            <HealthMetric label="Failed" value={healthData.failed_count} status="failed" />
+            <HealthMetric label="Skipped" value={healthData.skipped_count} status="skipped" />
+            <HealthMetric label="Not Configured" value={healthData.not_configured_count} status="not_configured" />
+          </div>
+        )}
+        {lastRunResponse && (
+          <p className="mt-4 rounded-md border border-[#d7dee3] bg-[#f8fafb] p-3 text-sm text-[#374151]">
+            {lastRunResponse.message}
+          </p>
+        )}
+      </section>
+
+      <SchedulerStatusCard scheduleData={scheduleData} runsData={runsData} loading={ingestionLoading} />
+
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <h3 className="text-lg font-semibold">Sources</h3>
+          <span className="text-sm text-[#5b6573]">Catalog plus freshness status</span>
+        </div>
+        <StatusBlock loading={sourcesLoading || ingestionLoading} error={sourceError || ingestionError} />
+        {!sourcesLoading && !sourceError && (
+          <div className="mt-4 overflow-hidden rounded-md border border-[#e5eaf0]">
+            <div className="hidden grid-cols-[1.05fr_0.75fr_0.65fr_0.65fr_0.8fr] bg-[#eef3f5] px-3 py-2 text-xs font-semibold uppercase text-[#5b6573] md:grid">
+              <span>Name</span>
+              <span>Status</span>
+              <span>Last Checked</span>
+              <span>Last Success</span>
+              <span>Latest Item</span>
+            </div>
+            <div className="divide-y divide-[#e5eaf0]">
+              {sourceData?.sources.map((source) => {
+                const health = healthBySourceKey.get(source.id);
+                return (
+                  <div
+                    key={source.id}
+                    className="grid gap-2 px-3 py-3 md:grid-cols-[1.05fr_0.75fr_0.65fr_0.65fr_0.8fr]"
+                  >
+                    <div>
+                      <p className="font-medium">{source.name}</p>
+                      <p className="mt-1 text-xs text-[#5b6573]">{source.access_method}</p>
+                    </div>
+                    <div>
+                      <StatusBadge status={health?.status ?? "not_configured"} />
+                      {health?.last_error && (
+                        <p className="mt-1 text-xs leading-4 text-[#8a4b08]">{health.last_error}</p>
+                      )}
+                    </div>
+                    <p className="text-sm text-[#374151]">{formatDateTime(health?.last_attempt_at)}</p>
+                    <p className="text-sm text-[#374151]">{formatDateTime(health?.last_success_at)}</p>
+                    <p className="text-sm text-[#374151]">{health?.latest_item_title ?? "--"}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-lg font-semibold">Latest Items</h3>
+          <span className="text-sm text-[#5b6573]">{latestItemsData?.total ?? 0} shown</span>
+        </div>
+        <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
+      </section>
+
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <h3 className="text-lg font-semibold">Recent Runs</h3>
+        <RecentRunsTable runsData={runsData} loading={ingestionLoading} />
+      </section>
+    </div>
   );
 }
 
@@ -2310,6 +2375,15 @@ function SettingRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function QuietStatusRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-[#e5eaf0] pb-2 last:border-b-0 last:pb-0">
+      <p className="text-sm text-[#5b6573]">{label}</p>
+      <p className="text-right text-sm font-semibold text-[#111827]">{value}</p>
+    </div>
+  );
+}
+
 function StatusBlock({ loading, error }: { loading: boolean; error: string | null }) {
   if (loading) {
     return <p className="mt-4 rounded-md bg-[#f8fafb] p-3 text-sm text-[#5b6573]">Loading.</p>;
@@ -2366,6 +2440,31 @@ function needsCheckCount(healthData: SourceHealthResponse | null) {
   }
 
   return healthData.stale_count + healthData.failed_count + healthData.skipped_count + healthData.not_configured_count;
+}
+
+function summarizeSourceStatus(
+  healthData: SourceHealthResponse | null,
+  loading: boolean,
+  error: string | null,
+) {
+  if (loading) {
+    return "Checking";
+  }
+
+  if (error) {
+    return "Needs attention";
+  }
+
+  if (!healthData) {
+    return "Not checked";
+  }
+
+  const needsCheck = needsCheckCount(healthData);
+  if (needsCheck === 0) {
+    return `${healthData.fresh_count} working`;
+  }
+
+  return `${healthData.fresh_count} working, ${needsCheck} need check`;
 }
 
 function formatDateTime(value: string | null | undefined) {
