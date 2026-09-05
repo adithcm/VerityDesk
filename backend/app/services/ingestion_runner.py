@@ -156,7 +156,7 @@ def get_daily_schedule_config(session: Session, now: datetime | None = None) -> 
         settings.daily_schedule_timezone,
         now or datetime.now(UTC),
     )
-    if settings.daily_next_run_at != next_run_at:
+    if not datetimes_match(settings.daily_next_run_at, next_run_at):
         settings.daily_next_run_at = next_run_at
         session.commit()
         session.refresh(settings)
@@ -185,13 +185,15 @@ def run_due_daily_workflow(session: Session, now: datetime | None = None) -> Dai
     current_time = now or datetime.now(UTC)
     settings = get_or_create_user_settings(session)
     if not settings.daily_schedule_enabled:
-        settings.daily_next_run_at = calculate_next_run_at(
+        next_run_at = calculate_next_run_at(
             settings.daily_briefing_time or "08:00",
             settings.daily_schedule_timezone,
             current_time,
         )
-        session.commit()
-        session.refresh(settings)
+        if not datetimes_match(settings.daily_next_run_at, next_run_at):
+            settings.daily_next_run_at = next_run_at
+            session.commit()
+            session.refresh(settings)
         return settings_to_schedule_config(settings)
 
     next_run_at = settings.daily_next_run_at or calculate_next_run_at(
@@ -200,9 +202,10 @@ def run_due_daily_workflow(session: Session, now: datetime | None = None) -> Dai
         current_time,
     )
     if current_time < as_aware_utc(next_run_at):
-        settings.daily_next_run_at = next_run_at
-        session.commit()
-        session.refresh(settings)
+        if not datetimes_match(settings.daily_next_run_at, next_run_at):
+            settings.daily_next_run_at = next_run_at
+            session.commit()
+            session.refresh(settings)
         return settings_to_schedule_config(settings)
 
     request = IngestionRunRequest(mode=settings.daily_schedule_mode, source_keys=[])
@@ -305,6 +308,12 @@ def as_aware_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def datetimes_match(left: datetime | None, right: datetime | None) -> bool:
+    if left is None or right is None:
+        return left is right
+    return as_aware_utc(left).replace(microsecond=0) == as_aware_utc(right).replace(microsecond=0)
 
 
 def format_datetime(value: datetime | None) -> str | None:

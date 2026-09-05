@@ -137,7 +137,7 @@ The system should respect source terms, paywalls, and `robots.txt`.
 
 ## Status
 
-Phase 1 planning is complete. Phase 2 application scaffold work is complete. Phase 3 data ingestion is in progress.
+Phases 1-5 are complete. Next planned work is Phase 6: simpler UI and personalization.
 
 ## Local Development
 
@@ -180,6 +180,17 @@ make app-dev
 ```
 
 This applies database migrations, starts the backend at `http://localhost:8000`, and starts the frontend at `http://localhost:3000`. Press `Ctrl+C` in that terminal to stop both services.
+
+In the app:
+
+- Use **Dashboard** to review source health, latest evidence, market/housing/macro report actions, and suggested next steps.
+- Use **Daily Briefing** to generate a saved briefing from current evidence.
+- Use **Reports** to reopen saved reports after restart, inspect citations, regenerate reports, archive reports, or delete reports.
+- Use **Watchlist** to generate company research.
+- Use **Agent Chat** for custom research questions.
+- Use **Settings** to enable daily automation, set the scheduled time, choose ingestion mode, and optionally generate an automatic daily briefing after ingestion.
+
+Daily automation only runs while the local backend is open. The schedule is saved in the local database and the startup command applies migrations automatically.
 
 Run the backend:
 
@@ -240,6 +251,9 @@ Local URLs:
 - Ingestion run: `POST http://localhost:8000/api/v1/ingestion/run`
 - Ingestion health: `http://localhost:8000/api/v1/ingestion/health`
 - Latest ingested items: `http://localhost:8000/api/v1/ingestion/latest-items`
+- Scheduler status: `http://localhost:8000/api/v1/ingestion/schedule`
+- Saved reports: `http://localhost:8000/api/v1/reports`
+- Proactive suggestions: `http://localhost:8000/api/v1/suggestions/proactive`
 
 ## Planning Docs
 
@@ -247,3 +261,6 @@ Local URLs:
 - [Implementation Phases](docs/roadmap/implementation-phases.md)
 - [Phase 1](docs/phases/phase-1/README.md)
 - [Phase 2](docs/phases/phase-2/README.md)
+- [Phase 3](docs/phases/phase-3/README.md)
+- [Phase 4](docs/phases/phase-4/README.md)
+- [Phase 5](docs/phases/phase-5/README.md)
