@@ -1860,38 +1860,45 @@ function SourcesView({
       <section className="rounded-md border border-[#d7dee3] bg-white p-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <h3 className="text-lg font-semibold">Sources</h3>
-          <span className="text-sm text-[#5b6573]">Catalog plus freshness status</span>
+          <span className="text-sm text-[#5b6573]">What is connected and what needs attention</span>
         </div>
         <StatusBlock loading={sourcesLoading || ingestionLoading} error={sourceError || ingestionError} />
         {!sourcesLoading && !sourceError && (
           <div className="mt-4 overflow-hidden rounded-md border border-[#e5eaf0]">
-            <div className="hidden grid-cols-[1.05fr_0.75fr_0.65fr_0.65fr_0.8fr] bg-[#eef3f5] px-3 py-2 text-xs font-semibold uppercase text-[#5b6573] md:grid">
-              <span>Name</span>
+            <div className="hidden grid-cols-[1fr_0.85fr_1.05fr_0.75fr_0.85fr] bg-[#eef3f5] px-3 py-2 text-xs font-semibold uppercase text-[#5b6573] md:grid">
+              <span>Source</span>
               <span>Status</span>
-              <span>Last Checked</span>
-              <span>Last Success</span>
+              <span>What it means</span>
+              <span>Last Updated</span>
               <span>Latest Item</span>
             </div>
             <div className="divide-y divide-[#e5eaf0]">
               {sourceData?.sources.map((source) => {
                 const health = healthBySourceKey.get(source.id);
+                const sourceStatus = sourceStatusSummary(source, health);
                 return (
                   <div
                     key={source.id}
-                    className="grid gap-2 px-3 py-3 md:grid-cols-[1.05fr_0.75fr_0.65fr_0.65fr_0.8fr]"
+                    className="grid gap-3 px-3 py-3 md:grid-cols-[1fr_0.85fr_1.05fr_0.75fr_0.85fr]"
                   >
                     <div>
                       <p className="font-medium">{source.name}</p>
-                      <p className="mt-1 text-xs text-[#5b6573]">{source.access_method}</p>
+                      <p className="mt-1 text-xs text-[#5b6573]">{formatAccessMethod(source.access_method)}</p>
                     </div>
                     <div>
-                      <StatusBadge status={health?.status ?? "not_configured"} />
+                      <StatusBadge status={sourceStatus.label} />
+                      <p className="mt-2 text-xs leading-4 text-[#5b6573]">{sourceStatus.nextStep}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm leading-5 text-[#374151]">{sourceStatus.description}</p>
                       {health?.last_error && (
-                        <p className="mt-1 text-xs leading-4 text-[#8a4b08]">{health.last_error}</p>
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-xs font-semibold text-[#8a4b08]">Technical message</summary>
+                          <p className="mt-1 text-xs leading-4 text-[#8a4b08]">{health.last_error}</p>
+                        </details>
                       )}
                     </div>
-                    <p className="text-sm text-[#374151]">{formatDateTime(health?.last_attempt_at)}</p>
-                    <p className="text-sm text-[#374151]">{formatDateTime(health?.last_success_at)}</p>
+                    <p className="text-sm text-[#374151]">{formatDateTime(health?.last_success_at ?? health?.last_attempt_at)}</p>
                     <p className="text-sm text-[#374151]">{health?.latest_item_title ?? "--"}</p>
                   </div>
                 );
@@ -2771,6 +2778,80 @@ function HealthMetric({ label, value, status }: { label: string; value: number; 
   );
 }
 
+function sourceStatusSummary(source: SourceEntry, health: SourceHealthItem | undefined) {
+  const errorText = health?.last_error?.toLowerCase() ?? "";
+
+  if (health?.status === "fresh") {
+    return {
+      label: "Working",
+      description: "This source has recent data available.",
+      nextStep: "No action needed.",
+    };
+  }
+
+  if (source.requires_api_key && (health?.status === "not_configured" || errorText.includes("api key"))) {
+    return {
+      label: "Missing API key",
+      description: "This source needs an API key before it can retrieve data.",
+      nextStep: "Add the key in your local environment file.",
+    };
+  }
+
+  if (source.status === "optional" || source.phase === "optional_v1") {
+    return {
+      label: "Scaffolded only",
+      description: "This provider is listed as an optional future connection.",
+      nextStep: "Planned after core sources are stable.",
+    };
+  }
+
+  if (source.access_method === "dataset_download" || errorText.includes("parser")) {
+    return {
+      label: "Parser not implemented",
+      description: "The source is known, but its data parser still needs to be completed.",
+      nextStep: "Planned for Phase 7.",
+    };
+  }
+
+  if (health?.status === "stale") {
+    return {
+      label: "Stale",
+      description: "This source worked before, but the latest saved data is old.",
+      nextStep: "Try refreshing sources.",
+    };
+  }
+
+  if (health?.status === "failed") {
+    return {
+      label: "Failed",
+      description: "The latest retrieval attempt did not finish successfully.",
+      nextStep: "Open the technical message or try refreshing.",
+    };
+  }
+
+  if (health?.status === "skipped") {
+    return {
+      label: "Skipped",
+      description: "InvestorAgent skipped this source during the latest run.",
+      nextStep: "Check whether it is enabled for the selected run mode.",
+    };
+  }
+
+  if (source.status === "planned") {
+    return {
+      label: "Scaffolded only",
+      description: "This source is in the catalog, but full ingestion may still be incomplete.",
+      nextStep: "Planned for Phase 7 if not already connected.",
+    };
+  }
+
+  return {
+    label: "Not checked",
+    description: "InvestorAgent has not recorded a successful retrieval yet.",
+    nextStep: "Run a source refresh.",
+  };
+}
+
 function SettingRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-[#e5eaf0] px-3 py-3">
@@ -2814,13 +2895,21 @@ function StatusDot({ status }: { status: string }) {
 }
 
 function badgeClass(status: string) {
-  if (status === "fresh" || status === "success" || status === "passed") {
+  if (status === "fresh" || status === "success" || status === "passed" || status === "Working") {
     return "bg-[#e8f5ee] text-[#1f6f4a]";
   }
-  if (status === "failed" || status === "blocked") {
+  if (status === "failed" || status === "blocked" || status === "Failed") {
     return "bg-[#fff1f0] text-[#b42318]";
   }
-  if (status === "stale" || status === "skipped" || status === "needs_revision") {
+  if (
+    status === "stale" ||
+    status === "skipped" ||
+    status === "needs_revision" ||
+    status === "Missing API key" ||
+    status === "Parser not implemented" ||
+    status === "Stale" ||
+    status === "Skipped"
+  ) {
     return "bg-[#fff7e8] text-[#8a4b08]";
   }
   return "bg-[#eef3f5] text-[#4b5563]";
@@ -2918,6 +3007,26 @@ function formatRunMode(mode: RunMode | undefined) {
   }
 
   return "All sources";
+}
+
+function formatAccessMethod(accessMethod: string) {
+  if (accessMethod === "rss") {
+    return "News feed";
+  }
+
+  if (accessMethod === "api") {
+    return "Direct API";
+  }
+
+  if (accessMethod === "dataset_download") {
+    return "Dataset download";
+  }
+
+  if (accessMethod === "rss_or_webpage") {
+    return "Feed or webpage";
+  }
+
+  return formatReportType(accessMethod);
 }
 
 function formatReportType(reportType: string) {

@@ -94,6 +94,8 @@ Status: Complete
 
 ### 6.5 Source/API Status UX
 
+Status: Complete
+
 - Show source state in user-friendly terms:
   - Working
   - Missing API key
