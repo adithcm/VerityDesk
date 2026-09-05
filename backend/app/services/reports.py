@@ -11,6 +11,8 @@ from app.schemas.agent import AgentCitation, AgentQueryRequest, AgentQueryRespon
 from app.schemas.report import (
     CompanyResearchRequest,
     DailyBriefingRequest,
+    HousingReportRequest,
+    MacroReportRequest,
     MarketStrategyRequest,
     ReportCreateRequest,
     ReportDeleteResponse,
@@ -57,6 +59,22 @@ MARKET_STRATEGY_DOMAINS = [
     "Banking and Credit",
     "Commodities and Energy",
     "Consumer and Labor",
+    "World and Geopolitics",
+]
+
+HOUSING_REPORT_DOMAINS = [
+    "Housing and Real Estate",
+    "Markets and Rates",
+    "U.S. Economy and Policy",
+    "Banking and Credit",
+    "Consumer and Labor",
+]
+
+MACRO_REPORT_DOMAINS = [
+    "U.S. Economy and Policy",
+    "Markets and Rates",
+    "Consumer and Labor",
+    "Banking and Credit",
     "World and Geopolitics",
 ]
 
@@ -255,6 +273,90 @@ def generate_market_strategy(session: Session, request: MarketStrategyRequest) -
     return get_report(session, report.id)
 
 
+def generate_housing_report(session: Session, request: HousingReportRequest) -> ReportResponse:
+    now = datetime.now(UTC)
+    domains = request.domains or HOUSING_REPORT_DOMAINS
+    query = request.user_query or (
+        "Generate a housing market research report using source-backed evidence. Cover mortgage rates, "
+        "affordability, home prices, supply and demand, construction, credit conditions, and key risks. "
+        "State data recency and uncertainty clearly."
+    )
+    agent_request = AgentQueryRequest(
+        user_query=query,
+        intent="housing_macro_research",
+        domains=domains,
+        regions=request.regions,
+        time_window=request.time_window,
+        safety_level="investment_research",
+    )
+    agent_response = run_agent_query(agent_request, session)
+
+    report = build_generated_report(
+        report_type="housing",
+        title=request.title or default_report_title(ReportCreateRequest(report_type="housing"), now),
+        domains=domains,
+        tickers=[],
+        companies=[],
+        as_of=now,
+        agent_response=agent_response,
+        metadata={
+            "user_query": query,
+            "regions": request.regions,
+            "time_window": request.time_window,
+            "generation_stage": "housing",
+            "expected_sections": ["mortgage_rates", "affordability", "supply_demand", "risks"],
+        },
+    )
+    session.add(report)
+    session.flush()
+    add_report_citations(session, report, agent_response.citations)
+    session.commit()
+    session.refresh(report)
+    return get_report(session, report.id)
+
+
+def generate_macro_report(session: Session, request: MacroReportRequest) -> ReportResponse:
+    now = datetime.now(UTC)
+    domains = request.domains or MACRO_REPORT_DOMAINS
+    query = request.user_query or (
+        "Generate a macroeconomic research report using source-backed evidence. Cover rates, labor, inflation "
+        "or price-pressure context where available, policy signals, credit conditions, broad economic risks, "
+        "and what to watch next. State data recency and uncertainty clearly."
+    )
+    agent_request = AgentQueryRequest(
+        user_query=query,
+        intent="housing_macro_research",
+        domains=domains,
+        regions=request.regions,
+        time_window=request.time_window,
+        safety_level="investment_research",
+    )
+    agent_response = run_agent_query(agent_request, session)
+
+    report = build_generated_report(
+        report_type="macro",
+        title=request.title or default_report_title(ReportCreateRequest(report_type="macro"), now),
+        domains=domains,
+        tickers=[],
+        companies=[],
+        as_of=now,
+        agent_response=agent_response,
+        metadata={
+            "user_query": query,
+            "regions": request.regions,
+            "time_window": request.time_window,
+            "generation_stage": "macro",
+            "expected_sections": ["rates", "labor", "policy", "credit", "risks"],
+        },
+    )
+    session.add(report)
+    session.flush()
+    add_report_citations(session, report, agent_response.citations)
+    session.commit()
+    session.refresh(report)
+    return get_report(session, report.id)
+
+
 def list_reports(session: Session, *, limit: int = 25, report_type: str | None = None) -> ReportListResponse:
     statement = select(Report).options(joinedload(Report.citations)).order_by(desc(Report.created_at), desc(Report.id))
     if report_type:
@@ -304,6 +406,42 @@ def add_report_citations(session: Session, report: Report, citations: list[Agent
                 supports_claim=citation.supports_claim,
             )
         )
+
+
+def build_generated_report(
+    *,
+    report_type: str,
+    title: str,
+    domains: list[str],
+    tickers: list[str],
+    companies: list[str],
+    as_of: datetime,
+    agent_response: AgentQueryResponse,
+    metadata: dict,
+) -> Report:
+    report_metadata = {
+        **metadata,
+        "agent_request_id": agent_response.request_id,
+        "agents_ran": agent_response.agents_ran,
+        "requires_guardrail_review": agent_response.requires_guardrail_review,
+        "follow_up_questions": agent_response.follow_up_questions,
+        "risks": agent_response.risks,
+    }
+    return Report(
+        report_type=report_type,
+        status="generated",
+        title=title,
+        summary=build_report_summary(agent_response),
+        body=agent_response.summary,
+        domains=domains,
+        tickers=tickers,
+        companies=companies,
+        as_of=as_of,
+        confidence=agent_response.confidence,
+        disclaimer_version="v1",
+        guardrail_status=agent_response.guardrail.status,
+        report_metadata=report_metadata,
+    )
 
 
 def report_to_response(report: Report) -> ReportResponse:

@@ -60,6 +60,22 @@ class MarketStrategyRequest(BaseModel):
     user_query: str | None = Field(default=None, max_length=4000)
 
 
+class HousingReportRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+    domains: list[str] = Field(default_factory=list)
+    regions: list[str] = Field(default_factory=list)
+    time_window: str = "quarter"
+    user_query: str | None = Field(default=None, max_length=4000)
+
+
+class MacroReportRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+    domains: list[str] = Field(default_factory=list)
+    regions: list[str] = Field(default_factory=list)
+    time_window: str = "quarter"
+    user_query: str | None = Field(default=None, max_length=4000)
+
+
 class ReportResponse(BaseModel):
     id: int
     report_type: ReportType

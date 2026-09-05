@@ -262,6 +262,12 @@ export default function Home() {
   const [marketReport, setMarketReport] = useState<ReportResponse | null>(null);
   const [marketReportLoading, setMarketReportLoading] = useState(false);
   const [marketReportError, setMarketReportError] = useState<string | null>(null);
+  const [housingReport, setHousingReport] = useState<ReportResponse | null>(null);
+  const [housingReportLoading, setHousingReportLoading] = useState(false);
+  const [housingReportError, setHousingReportError] = useState<string | null>(null);
+  const [macroReport, setMacroReport] = useState<ReportResponse | null>(null);
+  const [macroReportLoading, setMacroReportLoading] = useState(false);
+  const [macroReportError, setMacroReportError] = useState<string | null>(null);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -468,6 +474,54 @@ export default function Home() {
     }
   }
 
+  async function generateHousingReport() {
+    setHousingReportLoading(true);
+    setHousingReportError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/housing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regions: ["US"], time_window: "quarter" }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Housing report request failed with status ${response.status}`);
+      }
+
+      setHousingReport((await response.json()) as ReportResponse);
+      await loadAgentRuns();
+    } catch (error) {
+      setHousingReportError(error instanceof Error ? error.message : "Could not generate housing report");
+    } finally {
+      setHousingReportLoading(false);
+    }
+  }
+
+  async function generateMacroReport() {
+    setMacroReportLoading(true);
+    setMacroReportError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/macro`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regions: ["US"], time_window: "quarter" }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Macro report request failed with status ${response.status}`);
+      }
+
+      setMacroReport((await response.json()) as ReportResponse);
+      await loadAgentRuns();
+    } catch (error) {
+      setMacroReportError(error instanceof Error ? error.message : "Could not generate macro report");
+    } finally {
+      setMacroReportLoading(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f5f7f8] text-[#111827]">
       <div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
@@ -478,7 +532,7 @@ export default function Home() {
               <h1 className="mt-1 text-xl font-semibold">Market Workspace</h1>
             </div>
             <div className="rounded-md border border-[#d7dee3] px-2 py-1 text-xs font-medium text-[#4b5563]">
-              Phase 5.5
+              Phase 5.6
             </div>
           </div>
 
@@ -533,6 +587,14 @@ export default function Home() {
                 marketReportLoading={marketReportLoading}
                 marketReportError={marketReportError}
                 generateMarketStrategy={generateMarketStrategy}
+                housingReport={housingReport}
+                housingReportLoading={housingReportLoading}
+                housingReportError={housingReportError}
+                generateHousingReport={generateHousingReport}
+                macroReport={macroReport}
+                macroReportLoading={macroReportLoading}
+                macroReportError={macroReportError}
+                generateMacroReport={generateMacroReport}
               />
             )}
             {activeView === "Daily Briefing" && (
@@ -643,6 +705,14 @@ function DashboardView({
   marketReportLoading,
   marketReportError,
   generateMarketStrategy,
+  housingReport,
+  housingReportLoading,
+  housingReportError,
+  generateHousingReport,
+  macroReport,
+  macroReportLoading,
+  macroReportError,
+  generateMacroReport,
 }: {
   sourceData: SourceCatalogResponse | null;
   sourceError: string | null;
@@ -663,6 +733,14 @@ function DashboardView({
   marketReportLoading: boolean;
   marketReportError: string | null;
   generateMarketStrategy: () => void;
+  housingReport: ReportResponse | null;
+  housingReportLoading: boolean;
+  housingReportError: string | null;
+  generateHousingReport: () => void;
+  macroReport: ReportResponse | null;
+  macroReportLoading: boolean;
+  macroReportError: string | null;
+  generateMacroReport: () => void;
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
@@ -715,6 +793,17 @@ function DashboardView({
         generateMarketStrategy={generateMarketStrategy}
       />
 
+      <MacroHousingReportsCard
+        housingReport={housingReport}
+        housingReportLoading={housingReportLoading}
+        housingReportError={housingReportError}
+        generateHousingReport={generateHousingReport}
+        macroReport={macroReport}
+        macroReportLoading={macroReportLoading}
+        macroReportError={macroReportError}
+        generateMacroReport={generateMacroReport}
+      />
+
       <section className="rounded-md border border-[#d7dee3] bg-white p-4 xl:col-span-2">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold">Latest Items</h3>
@@ -727,6 +816,120 @@ function DashboardView({
         <h3 className="text-lg font-semibold">Recent Runs</h3>
         <RecentRunsTable runsData={runsData} loading={ingestionLoading} />
       </section>
+    </div>
+  );
+}
+
+function MacroHousingReportsCard({
+  housingReport,
+  housingReportLoading,
+  housingReportError,
+  generateHousingReport,
+  macroReport,
+  macroReportLoading,
+  macroReportError,
+  generateMacroReport,
+}: {
+  housingReport: ReportResponse | null;
+  housingReportLoading: boolean;
+  housingReportError: string | null;
+  generateHousingReport: () => void;
+  macroReport: ReportResponse | null;
+  macroReportLoading: boolean;
+  macroReportError: string | null;
+  generateMacroReport: () => void;
+}) {
+  return (
+    <section className="rounded-md border border-[#d7dee3] bg-white p-4 xl:col-span-2">
+      <div>
+        <h3 className="text-lg font-semibold">Housing And Macro</h3>
+        <p className="mt-1 text-sm text-[#5b6573]">
+          Generate research reports for housing conditions or broader macro context.
+        </p>
+      </div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <ReportGeneratorPanel
+          title="Housing Report"
+          description="Mortgage rates, affordability, supply, demand, and housing risks."
+          buttonLabel="Generate Housing Report"
+          loadingLabel="Generating"
+          loading={housingReportLoading}
+          error={housingReportError}
+          report={housingReport}
+          onGenerate={generateHousingReport}
+        />
+        <ReportGeneratorPanel
+          title="Macro Report"
+          description="Rates, labor, policy, credit, and broad economic risks."
+          buttonLabel="Generate Macro Report"
+          loadingLabel="Generating"
+          loading={macroReportLoading}
+          error={macroReportError}
+          report={macroReport}
+          onGenerate={generateMacroReport}
+        />
+      </div>
+    </section>
+  );
+}
+
+function ReportGeneratorPanel({
+  title,
+  description,
+  buttonLabel,
+  loadingLabel,
+  loading,
+  error,
+  report,
+  onGenerate,
+}: {
+  title: string;
+  description: string;
+  buttonLabel: string;
+  loadingLabel: string;
+  loading: boolean;
+  error: string | null;
+  report: ReportResponse | null;
+  onGenerate: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-[#e5eaf0] p-3">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-sm font-semibold">{title}</p>
+          <p className="mt-1 text-sm text-[#5b6573]">{description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={loading}
+          className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
+        >
+          {loading ? loadingLabel : buttonLabel}
+        </button>
+      </div>
+      {error && <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{error}</p>}
+      {report && <CompactReportPreview report={report} />}
+    </div>
+  );
+}
+
+function CompactReportPreview({ report }: { report: ReportResponse }) {
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <SettingRow label="Status" value={report.status} />
+        <SettingRow label="Confidence" value={report.confidence} />
+        <SettingRow label="Sources" value={String(report.citations.length)} />
+      </div>
+      <div>
+        <p className="text-sm font-semibold">{report.title}</p>
+        <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(report.as_of)}</p>
+        <p className="mt-3 max-h-72 overflow-auto whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
+          {report.body}
+        </p>
+      </div>
+      <CitationList citations={report.citations} />
     </div>
   );
 }

@@ -5,6 +5,8 @@ from app.db.session import get_db
 from app.schemas.report import (
     CompanyResearchRequest,
     DailyBriefingRequest,
+    HousingReportRequest,
+    MacroReportRequest,
     MarketStrategyRequest,
     ReportCreateRequest,
     ReportDeleteResponse,
@@ -17,6 +19,8 @@ from app.services.reports import (
     delete_report,
     generate_company_research,
     generate_daily_briefing,
+    generate_housing_report,
+    generate_macro_report,
     generate_market_strategy,
     get_report,
     list_reports,
@@ -56,6 +60,22 @@ def create_market_strategy(
     db: Session = Depends(get_db),
 ) -> ReportResponse:
     return generate_market_strategy(db, request)
+
+
+@router.post("/housing", response_model=ReportResponse, status_code=201)
+def create_housing_report(
+    request: HousingReportRequest,
+    db: Session = Depends(get_db),
+) -> ReportResponse:
+    return generate_housing_report(db, request)
+
+
+@router.post("/macro", response_model=ReportResponse, status_code=201)
+def create_macro_report(
+    request: MacroReportRequest,
+    db: Session = Depends(get_db),
+) -> ReportResponse:
+    return generate_macro_report(db, request)
 
 
 @router.get("", response_model=ReportListResponse)
