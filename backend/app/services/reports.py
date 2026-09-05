@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.db.models import Citation, Report, Source
 from app.schemas.agent import AgentCitation, AgentQueryRequest, AgentQueryResponse
 from app.schemas.report import (
+    CompanyResearchRequest,
     DailyBriefingRequest,
     ReportCreateRequest,
     ReportDeleteResponse,
@@ -38,6 +39,15 @@ DAILY_BRIEFING_DOMAINS = [
     "Banking and Credit",
     "Consumer and Labor",
     "Regulation and Legal",
+]
+
+COMPANY_RESEARCH_DOMAINS = [
+    "Companies and Earnings",
+    "Markets and Rates",
+    "U.S. Economy and Policy",
+    "Technology and AI",
+    "Regulation and Legal",
+    "Consumer and Labor",
 ]
 
 
@@ -104,6 +114,65 @@ def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> 
             "regions": request.regions,
             "time_window": request.time_window,
             "generation_stage": "daily_briefing",
+            "agent_request_id": agent_response.request_id,
+            "agents_ran": agent_response.agents_ran,
+            "requires_guardrail_review": agent_response.requires_guardrail_review,
+            "follow_up_questions": agent_response.follow_up_questions,
+            "risks": agent_response.risks,
+        },
+    )
+    session.add(report)
+    session.flush()
+    add_report_citations(session, report, agent_response.citations)
+    session.commit()
+    session.refresh(report)
+    return get_report(session, report.id)
+
+
+def generate_company_research(session: Session, request: CompanyResearchRequest) -> ReportResponse:
+    now = datetime.now(UTC)
+    tickers = normalize_symbols([request.ticker] if request.ticker else [])
+    companies = [request.company.strip()] if request.company and request.company.strip() else []
+    domains = request.domains or COMPANY_RESEARCH_DOMAINS
+    subject = ", ".join([*tickers, *companies])
+    query = request.user_query or (
+        f"Generate a company research report for {subject}. Cover recent company-specific news or filings, "
+        "business context, market and macro context, potential catalysts, key risks, and open questions. "
+        "Use source-backed evidence only and do not give buy, sell, or hold instructions."
+    )
+    agent_request = AgentQueryRequest(
+        user_query=query,
+        intent="company_research",
+        domains=domains,
+        tickers=tickers,
+        companies=companies,
+        regions=request.regions,
+        time_window=request.time_window,
+        safety_level="investment_research",
+    )
+    agent_response = run_agent_query(agent_request, session)
+
+    report = Report(
+        report_type="company_research",
+        status="generated",
+        title=request.title or default_report_title(
+            ReportCreateRequest(report_type="company_research", tickers=tickers, companies=companies),
+            now,
+        ),
+        summary=build_report_summary(agent_response),
+        body=agent_response.summary,
+        domains=domains,
+        tickers=tickers,
+        companies=companies,
+        as_of=now,
+        confidence=agent_response.confidence,
+        disclaimer_version="v1",
+        guardrail_status=agent_response.guardrail.status,
+        report_metadata={
+            "user_query": query,
+            "regions": request.regions,
+            "time_window": request.time_window,
+            "generation_stage": "company_research",
             "agent_request_id": agent_response.request_id,
             "agents_ran": agent_response.agents_ran,
             "requires_guardrail_review": agent_response.requires_guardrail_review,

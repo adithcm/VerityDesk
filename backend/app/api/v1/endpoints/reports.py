@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.report import (
+    CompanyResearchRequest,
     DailyBriefingRequest,
     ReportCreateRequest,
     ReportDeleteResponse,
@@ -10,7 +11,14 @@ from app.schemas.report import (
     ReportResponse,
     ReportType,
 )
-from app.services.reports import create_report, delete_report, generate_daily_briefing, get_report, list_reports
+from app.services.reports import (
+    create_report,
+    delete_report,
+    generate_company_research,
+    generate_daily_briefing,
+    get_report,
+    list_reports,
+)
 
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -30,6 +38,14 @@ def create_daily_briefing(
     db: Session = Depends(get_db),
 ) -> ReportResponse:
     return generate_daily_briefing(db, request)
+
+
+@router.post("/company-research", response_model=ReportResponse, status_code=201)
+def create_company_research(
+    request: CompanyResearchRequest,
+    db: Session = Depends(get_db),
+) -> ReportResponse:
+    return generate_company_research(db, request)
 
 
 @router.get("", response_model=ReportListResponse)

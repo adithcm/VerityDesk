@@ -12,7 +12,14 @@ from app.main import app
 from app.schemas.agent import AgentCitation, AgentQueryResponse, GuardrailCheck
 from app.schemas.report import ReportCreateRequest
 from app.services import reports
-from app.services.reports import create_report, delete_report, generate_daily_briefing, get_report, list_reports
+from app.services.reports import (
+    create_report,
+    delete_report,
+    generate_company_research,
+    generate_daily_briefing,
+    get_report,
+    list_reports,
+)
 
 
 def build_session_factory():
@@ -210,6 +217,114 @@ def test_daily_briefing_endpoint_returns_generated_report(monkeypatch) -> None:
     payload = response.json()
     assert payload["title"] == "Morning Briefing"
     assert payload["status"] == "generated"
+
+
+def test_generate_company_research_saves_agent_response_and_citations(monkeypatch) -> None:
+    def fake_run_agent_query(request, session):
+        assert request.intent == "company_research"
+        assert request.tickers == ["AAPL"]
+        assert request.companies == ["Apple"]
+        return AgentQueryResponse(
+            request_id="company-agent-request-1",
+            summary=(
+                "This is not financial advice. InvestorAgent is for research and educational purposes only.\n\n"
+                "Apple research is focused on filings, demand, and margin context."
+            ),
+            agents_ran=["CoordinatorAgent", "CompanyAgent", "MarketAgent", "SynthesisAgent"],
+            claims=[],
+            citations=[
+                AgentCitation(
+                    source_id="SEC EDGAR RSS",
+                    title="Apple filing",
+                    url="https://example.test/aapl",
+                    publisher="SEC",
+                    published_at="2026-09-04T12:00:00+00:00",
+                    retrieved_at="2026-09-04T13:00:00+00:00",
+                    supports_claim="Apple filed a company update.",
+                )
+            ],
+            confidence="medium",
+            risks=["Company evidence may be incomplete."],
+            follow_up_questions=["Should we compare this with prior filings?"],
+            guardrail=GuardrailCheck(
+                status="passed",
+                disclaimer="This is not financial advice.",
+                issues=[],
+                banned_phrases_found=[],
+                required_sections=[],
+            ),
+            requires_guardrail_review=False,
+        )
+
+    monkeypatch.setattr(reports, "run_agent_query", fake_run_agent_query)
+
+    with build_session() as session:
+        session.add(
+            Source(
+                name="SEC EDGAR RSS",
+                base_url="https://www.sec.gov",
+                source_type="official_rss",
+                domains=["Companies and Earnings"],
+                access_method="rss",
+            )
+        )
+        session.commit()
+
+        response = generate_company_research(
+            session,
+            reports.CompanyResearchRequest(ticker="aapl", company="Apple"),
+        )
+
+        assert response.report_type == "company_research"
+        assert response.status == "generated"
+        assert response.tickers == ["AAPL"]
+        assert response.companies == ["Apple"]
+        assert response.metadata["generation_stage"] == "company_research"
+        assert response.metadata["agent_request_id"] == "company-agent-request-1"
+        assert response.summary == "Apple research is focused on filings, demand, and margin context."
+        assert len(response.citations) == 1
+        assert response.citations[0].title == "Apple filing"
+
+
+def test_company_research_endpoint_returns_generated_report(monkeypatch) -> None:
+    def fake_generate_company_research(session, request):
+        return reports.ReportResponse(
+            id=2,
+            report_type="company_research",
+            status="generated",
+            title=request.title or "Company Research",
+            summary="Company summary.",
+            body="Company body.",
+            domains=request.domains,
+            tickers=["AAPL"],
+            companies=["Apple"],
+            as_of="2026-09-04T12:00:00+00:00",
+            confidence="medium",
+            disclaimer_version="v1",
+            guardrail_status="passed",
+            metadata={"generation_stage": "company_research"},
+            citations=[],
+            created_at="2026-09-04T12:00:00+00:00",
+            updated_at="2026-09-04T12:00:00+00:00",
+        )
+
+    monkeypatch.setattr("app.api.v1.endpoints.reports.generate_company_research", fake_generate_company_research)
+
+    response = TestClient(app).post(
+        "/api/v1/reports/company-research",
+        json={"ticker": "aapl", "company": "Apple"},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["report_type"] == "company_research"
+    assert payload["tickers"] == ["AAPL"]
+
+
+def test_company_research_endpoint_requires_ticker_or_company() -> None:
+    response = TestClient(app).post("/api/v1/reports/company-research", json={})
+
+    assert response.status_code == 422
 
 
 def test_report_endpoint_validates_report_type() -> None:

@@ -254,6 +254,11 @@ export default function Home() {
   const [dailyBriefingReport, setDailyBriefingReport] = useState<ReportResponse | null>(null);
   const [dailyBriefingLoading, setDailyBriefingLoading] = useState(false);
   const [dailyBriefingError, setDailyBriefingError] = useState<string | null>(null);
+  const [companyTicker, setCompanyTicker] = useState("AAPL");
+  const [companyName, setCompanyName] = useState("Apple");
+  const [companyReport, setCompanyReport] = useState<ReportResponse | null>(null);
+  const [companyReportLoading, setCompanyReportLoading] = useState(false);
+  const [companyReportError, setCompanyReportError] = useState<string | null>(null);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -407,6 +412,35 @@ export default function Home() {
     }
   }
 
+  async function generateCompanyReport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCompanyReportLoading(true);
+    setCompanyReportError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/company-research`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticker: companyTicker.trim() || null,
+          company: companyName.trim() || null,
+          time_window: "month",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Company report request failed with status ${response.status}`);
+      }
+
+      setCompanyReport((await response.json()) as ReportResponse);
+      await loadAgentRuns();
+    } catch (error) {
+      setCompanyReportError(error instanceof Error ? error.message : "Could not generate company report");
+    } finally {
+      setCompanyReportLoading(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f5f7f8] text-[#111827]">
       <div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
@@ -490,7 +524,18 @@ export default function Home() {
                 ingestionLoading={ingestionLoading}
               />
             )}
-            {activeView === "Watchlist" && <WatchlistView />}
+            {activeView === "Watchlist" && (
+              <WatchlistView
+                companyTicker={companyTicker}
+                companyName={companyName}
+                companyReport={companyReport}
+                companyReportLoading={companyReportLoading}
+                companyReportError={companyReportError}
+                setCompanyTicker={setCompanyTicker}
+                setCompanyName={setCompanyName}
+                generateCompanyReport={generateCompanyReport}
+              />
+            )}
             {activeView === "Agent Chat" && (
               <AgentChatView
                 agentQuery={agentQuery}
@@ -842,24 +887,108 @@ function SourcesView({
   );
 }
 
-function WatchlistView() {
+function WatchlistView({
+  companyTicker,
+  companyName,
+  companyReport,
+  companyReportLoading,
+  companyReportError,
+  setCompanyTicker,
+  setCompanyName,
+  generateCompanyReport,
+}: {
+  companyTicker: string;
+  companyName: string;
+  companyReport: ReportResponse | null;
+  companyReportLoading: boolean;
+  companyReportError: string | null;
+  setCompanyTicker: (value: string) => void;
+  setCompanyName: (value: string) => void;
+  generateCompanyReport: (event: FormEvent<HTMLFormElement>) => void;
+}) {
   return (
-    <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-      <h3 className="text-lg font-semibold">Watchlist</h3>
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        {watchlistRows.map((row) => (
-          <div key={row.symbol} className="rounded-md border border-[#e5eaf0] p-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-lg font-semibold">{row.symbol}</p>
-              <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-medium text-[#25636b]">
-                {row.state}
-              </span>
+    <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <h3 className="text-lg font-semibold">Watchlist</h3>
+        <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-1">
+          {watchlistRows.map((row) => (
+            <div key={row.symbol} className="rounded-md border border-[#e5eaf0] p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-lg font-semibold">{row.symbol}</p>
+                <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-medium text-[#25636b]">
+                  {row.state}
+                </span>
+              </div>
+              <p className="mt-3 text-sm text-[#5b6573]">{row.focus}</p>
             </div>
-            <p className="mt-3 text-sm text-[#5b6573]">{row.focus}</p>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <form onSubmit={generateCompanyReport}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Company Research</h3>
+              <p className="mt-1 text-sm text-[#5b6573]">Generate a saved company report from filings, news, and market context.</p>
+            </div>
+            <button
+              type="submit"
+              disabled={companyReportLoading || (!companyTicker.trim() && !companyName.trim())}
+              className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
+            >
+              {companyReportLoading ? "Generating" : "Generate Company Report"}
+            </button>
           </div>
-        ))}
-      </div>
-    </section>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm font-medium" htmlFor="company-ticker">
+              Ticker
+              <input
+                id="company-ticker"
+                value={companyTicker}
+                onChange={(event) => setCompanyTicker(event.target.value.toUpperCase())}
+                className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+              />
+            </label>
+            <label className="block text-sm font-medium" htmlFor="company-name">
+              Company
+              <input
+                id="company-name"
+                value={companyName}
+                onChange={(event) => setCompanyName(event.target.value)}
+                className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+              />
+            </label>
+          </div>
+        </form>
+
+        {companyReportError && (
+          <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{companyReportError}</p>
+        )}
+        {!companyReport && !companyReportError && (
+          <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+            No company report generated in this session yet.
+          </div>
+        )}
+        {companyReport && (
+          <div className="mt-4 space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SettingRow label="Status" value={companyReport.status} />
+              <SettingRow label="Confidence" value={companyReport.confidence} />
+              <SettingRow label="Sources" value={String(companyReport.citations.length)} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">{companyReport.title}</p>
+              <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(companyReport.as_of)}</p>
+              <p className="mt-3 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
+                {companyReport.body}
+              </p>
+            </div>
+            <CitationList citations={companyReport.citations} />
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 

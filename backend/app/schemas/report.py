@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.agent import AgentCitation, ConfidenceLevel, GuardrailStatus
 
@@ -33,6 +33,22 @@ class DailyBriefingRequest(BaseModel):
     regions: list[str] = Field(default_factory=list)
     time_window: str = "week"
     user_query: str | None = Field(default=None, max_length=4000)
+
+
+class CompanyResearchRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+    ticker: str | None = Field(default=None, max_length=32)
+    company: str | None = Field(default=None, max_length=255)
+    domains: list[str] = Field(default_factory=list)
+    regions: list[str] = Field(default_factory=list)
+    time_window: str = "month"
+    user_query: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def require_company_or_ticker(self) -> "CompanyResearchRequest":
+        if not (self.ticker and self.ticker.strip()) and not (self.company and self.company.strip()):
+            raise ValueError("Provide at least one ticker or company name.")
+        return self
 
 
 class ReportResponse(BaseModel):
