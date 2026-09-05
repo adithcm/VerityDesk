@@ -17,6 +17,7 @@ from app.services.reports import (
     delete_report,
     generate_company_research,
     generate_daily_briefing,
+    generate_market_strategy,
     get_report,
     list_reports,
 )
@@ -325,6 +326,107 @@ def test_company_research_endpoint_requires_ticker_or_company() -> None:
     response = TestClient(app).post("/api/v1/reports/company-research", json={})
 
     assert response.status_code == 422
+
+
+def test_generate_market_strategy_saves_agent_response_and_scenario_metadata(monkeypatch) -> None:
+    def fake_run_agent_query(request, session):
+        assert request.intent == "market_research"
+        assert request.tickers == ["SPY", "QQQ"]
+        assert "Markets and Rates" in request.domains
+        return AgentQueryResponse(
+            request_id="market-agent-request-1",
+            summary=(
+                "This is not financial advice. InvestorAgent is for research and educational purposes only.\n\n"
+                "Base scenario: markets remain focused on rates. Upside scenario: credit stays calm. "
+                "Downside scenario: inflation pressure returns."
+            ),
+            agents_ran=["CoordinatorAgent", "MarketAgent", "MacroAgent", "SynthesisAgent"],
+            claims=[],
+            citations=[
+                AgentCitation(
+                    source_id="FRED API",
+                    title="Federal Funds Rate",
+                    publisher="FRED",
+                    published_at="2026-09-04T12:00:00+00:00",
+                    retrieved_at="2026-09-04T13:00:00+00:00",
+                    supports_claim="Rates remain central to market context.",
+                )
+            ],
+            confidence="medium",
+            risks=["Scenario framing may change with new macro releases."],
+            follow_up_questions=["Should we compare equity sectors next?"],
+            guardrail=GuardrailCheck(
+                status="passed",
+                disclaimer="This is not financial advice.",
+                issues=[],
+                banned_phrases_found=[],
+                required_sections=[],
+            ),
+            requires_guardrail_review=False,
+        )
+
+    monkeypatch.setattr(reports, "run_agent_query", fake_run_agent_query)
+
+    with build_session() as session:
+        session.add(
+            Source(
+                name="FRED API",
+                base_url="https://fred.stlouisfed.org",
+                source_type="official_api",
+                domains=["Markets and Rates"],
+                access_method="api",
+            )
+        )
+        session.commit()
+
+        response = generate_market_strategy(
+            session,
+            reports.MarketStrategyRequest(tickers=["spy", "qqq"]),
+        )
+
+        assert response.report_type == "market_strategy"
+        assert response.status == "generated"
+        assert response.tickers == ["SPY", "QQQ"]
+        assert response.metadata["generation_stage"] == "market_strategy"
+        assert response.metadata["agent_request_id"] == "market-agent-request-1"
+        assert response.metadata["scenario_sections_expected"] == ["base", "upside", "downside"]
+        assert "Base scenario" in response.body
+        assert len(response.citations) == 1
+
+
+def test_market_strategy_endpoint_returns_generated_report(monkeypatch) -> None:
+    def fake_generate_market_strategy(session, request):
+        return reports.ReportResponse(
+            id=3,
+            report_type="market_strategy",
+            status="generated",
+            title=request.title or "Market Strategy",
+            summary="Market summary.",
+            body="Base scenario. Upside scenario. Downside scenario.",
+            domains=request.domains,
+            tickers=["SPY"],
+            companies=[],
+            as_of="2026-09-04T12:00:00+00:00",
+            confidence="medium",
+            disclaimer_version="v1",
+            guardrail_status="passed",
+            metadata={"generation_stage": "market_strategy"},
+            citations=[],
+            created_at="2026-09-04T12:00:00+00:00",
+            updated_at="2026-09-04T12:00:00+00:00",
+        )
+
+    monkeypatch.setattr("app.api.v1.endpoints.reports.generate_market_strategy", fake_generate_market_strategy)
+
+    response = TestClient(app).post(
+        "/api/v1/reports/market-strategy",
+        json={"tickers": ["spy"]},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["report_type"] == "market_strategy"
+    assert payload["tickers"] == ["SPY"]
 
 
 def test_report_endpoint_validates_report_type() -> None:

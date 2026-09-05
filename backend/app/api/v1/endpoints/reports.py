@@ -5,6 +5,7 @@ from app.db.session import get_db
 from app.schemas.report import (
     CompanyResearchRequest,
     DailyBriefingRequest,
+    MarketStrategyRequest,
     ReportCreateRequest,
     ReportDeleteResponse,
     ReportListResponse,
@@ -16,6 +17,7 @@ from app.services.reports import (
     delete_report,
     generate_company_research,
     generate_daily_briefing,
+    generate_market_strategy,
     get_report,
     list_reports,
 )
@@ -46,6 +48,14 @@ def create_company_research(
     db: Session = Depends(get_db),
 ) -> ReportResponse:
     return generate_company_research(db, request)
+
+
+@router.post("/market-strategy", response_model=ReportResponse, status_code=201)
+def create_market_strategy(
+    request: MarketStrategyRequest,
+    db: Session = Depends(get_db),
+) -> ReportResponse:
+    return generate_market_strategy(db, request)
 
 
 @router.get("", response_model=ReportListResponse)

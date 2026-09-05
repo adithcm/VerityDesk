@@ -23,10 +23,10 @@ flowchart TD
 - [Milestone 5.2: Evidence Cleanup And Source Data Quality](milestones/5.2-evidence-cleanup-and-source-data-quality.md)
 - [Milestone 5.3: Daily Briefing Generator](milestones/5.3-daily-briefing-generator.md)
 - [Milestone 5.4: Company Research Report Generator](milestones/5.4-company-research-report-generator.md)
+- [Milestone 5.5: Market Strategy And Scenario Reports](milestones/5.5-market-strategy-and-scenario-reports.md)
 
 ## Planned Milestones
 
-- [Milestone 5.5: Market Strategy And Scenario Reports](milestones/5.5-market-strategy-and-scenario-reports.md)
 - [Milestone 5.6: Housing And Macro Reports](milestones/5.6-housing-and-macro-reports.md)
 - [Milestone 5.7: Report Persistence And Citation Panels](milestones/5.7-report-persistence-and-citation-panels.md)
 - [Milestone 5.8: Proactive Briefing Suggestions](milestones/5.8-proactive-briefing-suggestions.md)
