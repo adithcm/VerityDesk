@@ -44,4 +44,14 @@ echo "Frontend: http://localhost:3000"
 echo "Backend:  http://localhost:8000"
 echo "Press Ctrl+C to stop both services."
 
-wait -n "$BACKEND_PID" "$FRONTEND_PID"
+while true; do
+  if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+    wait "$BACKEND_PID" || exit $?
+    exit 0
+  fi
+  if ! kill -0 "$FRONTEND_PID" 2>/dev/null; then
+    wait "$FRONTEND_PID" || exit $?
+    exit 0
+  fi
+  sleep 1
+done

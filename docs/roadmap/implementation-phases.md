@@ -1,6 +1,6 @@
 # Implementation Phases
 
-Last updated: 2026-09-02
+Last updated: 2026-09-05
 
 This document tracks the full InvestorAgent implementation roadmap from planning through advanced features.
 
@@ -10,6 +10,7 @@ This document tracks the full InvestorAgent implementation roadmap from planning
 - Phase 2: Complete
 - Phase 3: Complete
 - Phase 4: Complete
+- Phase 5: Complete
 
 ## Phase 1: Research And Planning
 
@@ -161,7 +162,7 @@ Next phase:
 
 ## Phase 5: Research Output System
 
-Status: In Progress
+Status: Complete
 
 Purpose: generate high-quality cited reports from collected data and agent outputs.
 
@@ -197,41 +198,150 @@ Completed milestones:
 - [Milestone 5.3: Daily briefing generator](../phases/phase-5/milestones/5.3-daily-briefing-generator.md).
 - [Milestone 5.4: Company research report generator](../phases/phase-5/milestones/5.4-company-research-report-generator.md).
 - [Milestone 5.5: Market strategy and scenario reports](../phases/phase-5/milestones/5.5-market-strategy-and-scenario-reports.md).
-
-Planned milestones:
-
 - [Milestone 5.6: Housing and macro reports](../phases/phase-5/milestones/5.6-housing-and-macro-reports.md).
 - [Milestone 5.7: Report persistence and citation panels](../phases/phase-5/milestones/5.7-report-persistence-and-citation-panels.md).
 - [Milestone 5.8: Proactive briefing suggestions](../phases/phase-5/milestones/5.8-proactive-briefing-suggestions.md).
 - [Milestone 5.9: Scheduler hardening and automatic report runs](../phases/phase-5/milestones/5.9-scheduler-hardening-and-automatic-report-runs.md).
 - [Milestone 5.10: Phase 5 validation and docs](../phases/phase-5/milestones/5.10-phase-5-validation-and-docs.md).
 
-## Phase 6: Full UI Dashboard
+Planned milestones:
+
+None.
+
+## Phase 6: Simpler UI And Personalization
 
 Status: Planned
 
-Purpose: turn the scaffold into a complete user-facing research workspace.
+Purpose: turn the working research system into a simpler, personalized user experience where the user mostly asks one natural-language question and the app figures out the rest.
+
+User feedback driving this phase:
+
+- The current screen has too much information visible at once.
+- The user has to do too much manual work across Dashboard, Daily Briefing, Reports, Watchlist, Agent Chat, Sources, and Settings.
+- Agent Chat is too restrictive because the user has to choose intent/domain and type tickers manually.
+- The user should only need to type the question in the normal path.
+- Intent, domain, tickers, companies, location, region, and report type should be auto-detected.
+- Technical details like source health, ingestion runs, raw scheduler status, and citations should be available but not dominate the first screen.
+- The product should feel like a personal intelligence desk, not an internal operations dashboard.
 
 Deliverables:
 
-- Polished dashboard.
-- Full daily briefing view.
-- Watchlist management.
-- Company research view.
-- Macro and housing view.
-- Source manager.
-- Saved reports.
-- Agent chat workspace.
-- Settings and API-key status.
-- Domain filters for the ten news categories.
-- User-friendly source status explanations for skipped, not configured, placeholder, and missing API-key states.
-- More automated agent experience: saved preferences, watchlist-aware defaults, proactive briefings, and suggested questions so users do not always need to start from a blank query box.
+- A simplified home screen centered on one primary question box.
+- Auto-detected intent, domain, ticker/company, region, and report type from the user's question.
+- Advanced controls hidden behind an optional panel instead of always visible.
+- Personalization profile for default location, watchlist, topics, sectors, housing interests, and briefing preferences.
+- Editable watchlist and saved preference management.
+- Cleaner Daily Briefing, Reports, Watchlist, Housing/Macro, and Agent Chat views.
+- A less cluttered dashboard that highlights:
+  - today's briefing
+  - suggested next actions
+  - saved reports
+  - important source/API status only when action is needed
+- User-friendly source/API-key status with labels such as:
+  - working
+  - missing API key
+  - parser not implemented
+  - scaffolded only
+  - skipped
+  - stale
+- Clearer empty states and next-step prompts.
+- Fewer manual dropdowns in the main workflow.
+- Tests for automatic query parsing, preference defaults, and simplified UI data contracts.
 
-## Phase 7: Local Desktop App
+Not in scope:
+
+- Major new external data connectors.
+- Native desktop packaging.
+- Broad live web search/retrieval.
+
+Detailed plan: [Phase 6](../phases/phase-6/README.md).
+
+## Phase 7: Source Expansion And Parser Completion
 
 Status: Planned
 
-Purpose: package the local web app as a native-feeling macOS desktop app.
+Purpose: finish scaffolded API connectors/parsers and broaden credible source coverage so the app can answer more flexible data questions, including regional housing and macro questions.
+
+User feedback driving this phase:
+
+- Some API sources are still scaffolded and need real parsers.
+- The app should retrieve information from multiple credible places so the user does not need to check many websites manually.
+- Questions like "what are mortgage rates for AZ?" should work with local data when available and clear fallback behavior when local data is missing.
+- The app needs broader official, market, company, housing, and news data before desktop packaging.
+
+Deliverables:
+
+- Finish Census Economic Indicators connector and parser.
+- Finish FHFA House Price Index connector and parser.
+- Finish Freddie Mac PMMS connector and parser.
+- Add or complete optional API-key providers:
+  - Alpha Vantage
+  - Finnhub
+  - NewsAPI
+  - GDELT
+- Add source-specific tests for parser behavior, skipped/missing-key handling, and normalized output.
+- Improve regional data support for states/metros where available.
+- Add source fallback logic:
+  - local stored data first
+  - official API refresh when stale or missing
+  - approved live lookup/search path where compliant and available
+- Add clearer source coverage metadata so the UI can explain why a question can or cannot be answered.
+- Add regional housing/mortgage examples to tests and docs.
+
+Not in scope:
+
+- Native desktop packaging.
+- Full autonomous agent planning.
+- Paid/licensed data providers unless manually configured.
+
+Detailed plan: [Phase 7](../phases/phase-7/README.md).
+
+## Phase 8: Agent Automation And Flexible Retrieval
+
+Status: Planned
+
+Purpose: make the multi-agent system more flexible and less dependent on manual user configuration.
+
+User feedback driving this phase:
+
+- Agents should be able to infer what the user wants instead of requiring dropdowns.
+- Agents should know when local data is insufficient and retrieve more information from approved live sources.
+- The user wants less typing and fewer clicks, with the app automatically selecting sources and agent workflows.
+- The system should feel proactive and personalized to the user's situation.
+
+Deliverables:
+
+- Stronger planner/coordinator for intent, entity, region, time-window, source, and agent selection.
+- Query understanding for locations, tickers, companies, sectors, topics, and time ranges.
+- More flexible live retrieval tools for approved sources.
+- Multi-step workflows that can:
+  - inspect local evidence
+  - decide whether more retrieval is needed
+  - run targeted source/API lookup
+  - synthesize a final cited answer
+- Automatic source selection based on query needs.
+- Better "I do not know yet" behavior with next retrieval steps.
+- Personalization-aware proactive briefings and report suggestions.
+- Natural-language answers as the default output, with citations and structured details expandable.
+- Guardrail checks that continue to prevent direct buy/sell/hold instructions.
+- Tests and evaluation fixtures for flexible queries such as:
+  - "What are mortgage rates in AZ?"
+  - "What matters for my watchlist today?"
+  - "How does the latest rate data affect housing?"
+  - "What changed with Apple this week?"
+
+Not in scope:
+
+- Native desktop packaging.
+- Multi-user cloud deployment.
+
+Detailed plan: [Phase 8](../phases/phase-8/README.md).
+
+## Phase 9: Local Desktop App
+
+Status: Planned
+
+Purpose: package the local web app as a native-feeling macOS desktop app after the UI, source coverage, and agent workflows are reliable.
 
 Deliverables:
 
@@ -243,7 +353,7 @@ Deliverables:
 - Desktop menu basics.
 - Local storage path handling.
 
-## Phase 8: Portable Deployment
+## Phase 10: Portable Deployment
 
 Status: Planned
 
@@ -259,7 +369,7 @@ Deliverables:
 - Clear install/run documentation.
 - Basic troubleshooting notes.
 
-## Phase 9: Quality, Safety, And Evaluation
+## Phase 11: Quality, Safety, And Evaluation
 
 Status: Planned
 
@@ -278,7 +388,7 @@ Deliverables:
 - Failed-source monitoring.
 - Staleness checks.
 
-## Phase 10: Advanced Features
+## Phase 12: Advanced Features
 
 Status: Planned
 

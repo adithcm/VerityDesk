@@ -39,6 +39,12 @@ class DailyScheduleConfig(BaseModel):
     local_time: str = "08:00"
     timezone: str = "local"
     mode: IngestionRunMode = "all"
+    generate_daily_briefing: bool = False
+    last_run_at: str | None = None
+    next_run_at: str | None = None
+    last_status: str | None = None
+    last_message: str | None = None
+    last_report_id: int | None = None
 
 
 class SourceHealthItem(BaseModel):

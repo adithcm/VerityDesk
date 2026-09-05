@@ -5,6 +5,8 @@ from app.db.session import get_db
 from app.schemas.report import (
     CompanyResearchRequest,
     DailyBriefingRequest,
+    HousingReportRequest,
+    MacroReportRequest,
     MarketStrategyRequest,
     ReportCreateRequest,
     ReportDeleteResponse,
@@ -13,13 +15,17 @@ from app.schemas.report import (
     ReportType,
 )
 from app.services.reports import (
+    archive_report,
     create_report,
     delete_report,
     generate_company_research,
     generate_daily_briefing,
+    generate_housing_report,
+    generate_macro_report,
     generate_market_strategy,
     get_report,
     list_reports,
+    regenerate_report,
 )
 
 
@@ -58,6 +64,22 @@ def create_market_strategy(
     return generate_market_strategy(db, request)
 
 
+@router.post("/housing", response_model=ReportResponse, status_code=201)
+def create_housing_report(
+    request: HousingReportRequest,
+    db: Session = Depends(get_db),
+) -> ReportResponse:
+    return generate_housing_report(db, request)
+
+
+@router.post("/macro", response_model=ReportResponse, status_code=201)
+def create_macro_report(
+    request: MacroReportRequest,
+    db: Session = Depends(get_db),
+) -> ReportResponse:
+    return generate_macro_report(db, request)
+
+
 @router.get("", response_model=ReportListResponse)
 def read_reports(
     limit: int = Query(default=25, ge=1, le=100),
@@ -70,6 +92,16 @@ def read_reports(
 @router.get("/{report_id}", response_model=ReportResponse)
 def read_report(report_id: int, db: Session = Depends(get_db)) -> ReportResponse:
     return get_report(db, report_id)
+
+
+@router.post("/{report_id}/archive", response_model=ReportResponse)
+def archive_research_report(report_id: int, db: Session = Depends(get_db)) -> ReportResponse:
+    return archive_report(db, report_id)
+
+
+@router.post("/{report_id}/regenerate", response_model=ReportResponse, status_code=201)
+def regenerate_research_report(report_id: int, db: Session = Depends(get_db)) -> ReportResponse:
+    return regenerate_report(db, report_id)
 
 
 @router.delete("/{report_id}", response_model=ReportDeleteResponse)

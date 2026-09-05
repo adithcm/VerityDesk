@@ -13,13 +13,17 @@ from app.schemas.agent import AgentCitation, AgentQueryResponse, GuardrailCheck
 from app.schemas.report import ReportCreateRequest
 from app.services import reports
 from app.services.reports import (
+    archive_report,
     create_report,
     delete_report,
     generate_company_research,
     generate_daily_briefing,
+    generate_housing_report,
+    generate_macro_report,
     generate_market_strategy,
     get_report,
     list_reports,
+    regenerate_report,
 )
 
 
@@ -78,6 +82,69 @@ def test_list_get_and_delete_reports() -> None:
         assert found.id == first.id
         assert deleted.deleted is True
         assert session.get(Report, first.id) is None
+
+
+def test_archive_report_hides_it_from_active_list() -> None:
+    with build_session() as session:
+        report = create_report(session, ReportCreateRequest(report_type="macro"))
+
+        archived = archive_report(session, report.id)
+        listed = list_reports(session, limit=10)
+        found = get_report(session, report.id)
+
+        assert archived.status == "archived"
+        assert listed.total == 0
+        assert found.status == "archived"
+
+
+def test_regenerate_report_uses_saved_context(monkeypatch) -> None:
+    with build_session() as session:
+        original = create_report(
+            session,
+            ReportCreateRequest(
+                report_type="market_strategy",
+                title="Market Watch",
+                user_query="Refresh the market setup.",
+                domains=["Markets and Rates"],
+                tickers=["spy"],
+                regions=["US"],
+                time_window="week",
+            ),
+        )
+
+        def fake_generate_market_strategy(session_arg, request):
+            assert session_arg is session
+            assert request.title == "Market Watch Refresh"
+            assert request.user_query == "Refresh the market setup."
+            assert request.domains == ["Markets and Rates"]
+            assert request.tickers == ["SPY"]
+            assert request.regions == ["US"]
+            assert request.time_window == "week"
+            return reports.ReportResponse(
+                id=original.id + 1,
+                report_type="market_strategy",
+                status="generated",
+                title=request.title,
+                summary="Refreshed.",
+                body="This is not financial advice. Refreshed market strategy.",
+                domains=request.domains,
+                tickers=request.tickers,
+                companies=[],
+                as_of="2026-09-05T12:00:00+00:00",
+                confidence="medium",
+                disclaimer_version="v1",
+                guardrail_status="passed",
+                metadata={},
+                citations=[],
+                created_at="2026-09-05T12:00:00+00:00",
+                updated_at="2026-09-05T12:00:00+00:00",
+            )
+
+        monkeypatch.setattr(reports, "generate_market_strategy", fake_generate_market_strategy)
+
+        regenerated = regenerate_report(session, original.id)
+
+        assert regenerated.title == "Market Watch Refresh"
 
 
 def test_report_endpoints_create_list_read_delete() -> None:
@@ -427,6 +494,180 @@ def test_market_strategy_endpoint_returns_generated_report(monkeypatch) -> None:
     payload = response.json()
     assert payload["report_type"] == "market_strategy"
     assert payload["tickers"] == ["SPY"]
+
+
+def test_generate_housing_report_saves_agent_response_and_metadata(monkeypatch) -> None:
+    def fake_run_agent_query(request, session):
+        assert request.intent == "housing_macro_research"
+        assert "Housing and Real Estate" in request.domains
+        return AgentQueryResponse(
+            request_id="housing-agent-request-1",
+            summary=(
+                "This is not financial advice. InvestorAgent is for research and educational purposes only.\n\n"
+                "Housing conditions remain focused on mortgage rates, affordability, and supply."
+            ),
+            agents_ran=["CoordinatorAgent", "MarketAgent", "MacroAgent", "HousingAgent", "SynthesisAgent"],
+            claims=[],
+            citations=[
+                AgentCitation(
+                    source_id="FRED API",
+                    title="30-Year Fixed Mortgage Rate",
+                    publisher="FRED",
+                    published_at="2026-09-04T12:00:00+00:00",
+                    retrieved_at="2026-09-04T13:00:00+00:00",
+                    supports_claim="Mortgage rates remain relevant for affordability.",
+                )
+            ],
+            confidence="medium",
+            risks=["Housing data can lag current market conditions."],
+            follow_up_questions=["Should we compare affordability by region?"],
+            guardrail=GuardrailCheck(
+                status="passed",
+                disclaimer="This is not financial advice.",
+                issues=[],
+                banned_phrases_found=[],
+                required_sections=[],
+            ),
+            requires_guardrail_review=False,
+        )
+
+    monkeypatch.setattr(reports, "run_agent_query", fake_run_agent_query)
+
+    with build_session() as session:
+        session.add(
+            Source(
+                name="FRED API",
+                base_url="https://fred.stlouisfed.org",
+                source_type="official_api",
+                domains=["Housing and Real Estate"],
+                access_method="api",
+            )
+        )
+        session.commit()
+
+        response = generate_housing_report(session, reports.HousingReportRequest(regions=["US"]))
+
+        assert response.report_type == "housing"
+        assert response.status == "generated"
+        assert response.metadata["generation_stage"] == "housing"
+        assert response.metadata["agent_request_id"] == "housing-agent-request-1"
+        assert response.metadata["expected_sections"] == ["mortgage_rates", "affordability", "supply_demand", "risks"]
+        assert len(response.citations) == 1
+
+
+def test_generate_macro_report_saves_agent_response_and_metadata(monkeypatch) -> None:
+    def fake_run_agent_query(request, session):
+        assert request.intent == "housing_macro_research"
+        assert "U.S. Economy and Policy" in request.domains
+        return AgentQueryResponse(
+            request_id="macro-agent-request-1",
+            summary=(
+                "This is not financial advice. InvestorAgent is for research and educational purposes only.\n\n"
+                "Macro conditions remain focused on rates, labor, policy, and credit."
+            ),
+            agents_ran=["CoordinatorAgent", "MarketAgent", "MacroAgent", "SynthesisAgent"],
+            claims=[],
+            citations=[
+                AgentCitation(
+                    source_id="FRED API",
+                    title="Unemployment Rate",
+                    publisher="FRED",
+                    published_at="2026-09-04T12:00:00+00:00",
+                    retrieved_at="2026-09-04T13:00:00+00:00",
+                    supports_claim="Labor data remains relevant for macro context.",
+                )
+            ],
+            confidence="medium",
+            risks=["Macro releases can revise prior values."],
+            follow_up_questions=["Should we compare this with Fed commentary?"],
+            guardrail=GuardrailCheck(
+                status="passed",
+                disclaimer="This is not financial advice.",
+                issues=[],
+                banned_phrases_found=[],
+                required_sections=[],
+            ),
+            requires_guardrail_review=False,
+        )
+
+    monkeypatch.setattr(reports, "run_agent_query", fake_run_agent_query)
+
+    with build_session() as session:
+        session.add(
+            Source(
+                name="FRED API",
+                base_url="https://fred.stlouisfed.org",
+                source_type="official_api",
+                domains=["U.S. Economy and Policy"],
+                access_method="api",
+            )
+        )
+        session.commit()
+
+        response = generate_macro_report(session, reports.MacroReportRequest(regions=["US"]))
+
+        assert response.report_type == "macro"
+        assert response.status == "generated"
+        assert response.metadata["generation_stage"] == "macro"
+        assert response.metadata["agent_request_id"] == "macro-agent-request-1"
+        assert response.metadata["expected_sections"] == ["rates", "labor", "policy", "credit", "risks"]
+        assert len(response.citations) == 1
+
+
+def test_housing_and_macro_endpoints_return_generated_reports(monkeypatch) -> None:
+    def fake_generate_housing_report(session, request):
+        return reports.ReportResponse(
+            id=4,
+            report_type="housing",
+            status="generated",
+            title=request.title or "Housing Report",
+            summary="Housing summary.",
+            body="Housing body.",
+            domains=request.domains,
+            tickers=[],
+            companies=[],
+            as_of="2026-09-05T12:00:00+00:00",
+            confidence="medium",
+            disclaimer_version="v1",
+            guardrail_status="passed",
+            metadata={"generation_stage": "housing"},
+            citations=[],
+            created_at="2026-09-05T12:00:00+00:00",
+            updated_at="2026-09-05T12:00:00+00:00",
+        )
+
+    def fake_generate_macro_report(session, request):
+        return reports.ReportResponse(
+            id=5,
+            report_type="macro",
+            status="generated",
+            title=request.title or "Macro Report",
+            summary="Macro summary.",
+            body="Macro body.",
+            domains=request.domains,
+            tickers=[],
+            companies=[],
+            as_of="2026-09-05T12:00:00+00:00",
+            confidence="medium",
+            disclaimer_version="v1",
+            guardrail_status="passed",
+            metadata={"generation_stage": "macro"},
+            citations=[],
+            created_at="2026-09-05T12:00:00+00:00",
+            updated_at="2026-09-05T12:00:00+00:00",
+        )
+
+    monkeypatch.setattr("app.api.v1.endpoints.reports.generate_housing_report", fake_generate_housing_report)
+    monkeypatch.setattr("app.api.v1.endpoints.reports.generate_macro_report", fake_generate_macro_report)
+
+    client = TestClient(app)
+    housing_response = client.post("/api/v1/reports/housing", json={"regions": ["US"]})
+    macro_response = client.post("/api/v1/reports/macro", json={"regions": ["US"]})
+
+    assert housing_response.status_code == 201
+    assert housing_response.json()["report_type"] == "housing"
+    assert macro_response.status_code == 201
+    assert macro_response.json()["report_type"] == "macro"
 
 
 def test_report_endpoint_validates_report_type() -> None:

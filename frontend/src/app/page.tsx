@@ -23,6 +23,7 @@ const domains = [
 const navigation = [
   "Dashboard",
   "Daily Briefing",
+  "Reports",
   "Sources",
   "Watchlist",
   "Agent Chat",
@@ -132,6 +133,12 @@ type DailyScheduleConfig = {
   local_time: string;
   timezone: string;
   mode: RunMode;
+  generate_daily_briefing: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  last_status: string | null;
+  last_message: string | null;
+  last_report_id: number | null;
 };
 
 type IngestionRunResponse = {
@@ -222,6 +229,37 @@ type ReportResponse = {
   updated_at: string;
 };
 
+type ReportListResponse = {
+  reports: ReportResponse[];
+  total: number;
+};
+
+type ProactiveSuggestion = {
+  id: string;
+  kind: "question" | "report" | "evidence_gap";
+  title: string;
+  prompt: string;
+  action:
+    | "run_agent_query"
+    | "generate_daily_briefing"
+    | "generate_company_research"
+    | "generate_market_strategy"
+    | "generate_housing_report"
+    | "generate_macro_report"
+    | "review_sources";
+  priority: number;
+  domains: string[];
+  tickers: string[];
+  reasons: string[];
+  guardrail_note: string;
+};
+
+type ProactiveSuggestionsResponse = {
+  suggestions: ProactiveSuggestion[];
+  total: number;
+  generated_at: string;
+};
+
 const watchlistRows = [
   { symbol: "SPY", focus: "Broad market risk", state: "Monitor" },
   { symbol: "QQQ", focus: "Growth and AI exposure", state: "Monitor" },
@@ -239,6 +277,8 @@ export default function Home() {
   const [scheduleData, setScheduleData] = useState<DailyScheduleConfig | null>(null);
   const [ingestionError, setIngestionError] = useState<string | null>(null);
   const [ingestionLoading, setIngestionLoading] = useState(true);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [runMode, setRunMode] = useState<RunMode>("all");
   const [runLoading, setRunLoading] = useState(false);
   const [lastRunResponse, setLastRunResponse] = useState<IngestionRunResponse | null>(null);
@@ -262,6 +302,20 @@ export default function Home() {
   const [marketReport, setMarketReport] = useState<ReportResponse | null>(null);
   const [marketReportLoading, setMarketReportLoading] = useState(false);
   const [marketReportError, setMarketReportError] = useState<string | null>(null);
+  const [housingReport, setHousingReport] = useState<ReportResponse | null>(null);
+  const [housingReportLoading, setHousingReportLoading] = useState(false);
+  const [housingReportError, setHousingReportError] = useState<string | null>(null);
+  const [macroReport, setMacroReport] = useState<ReportResponse | null>(null);
+  const [macroReportLoading, setMacroReportLoading] = useState(false);
+  const [macroReportError, setMacroReportError] = useState<string | null>(null);
+  const [reportListData, setReportListData] = useState<ReportListResponse | null>(null);
+  const [reportsLoading, setReportsLoading] = useState(true);
+  const [reportsError, setReportsError] = useState<string | null>(null);
+  const [selectedReport, setSelectedReport] = useState<ReportResponse | null>(null);
+  const [reportActionLoading, setReportActionLoading] = useState<string | null>(null);
+  const [suggestionsData, setSuggestionsData] = useState<ProactiveSuggestionsResponse | null>(null);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -311,6 +365,8 @@ export default function Home() {
     loadSources();
     loadIngestionStatus();
     loadAgentRuns();
+    loadReports();
+    loadSuggestions();
   }, []);
 
   const primarySources = useMemo(
@@ -334,6 +390,127 @@ export default function Home() {
     }
   }
 
+  async function loadReports(selectedId?: number | null) {
+    setReportsLoading(true);
+    setReportsError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports?limit=50`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Report request failed with status ${response.status}`);
+      }
+      const data = (await response.json()) as ReportListResponse;
+      setReportListData(data);
+      setSelectedReport((current) => {
+        if (selectedId === null) {
+          return data.reports[0] ?? null;
+        }
+        const nextId = selectedId ?? current?.id;
+        return data.reports.find((report) => report.id === nextId) ?? data.reports[0] ?? null;
+      });
+    } catch (error) {
+      setReportsError(error instanceof Error ? error.message : "Could not load reports");
+      setReportListData(null);
+    } finally {
+      setReportsLoading(false);
+    }
+  }
+
+  async function loadSuggestions() {
+    setSuggestionsLoading(true);
+    setSuggestionsError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/suggestions/proactive?limit=7`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Suggestions request failed with status ${response.status}`);
+      }
+      setSuggestionsData((await response.json()) as ProactiveSuggestionsResponse);
+    } catch (error) {
+      setSuggestionsError(error instanceof Error ? error.message : "Could not load suggestions");
+      setSuggestionsData(null);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }
+
+  function applySuggestion(suggestion: ProactiveSuggestion) {
+    if (suggestion.action === "run_agent_query") {
+      setAgentQuery(suggestion.prompt);
+      setAgentIntent(suggestion.domains.some((domain) => domain.includes("Housing")) ? "housing_macro_research" : "market_research");
+      setAgentDomain(suggestion.domains[0] ?? "Markets and Rates");
+      setAgentTicker(suggestion.tickers.join(", "));
+      setActiveView("Agent Chat");
+      return;
+    }
+    if (suggestion.action === "generate_daily_briefing") {
+      generateDailyBriefing();
+      setActiveView("Daily Briefing");
+      return;
+    }
+    if (suggestion.action === "generate_market_strategy") {
+      generateMarketStrategy();
+      setActiveView("Dashboard");
+      return;
+    }
+    if (suggestion.action === "generate_housing_report") {
+      generateHousingReport();
+      setActiveView("Dashboard");
+      return;
+    }
+    if (suggestion.action === "generate_macro_report") {
+      generateMacroReport();
+      setActiveView("Dashboard");
+      return;
+    }
+    if (suggestion.action === "review_sources") {
+      setActiveView("Sources");
+    }
+  }
+
+  async function openReport(reportId: number) {
+    setReportActionLoading(`open-${reportId}`);
+    setReportsError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/${reportId}`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Report detail request failed with status ${response.status}`);
+      }
+      setSelectedReport((await response.json()) as ReportResponse);
+    } catch (error) {
+      setReportsError(error instanceof Error ? error.message : "Could not open report");
+    } finally {
+      setReportActionLoading(null);
+    }
+  }
+
+  async function runReportAction(reportId: number, action: "regenerate" | "archive" | "delete") {
+    setReportActionLoading(`${action}-${reportId}`);
+    setReportsError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/reports/${reportId}${action === "delete" ? "" : `/${action}`}`,
+        { method: action === "delete" ? "DELETE" : "POST" },
+      );
+      if (!response.ok) {
+        throw new Error(`Report ${action} failed with status ${response.status}`);
+      }
+      const nextReport = action === "regenerate" ? ((await response.json()) as ReportResponse) : null;
+      if (nextReport) {
+        setSelectedReport(nextReport);
+        await loadReports(nextReport.id);
+      } else {
+        await loadReports(null);
+      }
+    } catch (error) {
+      setReportsError(error instanceof Error ? error.message : `Could not ${action} report`);
+    } finally {
+      setReportActionLoading(null);
+    }
+  }
+
   async function triggerIngestionRun() {
     setRunLoading(true);
     setIngestionError(null);
@@ -351,10 +528,33 @@ export default function Home() {
 
       setLastRunResponse((await response.json()) as IngestionRunResponse);
       await loadIngestionStatus();
+      await loadSuggestions();
     } catch (error) {
       setIngestionError(error instanceof Error ? error.message : "Could not run ingestion");
     } finally {
       setRunLoading(false);
+    }
+  }
+
+  async function saveSchedule(nextSchedule: DailyScheduleConfig) {
+    setScheduleSaving(true);
+    setScheduleError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/ingestion/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextSchedule),
+      });
+      if (!response.ok) {
+        throw new Error(`Schedule update failed with status ${response.status}`);
+      }
+      setScheduleData((await response.json()) as DailyScheduleConfig);
+      await loadIngestionStatus();
+    } catch (error) {
+      setScheduleError(error instanceof Error ? error.message : "Could not save schedule");
+    } finally {
+      setScheduleSaving(false);
     }
   }
 
@@ -408,6 +608,8 @@ export default function Home() {
 
       setDailyBriefingReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
+      await loadReports();
+      await loadSuggestions();
     } catch (error) {
       setDailyBriefingError(error instanceof Error ? error.message : "Could not generate daily briefing");
     } finally {
@@ -437,6 +639,8 @@ export default function Home() {
 
       setCompanyReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
+      await loadReports();
+      await loadSuggestions();
     } catch (error) {
       setCompanyReportError(error instanceof Error ? error.message : "Could not generate company report");
     } finally {
@@ -461,10 +665,64 @@ export default function Home() {
 
       setMarketReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
+      await loadReports();
+      await loadSuggestions();
     } catch (error) {
       setMarketReportError(error instanceof Error ? error.message : "Could not generate market strategy report");
     } finally {
       setMarketReportLoading(false);
+    }
+  }
+
+  async function generateHousingReport() {
+    setHousingReportLoading(true);
+    setHousingReportError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/housing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regions: ["US"], time_window: "quarter" }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Housing report request failed with status ${response.status}`);
+      }
+
+      setHousingReport((await response.json()) as ReportResponse);
+      await loadAgentRuns();
+      await loadReports();
+      await loadSuggestions();
+    } catch (error) {
+      setHousingReportError(error instanceof Error ? error.message : "Could not generate housing report");
+    } finally {
+      setHousingReportLoading(false);
+    }
+  }
+
+  async function generateMacroReport() {
+    setMacroReportLoading(true);
+    setMacroReportError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/macro`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regions: ["US"], time_window: "quarter" }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Macro report request failed with status ${response.status}`);
+      }
+
+      setMacroReport((await response.json()) as ReportResponse);
+      await loadAgentRuns();
+      await loadReports();
+      await loadSuggestions();
+    } catch (error) {
+      setMacroReportError(error instanceof Error ? error.message : "Could not generate macro report");
+    } finally {
+      setMacroReportLoading(false);
     }
   }
 
@@ -478,7 +736,7 @@ export default function Home() {
               <h1 className="mt-1 text-xl font-semibold">Market Workspace</h1>
             </div>
             <div className="rounded-md border border-[#d7dee3] px-2 py-1 text-xs font-medium text-[#4b5563]">
-              Phase 5.5
+              Phase 5.6
             </div>
           </div>
 
@@ -533,6 +791,19 @@ export default function Home() {
                 marketReportLoading={marketReportLoading}
                 marketReportError={marketReportError}
                 generateMarketStrategy={generateMarketStrategy}
+                housingReport={housingReport}
+                housingReportLoading={housingReportLoading}
+                housingReportError={housingReportError}
+                generateHousingReport={generateHousingReport}
+                macroReport={macroReport}
+                macroReportLoading={macroReportLoading}
+                macroReportError={macroReportError}
+                generateMacroReport={generateMacroReport}
+                suggestionsData={suggestionsData}
+                suggestionsLoading={suggestionsLoading}
+                suggestionsError={suggestionsError}
+                loadSuggestions={loadSuggestions}
+                applySuggestion={applySuggestion}
               />
             )}
             {activeView === "Daily Briefing" && (
@@ -543,6 +814,18 @@ export default function Home() {
                 dailyBriefingLoading={dailyBriefingLoading}
                 dailyBriefingError={dailyBriefingError}
                 generateDailyBriefing={generateDailyBriefing}
+              />
+            )}
+            {activeView === "Reports" && (
+              <ReportsView
+                reportListData={reportListData}
+                reportsLoading={reportsLoading}
+                reportsError={reportsError}
+                selectedReport={selectedReport}
+                reportActionLoading={reportActionLoading}
+                loadReports={loadReports}
+                openReport={openReport}
+                runReportAction={runReportAction}
               />
             )}
             {activeView === "Sources" && (
@@ -585,7 +868,15 @@ export default function Home() {
                 submitAgentQuery={submitAgentQuery}
               />
             )}
-            {activeView === "Settings" && <SettingsView healthData={healthData} scheduleData={scheduleData} />}
+            {activeView === "Settings" && (
+              <SettingsView
+                healthData={healthData}
+                scheduleData={scheduleData}
+                scheduleSaving={scheduleSaving}
+                scheduleError={scheduleError}
+                saveSchedule={saveSchedule}
+              />
+            )}
           </div>
         </section>
       </div>
@@ -643,6 +934,19 @@ function DashboardView({
   marketReportLoading,
   marketReportError,
   generateMarketStrategy,
+  housingReport,
+  housingReportLoading,
+  housingReportError,
+  generateHousingReport,
+  macroReport,
+  macroReportLoading,
+  macroReportError,
+  generateMacroReport,
+  suggestionsData,
+  suggestionsLoading,
+  suggestionsError,
+  loadSuggestions,
+  applySuggestion,
 }: {
   sourceData: SourceCatalogResponse | null;
   sourceError: string | null;
@@ -663,9 +967,30 @@ function DashboardView({
   marketReportLoading: boolean;
   marketReportError: string | null;
   generateMarketStrategy: () => void;
+  housingReport: ReportResponse | null;
+  housingReportLoading: boolean;
+  housingReportError: string | null;
+  generateHousingReport: () => void;
+  macroReport: ReportResponse | null;
+  macroReportLoading: boolean;
+  macroReportError: string | null;
+  generateMacroReport: () => void;
+  suggestionsData: ProactiveSuggestionsResponse | null;
+  suggestionsLoading: boolean;
+  suggestionsError: string | null;
+  loadSuggestions: () => Promise<void>;
+  applySuggestion: (suggestion: ProactiveSuggestion) => void;
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+      <ProactiveSuggestionsCard
+        suggestionsData={suggestionsData}
+        suggestionsLoading={suggestionsLoading}
+        suggestionsError={suggestionsError}
+        loadSuggestions={loadSuggestions}
+        applySuggestion={applySuggestion}
+      />
+
       <section className="rounded-md border border-[#d7dee3] bg-white p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <h3 className="text-lg font-semibold">Ingestion Health</h3>
@@ -715,6 +1040,17 @@ function DashboardView({
         generateMarketStrategy={generateMarketStrategy}
       />
 
+      <MacroHousingReportsCard
+        housingReport={housingReport}
+        housingReportLoading={housingReportLoading}
+        housingReportError={housingReportError}
+        generateHousingReport={generateHousingReport}
+        macroReport={macroReport}
+        macroReportLoading={macroReportLoading}
+        macroReportError={macroReportError}
+        generateMacroReport={generateMacroReport}
+      />
+
       <section className="rounded-md border border-[#d7dee3] bg-white p-4 xl:col-span-2">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold">Latest Items</h3>
@@ -727,6 +1063,189 @@ function DashboardView({
         <h3 className="text-lg font-semibold">Recent Runs</h3>
         <RecentRunsTable runsData={runsData} loading={ingestionLoading} />
       </section>
+    </div>
+  );
+}
+
+function ProactiveSuggestionsCard({
+  suggestionsData,
+  suggestionsLoading,
+  suggestionsError,
+  loadSuggestions,
+  applySuggestion,
+}: {
+  suggestionsData: ProactiveSuggestionsResponse | null;
+  suggestionsLoading: boolean;
+  suggestionsError: string | null;
+  loadSuggestions: () => Promise<void>;
+  applySuggestion: (suggestion: ProactiveSuggestion) => void;
+}) {
+  return (
+    <section className="rounded-md border border-[#d7dee3] bg-white p-4 xl:col-span-2">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Suggested Next Steps</h3>
+          <p className="mt-1 text-sm text-[#5b6573]">
+            Recommended questions and reports based on recent evidence and saved report history.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => loadSuggestions()}
+          disabled={suggestionsLoading}
+          className="min-h-10 rounded-md border border-[#cbd5dc] px-3 py-2 text-sm font-semibold text-[#143642] disabled:cursor-not-allowed disabled:text-[#9aa8b2]"
+        >
+          {suggestionsLoading ? "Loading" : "Refresh"}
+        </button>
+      </div>
+      <StatusBlock loading={suggestionsLoading} error={suggestionsError} />
+      {!suggestionsLoading && !suggestionsError && (!suggestionsData || suggestionsData.suggestions.length === 0) && (
+        <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+          No suggestions available yet.
+        </div>
+      )}
+      {suggestionsData && suggestionsData.suggestions.length > 0 && (
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          {suggestionsData.suggestions.slice(0, 6).map((suggestion) => (
+            <button
+              key={suggestion.id}
+              type="button"
+              onClick={() => applySuggestion(suggestion)}
+              className="rounded-md border border-[#e5eaf0] p-3 text-left transition hover:border-[#b7c7ce] hover:bg-[#f8fafb]"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-semibold uppercase text-[#25636b]">
+                  {formatSuggestionKind(suggestion.kind)}
+                </span>
+                <span className="text-xs font-semibold text-[#5b6573]">Priority {suggestion.priority}</span>
+              </div>
+              <p className="mt-3 text-sm font-semibold">{suggestion.title}</p>
+              <p className="mt-2 text-sm leading-5 text-[#374151]">{suggestion.prompt}</p>
+              {suggestion.reasons.length > 0 && (
+                <p className="mt-3 text-xs leading-5 text-[#5b6573]">{suggestion.reasons[0]}</p>
+              )}
+              <p className="mt-3 text-xs font-medium text-[#8a4b08]">{suggestion.guardrail_note}</p>
+            </button>
+          ))}
+        </div>
+      )}
+      {suggestionsData && (
+        <p className="mt-3 text-xs text-[#5b6573]">Updated {formatDateTime(suggestionsData.generated_at)}</p>
+      )}
+    </section>
+  );
+}
+
+function MacroHousingReportsCard({
+  housingReport,
+  housingReportLoading,
+  housingReportError,
+  generateHousingReport,
+  macroReport,
+  macroReportLoading,
+  macroReportError,
+  generateMacroReport,
+}: {
+  housingReport: ReportResponse | null;
+  housingReportLoading: boolean;
+  housingReportError: string | null;
+  generateHousingReport: () => void;
+  macroReport: ReportResponse | null;
+  macroReportLoading: boolean;
+  macroReportError: string | null;
+  generateMacroReport: () => void;
+}) {
+  return (
+    <section className="rounded-md border border-[#d7dee3] bg-white p-4 xl:col-span-2">
+      <div>
+        <h3 className="text-lg font-semibold">Housing And Macro</h3>
+        <p className="mt-1 text-sm text-[#5b6573]">
+          Generate research reports for housing conditions or broader macro context.
+        </p>
+      </div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <ReportGeneratorPanel
+          title="Housing Report"
+          description="Mortgage rates, affordability, supply, demand, and housing risks."
+          buttonLabel="Generate Housing Report"
+          loadingLabel="Generating"
+          loading={housingReportLoading}
+          error={housingReportError}
+          report={housingReport}
+          onGenerate={generateHousingReport}
+        />
+        <ReportGeneratorPanel
+          title="Macro Report"
+          description="Rates, labor, policy, credit, and broad economic risks."
+          buttonLabel="Generate Macro Report"
+          loadingLabel="Generating"
+          loading={macroReportLoading}
+          error={macroReportError}
+          report={macroReport}
+          onGenerate={generateMacroReport}
+        />
+      </div>
+    </section>
+  );
+}
+
+function ReportGeneratorPanel({
+  title,
+  description,
+  buttonLabel,
+  loadingLabel,
+  loading,
+  error,
+  report,
+  onGenerate,
+}: {
+  title: string;
+  description: string;
+  buttonLabel: string;
+  loadingLabel: string;
+  loading: boolean;
+  error: string | null;
+  report: ReportResponse | null;
+  onGenerate: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-[#e5eaf0] p-3">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-sm font-semibold">{title}</p>
+          <p className="mt-1 text-sm text-[#5b6573]">{description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={loading}
+          className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
+        >
+          {loading ? loadingLabel : buttonLabel}
+        </button>
+      </div>
+      {error && <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{error}</p>}
+      {report && <CompactReportPreview report={report} />}
+    </div>
+  );
+}
+
+function CompactReportPreview({ report }: { report: ReportResponse }) {
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <SettingRow label="Status" value={report.status} />
+        <SettingRow label="Confidence" value={report.confidence} />
+        <SettingRow label="Sources" value={String(report.citations.length)} />
+      </div>
+      <div>
+        <p className="text-sm font-semibold">{report.title}</p>
+        <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(report.as_of)}</p>
+        <p className="mt-3 max-h-72 overflow-auto whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
+          {report.body}
+        </p>
+      </div>
+      <CitationList citations={report.citations} />
     </div>
   );
 }
@@ -842,8 +1361,17 @@ function SchedulerStatusCard({
           <SettingRow label="Daily Run" value={scheduleData?.enabled ? "On" : "Off"} />
           <SettingRow label="Scheduled Time" value={formatScheduleTime(scheduleData)} />
           <SettingRow label="Run Mode" value={formatRunMode(scheduleData?.mode)} />
-          <SettingRow label="Last Run" value={formatDateTime(lastRun?.completed_at ?? lastRun?.started_at)} />
+          <SettingRow label="Auto Briefing" value={scheduleData?.generate_daily_briefing ? "On" : "Off"} />
+          <SettingRow label="Last Run" value={formatDateTime(scheduleData?.last_run_at ?? lastRun?.completed_at ?? lastRun?.started_at)} />
+          <SettingRow label="Next Run" value={formatDateTime(scheduleData?.next_run_at)} />
+          <SettingRow label="Last Status" value={scheduleData?.last_status ?? "--"} />
+          <SettingRow label="Last Report" value={scheduleData?.last_report_id ? `#${scheduleData.last_report_id}` : "--"} />
         </div>
+      )}
+      {scheduleData?.last_message && (
+        <p className="mt-4 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm text-[#5b6573]">
+          {scheduleData.last_message}
+        </p>
       )}
     </section>
   );
@@ -915,6 +1443,191 @@ function DailyBriefingView({
         </div>
         <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
       </section>
+    </div>
+  );
+}
+
+function ReportsView({
+  reportListData,
+  reportsLoading,
+  reportsError,
+  selectedReport,
+  reportActionLoading,
+  loadReports,
+  openReport,
+  runReportAction,
+}: {
+  reportListData: ReportListResponse | null;
+  reportsLoading: boolean;
+  reportsError: string | null;
+  selectedReport: ReportResponse | null;
+  reportActionLoading: string | null;
+  loadReports: (selectedId?: number | null) => Promise<void>;
+  openReport: (reportId: number) => Promise<void>;
+  runReportAction: (reportId: number, action: "regenerate" | "archive" | "delete") => Promise<void>;
+}) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">Saved Reports</h3>
+            <p className="mt-1 text-sm text-[#5b6573]">{reportListData?.total ?? 0} active reports</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadReports()}
+            disabled={reportsLoading}
+            className="min-h-10 rounded-md border border-[#cbd5dc] px-3 py-2 text-sm font-semibold text-[#143642] disabled:cursor-not-allowed disabled:text-[#9aa8b2]"
+          >
+            {reportsLoading ? "Loading" : "Refresh"}
+          </button>
+        </div>
+        <StatusBlock loading={reportsLoading} error={reportsError} />
+        {!reportsLoading && !reportsError && (!reportListData || reportListData.reports.length === 0) && (
+          <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+            No saved reports yet.
+          </div>
+        )}
+        {reportListData && reportListData.reports.length > 0 && (
+          <div className="mt-4 space-y-2">
+            {reportListData.reports.map((report) => (
+              <button
+                key={report.id}
+                type="button"
+                onClick={() => openReport(report.id)}
+                className={`w-full rounded-md border p-3 text-left transition ${
+                  selectedReport?.id === report.id
+                    ? "border-[#25636b] bg-[#eef7f7]"
+                    : "border-[#e5eaf0] hover:border-[#b7c7ce]"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold uppercase text-[#25636b]">
+                    {formatReportType(report.report_type)}
+                  </span>
+                  <StatusBadge status={report.status} />
+                </div>
+                <p className="mt-2 text-sm font-semibold">{report.title}</p>
+                <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(report.as_of)}</p>
+                <p className="mt-2 line-clamp-2 text-sm text-[#5b6573]">{report.summary ?? report.body}</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        {!selectedReport ? (
+          <div className="rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+            Select a report to review details and citations.
+          </div>
+        ) : (
+          <ReportDetailPanel
+            report={selectedReport}
+            reportActionLoading={reportActionLoading}
+            runReportAction={runReportAction}
+          />
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ReportDetailPanel({
+  report,
+  reportActionLoading,
+  runReportAction,
+}: {
+  report: ReportResponse;
+  reportActionLoading: string | null;
+  runReportAction: (reportId: number, action: "regenerate" | "archive" | "delete") => Promise<void>;
+}) {
+  const isBusy = reportActionLoading?.endsWith(`-${report.id}`) ?? false;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-sm font-semibold uppercase text-[#25636b]">{formatReportType(report.report_type)}</p>
+          <h3 className="mt-1 text-xl font-semibold">{report.title}</h3>
+          <p className="mt-2 text-sm text-[#5b6573]">{report.summary}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => runReportAction(report.id, "regenerate")}
+            disabled={isBusy}
+            className="min-h-10 rounded-md bg-[#143642] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
+          >
+            {reportActionLoading === `regenerate-${report.id}` ? "Regenerating" : "Regenerate"}
+          </button>
+          <button
+            type="button"
+            onClick={() => runReportAction(report.id, "archive")}
+            disabled={isBusy}
+            className="min-h-10 rounded-md border border-[#cbd5dc] px-3 py-2 text-sm font-semibold text-[#143642] disabled:cursor-not-allowed disabled:text-[#9aa8b2]"
+          >
+            {reportActionLoading === `archive-${report.id}` ? "Archiving" : "Archive"}
+          </button>
+          <button
+            type="button"
+            onClick={() => runReportAction(report.id, "delete")}
+            disabled={isBusy}
+            className="min-h-10 rounded-md border border-[#f0b8b1] px-3 py-2 text-sm font-semibold text-[#b42318] disabled:cursor-not-allowed disabled:text-[#9aa8b2]"
+          >
+            {reportActionLoading === `delete-${report.id}` ? "Deleting" : "Delete"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <SettingRow label="Status" value={report.status} />
+        <SettingRow label="Confidence" value={report.confidence} />
+        <SettingRow label="Guardrail" value={report.guardrail_status} />
+        <SettingRow label="Sources" value={String(report.citations.length)} />
+        <SettingRow label="Generated At" value={formatDateTime(report.as_of)} />
+        <SettingRow label="Created At" value={formatDateTime(report.created_at)} />
+        <SettingRow label="Updated At" value={formatDateTime(report.updated_at)} />
+        <SettingRow label="Disclaimer" value={report.disclaimer_version} />
+      </div>
+
+      {(report.domains.length > 0 || report.tickers.length > 0 || report.companies.length > 0) && (
+        <div className="grid gap-3 md:grid-cols-3">
+          <InlineList title="Domains" values={report.domains} />
+          <InlineList title="Tickers" values={report.tickers} />
+          <InlineList title="Companies" values={report.companies} />
+        </div>
+      )}
+
+      <div>
+        <p className="text-sm font-semibold">Report</p>
+        <p className="mt-2 max-h-[520px] overflow-auto whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-4 text-sm leading-6 text-[#374151]">
+          {report.body}
+        </p>
+      </div>
+
+      <ReportMetadataPanel metadata={report.metadata} />
+      <CitationList citations={report.citations} />
+    </div>
+  );
+}
+
+function ReportMetadataPanel({ metadata }: { metadata: Record<string, unknown> }) {
+  const rows = Object.entries(metadata).filter(([, value]) => value !== null && value !== undefined && value !== "");
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div>
+      <p className="text-sm font-semibold">Report Context</p>
+      <div className="mt-2 grid gap-2 md:grid-cols-2">
+        {rows.slice(0, 10).map(([key, value]) => (
+          <SettingRow key={key} label={formatMetadataKey(key)} value={formatMetadataValue(value)} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -1376,22 +2089,98 @@ function GuardrailDetails({ response }: { response: AgentResponse }) {
 function SettingsView({
   healthData,
   scheduleData,
+  scheduleSaving,
+  scheduleError,
+  saveSchedule,
 }: {
   healthData: SourceHealthResponse | null;
   scheduleData: DailyScheduleConfig | null;
+  scheduleSaving: boolean;
+  scheduleError: string | null;
+  saveSchedule: (nextSchedule: DailyScheduleConfig) => Promise<void>;
 }) {
+  const schedule = scheduleData ?? defaultScheduleConfig();
+
+  function updateSchedule(patch: Partial<DailyScheduleConfig>) {
+    saveSchedule({ ...schedule, ...patch });
+  }
+
   return (
-    <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-      <h3 className="text-lg font-semibold">Settings</h3>
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <SettingRow label="Backend URL" value={API_BASE_URL} />
-        <SettingRow label="Source Mode" value="Catalog and ingestion status" />
-        <SettingRow label="Storage" value="Local SQLite" />
-        <SettingRow label="Tracked Sources" value={String(healthData?.total ?? 0)} />
-        <SettingRow label="Daily Run" value={scheduleData?.enabled ? "On" : "Off"} />
-        <SettingRow label="Scheduled Time" value={formatScheduleTime(scheduleData)} />
-      </div>
-    </section>
+    <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <h3 className="text-lg font-semibold">Settings</h3>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+          <SettingRow label="Backend URL" value={API_BASE_URL} />
+          <SettingRow label="Source Mode" value="Catalog and ingestion status" />
+          <SettingRow label="Storage" value="Local SQLite" />
+          <SettingRow label="Tracked Sources" value={String(healthData?.total ?? 0)} />
+        </div>
+      </section>
+
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Daily Automation</h3>
+            <p className="mt-1 text-sm text-[#5b6573]">
+              Runs while the local backend is open. Schedule settings are saved locally.
+            </p>
+          </div>
+          <StatusBadge status={schedule.enabled ? "enabled" : "off"} />
+        </div>
+        {scheduleError && <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{scheduleError}</p>}
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <label className="flex items-center gap-3 rounded-md border border-[#e5eaf0] p-3 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={schedule.enabled}
+              disabled={scheduleSaving}
+              onChange={(event) => updateSchedule({ enabled: event.target.checked })}
+            />
+            Daily run
+          </label>
+          <label className="flex items-center gap-3 rounded-md border border-[#e5eaf0] p-3 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={schedule.generate_daily_briefing}
+              disabled={scheduleSaving}
+              onChange={(event) => updateSchedule({ generate_daily_briefing: event.target.checked })}
+            />
+            Generate daily briefing
+          </label>
+          <label className="block text-sm font-medium" htmlFor="schedule-time">
+            Scheduled Time
+            <input
+              id="schedule-time"
+              type="time"
+              value={schedule.local_time}
+              disabled={scheduleSaving}
+              onChange={(event) => updateSchedule({ local_time: event.target.value })}
+              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+            />
+          </label>
+          <label className="block text-sm font-medium" htmlFor="schedule-mode">
+            Run Mode
+            <select
+              id="schedule-mode"
+              value={schedule.mode}
+              disabled={scheduleSaving}
+              onChange={(event) => updateSchedule({ mode: event.target.value as RunMode })}
+              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
+            >
+              <option value="all">All sources</option>
+              <option value="rss">RSS only</option>
+              <option value="official_api">Official APIs only</option>
+            </select>
+          </label>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <SettingRow label="Next Run" value={formatDateTime(schedule.next_run_at)} />
+          <SettingRow label="Last Run" value={formatDateTime(schedule.last_run_at)} />
+          <SettingRow label="Last Status" value={schedule.last_status ?? "--"} />
+        </div>
+        {scheduleSaving && <p className="mt-4 text-sm text-[#5b6573]">Saving schedule.</p>}
+      </section>
+    </div>
   );
 }
 
@@ -1625,6 +2414,55 @@ function formatRunMode(mode: RunMode | undefined) {
   }
 
   return "All sources";
+}
+
+function formatReportType(reportType: string) {
+  return reportType
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function formatSuggestionKind(kind: ProactiveSuggestion["kind"]) {
+  if (kind === "evidence_gap") {
+    return "Evidence Gap";
+  }
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
+function defaultScheduleConfig(): DailyScheduleConfig {
+  return {
+    enabled: false,
+    local_time: "08:00",
+    timezone: "local",
+    mode: "all",
+    generate_daily_briefing: false,
+    last_run_at: null,
+    next_run_at: null,
+    last_status: null,
+    last_message: null,
+    last_report_id: null,
+  };
+}
+
+function formatMetadataKey(key: string) {
+  return key
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function formatMetadataValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.map(String).join(", ") : "--";
+  }
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+  if (typeof value === "object" && value !== null) {
+    return JSON.stringify(value);
+  }
+  return value === null || value === undefined || value === "" ? "--" : String(value);
 }
 
 function observationSummary(item: LatestIngestedItem) {

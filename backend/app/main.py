@@ -1,9 +1,22 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.services.scheduler import start_daily_scheduler, stop_daily_scheduler
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler_task = start_daily_scheduler()
+    app.state.scheduler_task = scheduler_task
+    try:
+        yield
+    finally:
+        await stop_daily_scheduler(scheduler_task)
 
 
 def create_app() -> FastAPI:
@@ -14,6 +27,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description="Local-first market intelligence backend.",
+        lifespan=lifespan,
     )
 
     app.add_middleware(
