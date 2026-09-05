@@ -13,6 +13,7 @@ from app.schemas.agent import AgentCitation, AgentQueryResponse, GuardrailCheck
 from app.schemas.report import ReportCreateRequest
 from app.services import reports
 from app.services.reports import (
+    archive_report,
     create_report,
     delete_report,
     generate_company_research,
@@ -22,6 +23,7 @@ from app.services.reports import (
     generate_market_strategy,
     get_report,
     list_reports,
+    regenerate_report,
 )
 
 
@@ -80,6 +82,69 @@ def test_list_get_and_delete_reports() -> None:
         assert found.id == first.id
         assert deleted.deleted is True
         assert session.get(Report, first.id) is None
+
+
+def test_archive_report_hides_it_from_active_list() -> None:
+    with build_session() as session:
+        report = create_report(session, ReportCreateRequest(report_type="macro"))
+
+        archived = archive_report(session, report.id)
+        listed = list_reports(session, limit=10)
+        found = get_report(session, report.id)
+
+        assert archived.status == "archived"
+        assert listed.total == 0
+        assert found.status == "archived"
+
+
+def test_regenerate_report_uses_saved_context(monkeypatch) -> None:
+    with build_session() as session:
+        original = create_report(
+            session,
+            ReportCreateRequest(
+                report_type="market_strategy",
+                title="Market Watch",
+                user_query="Refresh the market setup.",
+                domains=["Markets and Rates"],
+                tickers=["spy"],
+                regions=["US"],
+                time_window="week",
+            ),
+        )
+
+        def fake_generate_market_strategy(session_arg, request):
+            assert session_arg is session
+            assert request.title == "Market Watch Refresh"
+            assert request.user_query == "Refresh the market setup."
+            assert request.domains == ["Markets and Rates"]
+            assert request.tickers == ["SPY"]
+            assert request.regions == ["US"]
+            assert request.time_window == "week"
+            return reports.ReportResponse(
+                id=original.id + 1,
+                report_type="market_strategy",
+                status="generated",
+                title=request.title,
+                summary="Refreshed.",
+                body="This is not financial advice. Refreshed market strategy.",
+                domains=request.domains,
+                tickers=request.tickers,
+                companies=[],
+                as_of="2026-09-05T12:00:00+00:00",
+                confidence="medium",
+                disclaimer_version="v1",
+                guardrail_status="passed",
+                metadata={},
+                citations=[],
+                created_at="2026-09-05T12:00:00+00:00",
+                updated_at="2026-09-05T12:00:00+00:00",
+            )
+
+        monkeypatch.setattr(reports, "generate_market_strategy", fake_generate_market_strategy)
+
+        regenerated = regenerate_report(session, original.id)
+
+        assert regenerated.title == "Market Watch Refresh"
 
 
 def test_report_endpoints_create_list_read_delete() -> None:

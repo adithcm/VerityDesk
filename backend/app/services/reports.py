@@ -361,6 +361,7 @@ def list_reports(session: Session, *, limit: int = 25, report_type: str | None =
     statement = select(Report).options(joinedload(Report.citations)).order_by(desc(Report.created_at), desc(Report.id))
     if report_type:
         statement = statement.where(Report.report_type == report_type)
+    statement = statement.where(Report.status != "archived")
 
     reports = session.scalars(statement.limit(limit)).unique().all()
     return ReportListResponse(
@@ -387,6 +388,90 @@ def delete_report(session: Session, report_id: int) -> ReportDeleteResponse:
     session.delete(report)
     session.commit()
     return ReportDeleteResponse(id=report_id, deleted=True)
+
+
+def archive_report(session: Session, report_id: int) -> ReportResponse:
+    report = session.get(Report, report_id)
+    if report is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+
+    report.status = "archived"
+    session.commit()
+    session.refresh(report)
+    return get_report(session, report.id)
+
+
+def regenerate_report(session: Session, report_id: int) -> ReportResponse:
+    report = session.get(Report, report_id)
+    if report is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+
+    metadata = report.report_metadata or {}
+    regions = list(metadata.get("regions") or [])
+    time_window = metadata.get("time_window") or default_time_window(report.report_type)
+    user_query = metadata.get("user_query")
+    title = f"{report.title} Refresh"
+
+    if report.report_type == "daily_briefing":
+        return generate_daily_briefing(
+            session,
+            DailyBriefingRequest(
+                title=title,
+                domains=report.domains,
+                regions=regions,
+                time_window=time_window,
+                user_query=user_query,
+            ),
+        )
+    if report.report_type == "company_research":
+        return generate_company_research(
+            session,
+            CompanyResearchRequest(
+                title=title,
+                ticker=(report.tickers or [None])[0],
+                company=(report.companies or [None])[0],
+                domains=report.domains,
+                regions=regions,
+                time_window=time_window,
+                user_query=user_query,
+            ),
+        )
+    if report.report_type == "market_strategy":
+        return generate_market_strategy(
+            session,
+            MarketStrategyRequest(
+                title=title,
+                domains=report.domains,
+                tickers=report.tickers,
+                regions=regions,
+                time_window=time_window,
+                user_query=user_query,
+            ),
+        )
+    if report.report_type == "housing":
+        return generate_housing_report(
+            session,
+            HousingReportRequest(
+                title=title,
+                domains=report.domains,
+                regions=regions,
+                time_window=time_window,
+                user_query=user_query,
+            ),
+        )
+    if report.report_type == "macro":
+        return generate_macro_report(
+            session,
+            MacroReportRequest(
+                title=title,
+                domains=report.domains,
+                regions=regions,
+                time_window=time_window,
+                user_query=user_query,
+            ),
+        )
+
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Report type cannot be regenerated")
 
 
 def add_report_citations(session: Session, report: Report, citations: list[AgentCitation]) -> None:
@@ -517,6 +602,14 @@ def default_report_title(request: ReportCreateRequest, as_of: datetime) -> str:
     if request.companies:
         return f"{label}: {', '.join(request.companies)} ({date})"
     return f"{label} ({date})"
+
+
+def default_time_window(report_type: str) -> str:
+    if report_type == "daily_briefing":
+        return "week"
+    if report_type in {"housing", "macro"}:
+        return "quarter"
+    return "month"
 
 
 def build_report_shell_body(request: ReportCreateRequest) -> str:

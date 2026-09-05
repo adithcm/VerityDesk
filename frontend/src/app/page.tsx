@@ -23,6 +23,7 @@ const domains = [
 const navigation = [
   "Dashboard",
   "Daily Briefing",
+  "Reports",
   "Sources",
   "Watchlist",
   "Agent Chat",
@@ -222,6 +223,11 @@ type ReportResponse = {
   updated_at: string;
 };
 
+type ReportListResponse = {
+  reports: ReportResponse[];
+  total: number;
+};
+
 const watchlistRows = [
   { symbol: "SPY", focus: "Broad market risk", state: "Monitor" },
   { symbol: "QQQ", focus: "Growth and AI exposure", state: "Monitor" },
@@ -268,6 +274,11 @@ export default function Home() {
   const [macroReport, setMacroReport] = useState<ReportResponse | null>(null);
   const [macroReportLoading, setMacroReportLoading] = useState(false);
   const [macroReportError, setMacroReportError] = useState<string | null>(null);
+  const [reportListData, setReportListData] = useState<ReportListResponse | null>(null);
+  const [reportsLoading, setReportsLoading] = useState(true);
+  const [reportsError, setReportsError] = useState<string | null>(null);
+  const [selectedReport, setSelectedReport] = useState<ReportResponse | null>(null);
+  const [reportActionLoading, setReportActionLoading] = useState<string | null>(null);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -317,6 +328,7 @@ export default function Home() {
     loadSources();
     loadIngestionStatus();
     loadAgentRuns();
+    loadReports();
   }, []);
 
   const primarySources = useMemo(
@@ -337,6 +349,75 @@ export default function Home() {
       setAgentRunsData(null);
     } finally {
       setAgentRunsLoading(false);
+    }
+  }
+
+  async function loadReports(selectedId?: number | null) {
+    setReportsLoading(true);
+    setReportsError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports?limit=50`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Report request failed with status ${response.status}`);
+      }
+      const data = (await response.json()) as ReportListResponse;
+      setReportListData(data);
+      setSelectedReport((current) => {
+        if (selectedId === null) {
+          return data.reports[0] ?? null;
+        }
+        const nextId = selectedId ?? current?.id;
+        return data.reports.find((report) => report.id === nextId) ?? data.reports[0] ?? null;
+      });
+    } catch (error) {
+      setReportsError(error instanceof Error ? error.message : "Could not load reports");
+      setReportListData(null);
+    } finally {
+      setReportsLoading(false);
+    }
+  }
+
+  async function openReport(reportId: number) {
+    setReportActionLoading(`open-${reportId}`);
+    setReportsError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/${reportId}`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Report detail request failed with status ${response.status}`);
+      }
+      setSelectedReport((await response.json()) as ReportResponse);
+    } catch (error) {
+      setReportsError(error instanceof Error ? error.message : "Could not open report");
+    } finally {
+      setReportActionLoading(null);
+    }
+  }
+
+  async function runReportAction(reportId: number, action: "regenerate" | "archive" | "delete") {
+    setReportActionLoading(`${action}-${reportId}`);
+    setReportsError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/reports/${reportId}${action === "delete" ? "" : `/${action}`}`,
+        { method: action === "delete" ? "DELETE" : "POST" },
+      );
+      if (!response.ok) {
+        throw new Error(`Report ${action} failed with status ${response.status}`);
+      }
+      const nextReport = action === "regenerate" ? ((await response.json()) as ReportResponse) : null;
+      if (nextReport) {
+        setSelectedReport(nextReport);
+        await loadReports(nextReport.id);
+      } else {
+        await loadReports(null);
+      }
+    } catch (error) {
+      setReportsError(error instanceof Error ? error.message : `Could not ${action} report`);
+    } finally {
+      setReportActionLoading(null);
     }
   }
 
@@ -414,6 +495,7 @@ export default function Home() {
 
       setDailyBriefingReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
+      await loadReports();
     } catch (error) {
       setDailyBriefingError(error instanceof Error ? error.message : "Could not generate daily briefing");
     } finally {
@@ -443,6 +525,7 @@ export default function Home() {
 
       setCompanyReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
+      await loadReports();
     } catch (error) {
       setCompanyReportError(error instanceof Error ? error.message : "Could not generate company report");
     } finally {
@@ -467,6 +550,7 @@ export default function Home() {
 
       setMarketReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
+      await loadReports();
     } catch (error) {
       setMarketReportError(error instanceof Error ? error.message : "Could not generate market strategy report");
     } finally {
@@ -491,6 +575,7 @@ export default function Home() {
 
       setHousingReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
+      await loadReports();
     } catch (error) {
       setHousingReportError(error instanceof Error ? error.message : "Could not generate housing report");
     } finally {
@@ -515,6 +600,7 @@ export default function Home() {
 
       setMacroReport((await response.json()) as ReportResponse);
       await loadAgentRuns();
+      await loadReports();
     } catch (error) {
       setMacroReportError(error instanceof Error ? error.message : "Could not generate macro report");
     } finally {
@@ -605,6 +691,18 @@ export default function Home() {
                 dailyBriefingLoading={dailyBriefingLoading}
                 dailyBriefingError={dailyBriefingError}
                 generateDailyBriefing={generateDailyBriefing}
+              />
+            )}
+            {activeView === "Reports" && (
+              <ReportsView
+                reportListData={reportListData}
+                reportsLoading={reportsLoading}
+                reportsError={reportsError}
+                selectedReport={selectedReport}
+                reportActionLoading={reportActionLoading}
+                loadReports={loadReports}
+                openReport={openReport}
+                runReportAction={runReportAction}
               />
             )}
             {activeView === "Sources" && (
@@ -1118,6 +1216,191 @@ function DailyBriefingView({
         </div>
         <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
       </section>
+    </div>
+  );
+}
+
+function ReportsView({
+  reportListData,
+  reportsLoading,
+  reportsError,
+  selectedReport,
+  reportActionLoading,
+  loadReports,
+  openReport,
+  runReportAction,
+}: {
+  reportListData: ReportListResponse | null;
+  reportsLoading: boolean;
+  reportsError: string | null;
+  selectedReport: ReportResponse | null;
+  reportActionLoading: string | null;
+  loadReports: (selectedId?: number | null) => Promise<void>;
+  openReport: (reportId: number) => Promise<void>;
+  runReportAction: (reportId: number, action: "regenerate" | "archive" | "delete") => Promise<void>;
+}) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">Saved Reports</h3>
+            <p className="mt-1 text-sm text-[#5b6573]">{reportListData?.total ?? 0} active reports</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadReports()}
+            disabled={reportsLoading}
+            className="min-h-10 rounded-md border border-[#cbd5dc] px-3 py-2 text-sm font-semibold text-[#143642] disabled:cursor-not-allowed disabled:text-[#9aa8b2]"
+          >
+            {reportsLoading ? "Loading" : "Refresh"}
+          </button>
+        </div>
+        <StatusBlock loading={reportsLoading} error={reportsError} />
+        {!reportsLoading && !reportsError && (!reportListData || reportListData.reports.length === 0) && (
+          <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+            No saved reports yet.
+          </div>
+        )}
+        {reportListData && reportListData.reports.length > 0 && (
+          <div className="mt-4 space-y-2">
+            {reportListData.reports.map((report) => (
+              <button
+                key={report.id}
+                type="button"
+                onClick={() => openReport(report.id)}
+                className={`w-full rounded-md border p-3 text-left transition ${
+                  selectedReport?.id === report.id
+                    ? "border-[#25636b] bg-[#eef7f7]"
+                    : "border-[#e5eaf0] hover:border-[#b7c7ce]"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold uppercase text-[#25636b]">
+                    {formatReportType(report.report_type)}
+                  </span>
+                  <StatusBadge status={report.status} />
+                </div>
+                <p className="mt-2 text-sm font-semibold">{report.title}</p>
+                <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(report.as_of)}</p>
+                <p className="mt-2 line-clamp-2 text-sm text-[#5b6573]">{report.summary ?? report.body}</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        {!selectedReport ? (
+          <div className="rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+            Select a report to review details and citations.
+          </div>
+        ) : (
+          <ReportDetailPanel
+            report={selectedReport}
+            reportActionLoading={reportActionLoading}
+            runReportAction={runReportAction}
+          />
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ReportDetailPanel({
+  report,
+  reportActionLoading,
+  runReportAction,
+}: {
+  report: ReportResponse;
+  reportActionLoading: string | null;
+  runReportAction: (reportId: number, action: "regenerate" | "archive" | "delete") => Promise<void>;
+}) {
+  const isBusy = reportActionLoading?.endsWith(`-${report.id}`) ?? false;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-sm font-semibold uppercase text-[#25636b]">{formatReportType(report.report_type)}</p>
+          <h3 className="mt-1 text-xl font-semibold">{report.title}</h3>
+          <p className="mt-2 text-sm text-[#5b6573]">{report.summary}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => runReportAction(report.id, "regenerate")}
+            disabled={isBusy}
+            className="min-h-10 rounded-md bg-[#143642] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
+          >
+            {reportActionLoading === `regenerate-${report.id}` ? "Regenerating" : "Regenerate"}
+          </button>
+          <button
+            type="button"
+            onClick={() => runReportAction(report.id, "archive")}
+            disabled={isBusy}
+            className="min-h-10 rounded-md border border-[#cbd5dc] px-3 py-2 text-sm font-semibold text-[#143642] disabled:cursor-not-allowed disabled:text-[#9aa8b2]"
+          >
+            {reportActionLoading === `archive-${report.id}` ? "Archiving" : "Archive"}
+          </button>
+          <button
+            type="button"
+            onClick={() => runReportAction(report.id, "delete")}
+            disabled={isBusy}
+            className="min-h-10 rounded-md border border-[#f0b8b1] px-3 py-2 text-sm font-semibold text-[#b42318] disabled:cursor-not-allowed disabled:text-[#9aa8b2]"
+          >
+            {reportActionLoading === `delete-${report.id}` ? "Deleting" : "Delete"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <SettingRow label="Status" value={report.status} />
+        <SettingRow label="Confidence" value={report.confidence} />
+        <SettingRow label="Guardrail" value={report.guardrail_status} />
+        <SettingRow label="Sources" value={String(report.citations.length)} />
+        <SettingRow label="Generated At" value={formatDateTime(report.as_of)} />
+        <SettingRow label="Created At" value={formatDateTime(report.created_at)} />
+        <SettingRow label="Updated At" value={formatDateTime(report.updated_at)} />
+        <SettingRow label="Disclaimer" value={report.disclaimer_version} />
+      </div>
+
+      {(report.domains.length > 0 || report.tickers.length > 0 || report.companies.length > 0) && (
+        <div className="grid gap-3 md:grid-cols-3">
+          <InlineList title="Domains" values={report.domains} />
+          <InlineList title="Tickers" values={report.tickers} />
+          <InlineList title="Companies" values={report.companies} />
+        </div>
+      )}
+
+      <div>
+        <p className="text-sm font-semibold">Report</p>
+        <p className="mt-2 max-h-[520px] overflow-auto whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-4 text-sm leading-6 text-[#374151]">
+          {report.body}
+        </p>
+      </div>
+
+      <ReportMetadataPanel metadata={report.metadata} />
+      <CitationList citations={report.citations} />
+    </div>
+  );
+}
+
+function ReportMetadataPanel({ metadata }: { metadata: Record<string, unknown> }) {
+  const rows = Object.entries(metadata).filter(([, value]) => value !== null && value !== undefined && value !== "");
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div>
+      <p className="text-sm font-semibold">Report Context</p>
+      <div className="mt-2 grid gap-2 md:grid-cols-2">
+        {rows.slice(0, 10).map(([key, value]) => (
+          <SettingRow key={key} label={formatMetadataKey(key)} value={formatMetadataValue(value)} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -1828,6 +2111,33 @@ function formatRunMode(mode: RunMode | undefined) {
   }
 
   return "All sources";
+}
+
+function formatReportType(reportType: string) {
+  return reportType
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function formatMetadataKey(key: string) {
+  return key
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function formatMetadataValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.map(String).join(", ") : "--";
+  }
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+  if (typeof value === "object" && value !== null) {
+    return JSON.stringify(value);
+  }
+  return value === null || value === undefined || value === "" ? "--" : String(value);
 }
 
 function observationSummary(item: LatestIngestedItem) {

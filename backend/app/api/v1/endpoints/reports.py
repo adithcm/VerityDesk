@@ -15,6 +15,7 @@ from app.schemas.report import (
     ReportType,
 )
 from app.services.reports import (
+    archive_report,
     create_report,
     delete_report,
     generate_company_research,
@@ -24,6 +25,7 @@ from app.services.reports import (
     generate_market_strategy,
     get_report,
     list_reports,
+    regenerate_report,
 )
 
 
@@ -90,6 +92,16 @@ def read_reports(
 @router.get("/{report_id}", response_model=ReportResponse)
 def read_report(report_id: int, db: Session = Depends(get_db)) -> ReportResponse:
     return get_report(db, report_id)
+
+
+@router.post("/{report_id}/archive", response_model=ReportResponse)
+def archive_research_report(report_id: int, db: Session = Depends(get_db)) -> ReportResponse:
+    return archive_report(db, report_id)
+
+
+@router.post("/{report_id}/regenerate", response_model=ReportResponse, status_code=201)
+def regenerate_research_report(report_id: int, db: Session = Depends(get_db)) -> ReportResponse:
+    return regenerate_report(db, report_id)
 
 
 @router.delete("/{report_id}", response_model=ReportDeleteResponse)
