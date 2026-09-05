@@ -234,8 +234,9 @@ def format_evidence(
         date = observation.released_at or observation.retrieved_at or "unknown date"
         unit = f" {observation.unit}" if observation.unit else ""
         lines.append(
-            f"- Economic observation: {observation.series_name} {observation.period} = "
-            f"{observation.value}{unit} ({observation.source_name}, {date})"
+            f"- Economic observation: {observation.display_name} ({observation.series_id}) "
+            f"{observation.period} = {observation.value}{unit} ({observation.source_name}, {date}) - "
+            f"{observation.description}"
         )
 
     return "\n".join(lines)

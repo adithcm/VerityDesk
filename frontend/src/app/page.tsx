@@ -110,6 +110,7 @@ type LatestIngestedItem = {
   item_type: "article" | "economic_observation";
   source_key: string;
   source_name: string | null;
+  series_id: string | null;
   title: string;
   url: string | null;
   published_at: string | null;
@@ -201,6 +202,26 @@ type AgentRunHistoryResponse = {
   total: number;
 };
 
+type ReportResponse = {
+  id: number;
+  report_type: string;
+  status: string;
+  title: string;
+  summary: string | null;
+  body: string;
+  domains: string[];
+  tickers: string[];
+  companies: string[];
+  as_of: string | null;
+  confidence: "low" | "medium" | "high";
+  disclaimer_version: string;
+  guardrail_status: "passed" | "needs_revision" | "blocked";
+  metadata: Record<string, unknown>;
+  citations: AgentResponse["citations"];
+  created_at: string;
+  updated_at: string;
+};
+
 const watchlistRows = [
   { symbol: "SPY", focus: "Broad market risk", state: "Monitor" },
   { symbol: "QQQ", focus: "Growth and AI exposure", state: "Monitor" },
@@ -230,6 +251,17 @@ export default function Home() {
   const [agentResponse, setAgentResponse] = useState<AgentResponse | null>(null);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [agentLoading, setAgentLoading] = useState(false);
+  const [dailyBriefingReport, setDailyBriefingReport] = useState<ReportResponse | null>(null);
+  const [dailyBriefingLoading, setDailyBriefingLoading] = useState(false);
+  const [dailyBriefingError, setDailyBriefingError] = useState<string | null>(null);
+  const [companyTicker, setCompanyTicker] = useState("AAPL");
+  const [companyName, setCompanyName] = useState("Apple");
+  const [companyReport, setCompanyReport] = useState<ReportResponse | null>(null);
+  const [companyReportLoading, setCompanyReportLoading] = useState(false);
+  const [companyReportError, setCompanyReportError] = useState<string | null>(null);
+  const [marketReport, setMarketReport] = useState<ReportResponse | null>(null);
+  const [marketReportLoading, setMarketReportLoading] = useState(false);
+  const [marketReportError, setMarketReportError] = useState<string | null>(null);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -359,6 +391,83 @@ export default function Home() {
     }
   }
 
+  async function generateDailyBriefing() {
+    setDailyBriefingLoading(true);
+    setDailyBriefingError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/daily-briefing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ time_window: "week" }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Daily briefing request failed with status ${response.status}`);
+      }
+
+      setDailyBriefingReport((await response.json()) as ReportResponse);
+      await loadAgentRuns();
+    } catch (error) {
+      setDailyBriefingError(error instanceof Error ? error.message : "Could not generate daily briefing");
+    } finally {
+      setDailyBriefingLoading(false);
+    }
+  }
+
+  async function generateCompanyReport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCompanyReportLoading(true);
+    setCompanyReportError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/company-research`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticker: companyTicker.trim() || null,
+          company: companyName.trim() || null,
+          time_window: "month",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Company report request failed with status ${response.status}`);
+      }
+
+      setCompanyReport((await response.json()) as ReportResponse);
+      await loadAgentRuns();
+    } catch (error) {
+      setCompanyReportError(error instanceof Error ? error.message : "Could not generate company report");
+    } finally {
+      setCompanyReportLoading(false);
+    }
+  }
+
+  async function generateMarketStrategy() {
+    setMarketReportLoading(true);
+    setMarketReportError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/market-strategy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers: ["SPY", "QQQ", "TLT"], time_window: "month" }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Market strategy request failed with status ${response.status}`);
+      }
+
+      setMarketReport((await response.json()) as ReportResponse);
+      await loadAgentRuns();
+    } catch (error) {
+      setMarketReportError(error instanceof Error ? error.message : "Could not generate market strategy report");
+    } finally {
+      setMarketReportLoading(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f5f7f8] text-[#111827]">
       <div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
@@ -369,7 +478,7 @@ export default function Home() {
               <h1 className="mt-1 text-xl font-semibold">Market Workspace</h1>
             </div>
             <div className="rounded-md border border-[#d7dee3] px-2 py-1 text-xs font-medium text-[#4b5563]">
-              Phase 4.6
+              Phase 5.5
             </div>
           </div>
 
@@ -420,10 +529,21 @@ export default function Home() {
                 lastRunResponse={lastRunResponse}
                 setRunMode={setRunMode}
                 triggerIngestionRun={triggerIngestionRun}
+                marketReport={marketReport}
+                marketReportLoading={marketReportLoading}
+                marketReportError={marketReportError}
+                generateMarketStrategy={generateMarketStrategy}
               />
             )}
             {activeView === "Daily Briefing" && (
-              <DailyBriefingView latestItemsData={latestItemsData} ingestionLoading={ingestionLoading} />
+              <DailyBriefingView
+                latestItemsData={latestItemsData}
+                ingestionLoading={ingestionLoading}
+                dailyBriefingReport={dailyBriefingReport}
+                dailyBriefingLoading={dailyBriefingLoading}
+                dailyBriefingError={dailyBriefingError}
+                generateDailyBriefing={generateDailyBriefing}
+              />
             )}
             {activeView === "Sources" && (
               <SourcesView
@@ -435,7 +555,18 @@ export default function Home() {
                 ingestionLoading={ingestionLoading}
               />
             )}
-            {activeView === "Watchlist" && <WatchlistView />}
+            {activeView === "Watchlist" && (
+              <WatchlistView
+                companyTicker={companyTicker}
+                companyName={companyName}
+                companyReport={companyReport}
+                companyReportLoading={companyReportLoading}
+                companyReportError={companyReportError}
+                setCompanyTicker={setCompanyTicker}
+                setCompanyName={setCompanyName}
+                generateCompanyReport={generateCompanyReport}
+              />
+            )}
             {activeView === "Agent Chat" && (
               <AgentChatView
                 agentQuery={agentQuery}
@@ -508,6 +639,10 @@ function DashboardView({
   lastRunResponse,
   setRunMode,
   triggerIngestionRun,
+  marketReport,
+  marketReportLoading,
+  marketReportError,
+  generateMarketStrategy,
 }: {
   sourceData: SourceCatalogResponse | null;
   sourceError: string | null;
@@ -524,6 +659,10 @@ function DashboardView({
   lastRunResponse: IngestionRunResponse | null;
   setRunMode: (mode: RunMode) => void;
   triggerIngestionRun: () => void;
+  marketReport: ReportResponse | null;
+  marketReportLoading: boolean;
+  marketReportError: string | null;
+  generateMarketStrategy: () => void;
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
@@ -569,6 +708,13 @@ function DashboardView({
 
       <SchedulerStatusCard scheduleData={scheduleData} runsData={runsData} loading={ingestionLoading} />
 
+      <MarketStrategyCard
+        marketReport={marketReport}
+        marketReportLoading={marketReportLoading}
+        marketReportError={marketReportError}
+        generateMarketStrategy={generateMarketStrategy}
+      />
+
       <section className="rounded-md border border-[#d7dee3] bg-white p-4 xl:col-span-2">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold">Latest Items</h3>
@@ -582,6 +728,59 @@ function DashboardView({
         <RecentRunsTable runsData={runsData} loading={ingestionLoading} />
       </section>
     </div>
+  );
+}
+
+function MarketStrategyCard({
+  marketReport,
+  marketReportLoading,
+  marketReportError,
+  generateMarketStrategy,
+}: {
+  marketReport: ReportResponse | null;
+  marketReportLoading: boolean;
+  marketReportError: string | null;
+  generateMarketStrategy: () => void;
+}) {
+  return (
+    <section className="rounded-md border border-[#d7dee3] bg-white p-4 xl:col-span-2">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Market Strategy</h3>
+          <p className="mt-1 text-sm text-[#5b6573]">
+            Generate a scenario-based market research note for broad watchlist context.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={generateMarketStrategy}
+          disabled={marketReportLoading}
+          className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
+        >
+          {marketReportLoading ? "Generating" : "Generate Market Strategy"}
+        </button>
+      </div>
+      {marketReportError && (
+        <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{marketReportError}</p>
+      )}
+      {marketReport && (
+        <div className="mt-4 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <SettingRow label="Status" value={marketReport.status} />
+            <SettingRow label="Confidence" value={marketReport.confidence} />
+            <SettingRow label="Sources" value={String(marketReport.citations.length)} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold">{marketReport.title}</p>
+            <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(marketReport.as_of)}</p>
+            <p className="mt-3 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
+              {marketReport.body}
+            </p>
+          </div>
+          <CitationList citations={marketReport.citations} />
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -653,18 +852,70 @@ function SchedulerStatusCard({
 function DailyBriefingView({
   latestItemsData,
   ingestionLoading,
+  dailyBriefingReport,
+  dailyBriefingLoading,
+  dailyBriefingError,
+  generateDailyBriefing,
 }: {
   latestItemsData: LatestItemsResponse | null;
   ingestionLoading: boolean;
+  dailyBriefingReport: ReportResponse | null;
+  dailyBriefingLoading: boolean;
+  dailyBriefingError: string | null;
+  generateDailyBriefing: () => void;
 }) {
   return (
-    <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <h3 className="text-lg font-semibold">Daily Briefing Inputs</h3>
-        <span className="text-sm text-[#5b6573]">Latest ingested source material</span>
-      </div>
-      <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
-    </section>
+    <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Daily Briefing</h3>
+            <p className="mt-1 text-sm text-[#5b6573]">Generate a saved briefing from current ingested evidence.</p>
+          </div>
+          <button
+            type="button"
+            onClick={generateDailyBriefing}
+            disabled={dailyBriefingLoading}
+            className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
+          >
+            {dailyBriefingLoading ? "Generating" : "Generate Daily Briefing"}
+          </button>
+        </div>
+        {dailyBriefingError && (
+          <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{dailyBriefingError}</p>
+        )}
+        {!dailyBriefingReport && !dailyBriefingError && (
+          <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+            No briefing generated in this session yet.
+          </div>
+        )}
+        {dailyBriefingReport && (
+          <div className="mt-4 space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SettingRow label="Status" value={dailyBriefingReport.status} />
+              <SettingRow label="Confidence" value={dailyBriefingReport.confidence} />
+              <SettingRow label="Sources" value={String(dailyBriefingReport.citations.length)} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">{dailyBriefingReport.title}</p>
+              <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(dailyBriefingReport.as_of)}</p>
+              <p className="mt-3 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
+                {dailyBriefingReport.body}
+              </p>
+            </div>
+            <CitationList citations={dailyBriefingReport.citations} />
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <h3 className="text-lg font-semibold">Briefing Inputs</h3>
+          <span className="text-sm text-[#5b6573]">Latest ingested source material</span>
+        </div>
+        <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
+      </section>
+    </div>
   );
 }
 
@@ -735,24 +986,108 @@ function SourcesView({
   );
 }
 
-function WatchlistView() {
+function WatchlistView({
+  companyTicker,
+  companyName,
+  companyReport,
+  companyReportLoading,
+  companyReportError,
+  setCompanyTicker,
+  setCompanyName,
+  generateCompanyReport,
+}: {
+  companyTicker: string;
+  companyName: string;
+  companyReport: ReportResponse | null;
+  companyReportLoading: boolean;
+  companyReportError: string | null;
+  setCompanyTicker: (value: string) => void;
+  setCompanyName: (value: string) => void;
+  generateCompanyReport: (event: FormEvent<HTMLFormElement>) => void;
+}) {
   return (
-    <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-      <h3 className="text-lg font-semibold">Watchlist</h3>
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        {watchlistRows.map((row) => (
-          <div key={row.symbol} className="rounded-md border border-[#e5eaf0] p-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-lg font-semibold">{row.symbol}</p>
-              <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-medium text-[#25636b]">
-                {row.state}
-              </span>
+    <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <h3 className="text-lg font-semibold">Watchlist</h3>
+        <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-1">
+          {watchlistRows.map((row) => (
+            <div key={row.symbol} className="rounded-md border border-[#e5eaf0] p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-lg font-semibold">{row.symbol}</p>
+                <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-medium text-[#25636b]">
+                  {row.state}
+                </span>
+              </div>
+              <p className="mt-3 text-sm text-[#5b6573]">{row.focus}</p>
             </div>
-            <p className="mt-3 text-sm text-[#5b6573]">{row.focus}</p>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <form onSubmit={generateCompanyReport}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Company Research</h3>
+              <p className="mt-1 text-sm text-[#5b6573]">Generate a saved company report from filings, news, and market context.</p>
+            </div>
+            <button
+              type="submit"
+              disabled={companyReportLoading || (!companyTicker.trim() && !companyName.trim())}
+              className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
+            >
+              {companyReportLoading ? "Generating" : "Generate Company Report"}
+            </button>
           </div>
-        ))}
-      </div>
-    </section>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm font-medium" htmlFor="company-ticker">
+              Ticker
+              <input
+                id="company-ticker"
+                value={companyTicker}
+                onChange={(event) => setCompanyTicker(event.target.value.toUpperCase())}
+                className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+              />
+            </label>
+            <label className="block text-sm font-medium" htmlFor="company-name">
+              Company
+              <input
+                id="company-name"
+                value={companyName}
+                onChange={(event) => setCompanyName(event.target.value)}
+                className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+              />
+            </label>
+          </div>
+        </form>
+
+        {companyReportError && (
+          <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{companyReportError}</p>
+        )}
+        {!companyReport && !companyReportError && (
+          <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+            No company report generated in this session yet.
+          </div>
+        )}
+        {companyReport && (
+          <div className="mt-4 space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SettingRow label="Status" value={companyReport.status} />
+              <SettingRow label="Confidence" value={companyReport.confidence} />
+              <SettingRow label="Sources" value={String(companyReport.citations.length)} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">{companyReport.title}</p>
+              <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(companyReport.as_of)}</p>
+              <p className="mt-3 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
+                {companyReport.body}
+              </p>
+            </div>
+            <CitationList citations={companyReport.citations} />
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -1089,11 +1424,18 @@ function LatestItemsList({
               <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-medium text-[#25636b]">
                 {item.item_type === "article" ? "Article" : "Observation"}
               </span>
+              {item.series_id && (
+                <span className="rounded-md border border-[#d7dee3] px-2 py-1 text-xs font-medium text-[#5b6573]">
+                  {item.series_id}
+                </span>
+              )}
             </div>
             <p className="mt-1 text-sm text-[#5b6573]">{item.summary ?? observationSummary(item)}</p>
           </div>
           <p className="text-sm text-[#374151]">{item.source_name ?? item.source_key}</p>
           <div>
+            <p className="text-xs font-semibold uppercase text-[#5b6573]">{item.item_type === "article" ? "Published At" : "Released At"}</p>
+            <p className="mt-1 text-sm text-[#5b6573]">{formatDateTime(item.published_at)}</p>
             <p className="text-xs font-semibold uppercase text-[#5b6573]">Retrieved At</p>
             <p className="mt-1 text-sm text-[#5b6573]">{formatDateTime(item.retrieved_at)}</p>
           </div>

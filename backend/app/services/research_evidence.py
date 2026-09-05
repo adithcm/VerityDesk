@@ -7,6 +7,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Article, EconomicObservation, IngestionRun, SourceHealth
+from app.services.economic_series import economic_series_info
 from app.services.ingestion_status import build_source_health_item
 from app.services.source_catalog import load_source_catalog
 
@@ -49,6 +50,8 @@ class EconomicObservationEvidence:
     source_name: str | None
     series_id: str
     series_name: str
+    display_name: str
+    description: str
     value: float
     unit: str | None
     period: str
@@ -135,7 +138,8 @@ class ResearchEvidenceRepository:
             for observation in observations
             if self.observation_matches(observation, query)
         ]
-        return sorted(filtered, key=lambda item: item.relevance_score, reverse=True)[: query.limit]
+        grouped = group_latest_observation_evidence(filtered)
+        return sorted(grouped, key=lambda item: item.relevance_score, reverse=True)[: query.limit]
 
     def source_health(self, source_ids: list[str] | None = None) -> list[SourceHealthEvidence]:
         selected_source_ids = normalize_values(source_ids or [])
@@ -226,6 +230,7 @@ class ResearchEvidenceRepository:
     ) -> EconomicObservationEvidence:
         source_id = self.source_id_for_observation(observation)
         source_name = observation.source.name if observation.source else None
+        series_info = economic_series_info(observation.series_id, observation.series_name)
         relevance_score = score_observation(observation, query)
         return EconomicObservationEvidence(
             id=observation.id,
@@ -233,8 +238,10 @@ class ResearchEvidenceRepository:
             source_name=source_name,
             series_id=observation.series_id,
             series_name=observation.series_name,
+            display_name=series_info.label,
+            description=series_info.description,
             value=observation.value,
-            unit=observation.unit,
+            unit=observation.unit or series_info.unit,
             period=observation.period,
             released_at=format_datetime(observation.released_at),
             retrieved_at=format_datetime(observation.retrieved_at),
@@ -242,7 +249,7 @@ class ResearchEvidenceRepository:
             citation=EvidenceCitation(
                 source_id=source_id,
                 source_name=source_name,
-                title=observation.series_name,
+                title=series_info.label,
                 url=None,
                 published_at=format_datetime(observation.released_at),
                 retrieved_at=format_datetime(observation.retrieved_at),
@@ -327,6 +334,23 @@ def score_observation(observation: EconomicObservation, query: EvidenceQuery) ->
     score += 5 * overlap_count([observation.series_id], query.series_ids)
     score += 2 * overlap_count([observation.region] if observation.region else [], query.regions)
     return score
+
+
+def group_latest_observation_evidence(
+    observations: list[EconomicObservationEvidence],
+) -> list[EconomicObservationEvidence]:
+    grouped: dict[tuple[str, str | None], EconomicObservationEvidence] = {}
+    for observation in observations:
+        key = (observation.series_id, observation.region)
+        existing = grouped.get(key)
+        if existing is None or observation_sort_key(observation) > observation_sort_key(existing):
+            grouped[key] = observation
+
+    return list(grouped.values())
+
+
+def observation_sort_key(observation: EconomicObservationEvidence) -> tuple[str, str]:
+    return (observation.released_at or "", observation.retrieved_at or "")
 
 
 def overlap_count(values: list[str], filters: list[str]) -> int:

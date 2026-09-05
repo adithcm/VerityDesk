@@ -164,8 +164,9 @@ def test_list_latest_items_combines_articles_and_observations() -> None:
                 EconomicObservation(
                     source=source,
                     series_id="FEDFUNDS",
-                    series_name="Federal Funds Rate",
+                    series_name="FEDFUNDS",
                     value=4.5,
+                    unit="percent",
                     period="2026-08-01",
                     retrieved_at=now + timedelta(minutes=1),
                 ),
@@ -178,9 +179,51 @@ def test_list_latest_items_combines_articles_and_observations() -> None:
     assert response.total == 2
     assert response.items[0].item_type == "economic_observation"
     assert response.items[0].title == "Federal Funds Rate"
+    assert response.items[0].series_id == "FEDFUNDS"
+    assert "Effective federal funds rate" in response.items[0].summary
     assert response.items[0].value == 4.5
     assert response.items[1].item_type == "article"
     assert response.items[1].url == "https://example.test/markets"
+
+
+def test_list_latest_items_groups_observations_by_series_and_region() -> None:
+    now = datetime(2026, 9, 3, 8, 0, tzinfo=UTC)
+
+    with build_session() as session:
+        source = add_source(session)
+        session.add_all(
+            [
+                EconomicObservation(
+                    source=source,
+                    series_id="UNRATE",
+                    series_name="UNRATE",
+                    value=4.2,
+                    unit="percent",
+                    period="2026-07-01",
+                    retrieved_at=now,
+                    released_at=now - timedelta(days=30),
+                    region="US",
+                ),
+                EconomicObservation(
+                    source=source,
+                    series_id="UNRATE",
+                    series_name="UNRATE",
+                    value=4.3,
+                    unit="percent",
+                    period="2026-08-01",
+                    retrieved_at=now + timedelta(minutes=1),
+                    released_at=now - timedelta(days=1),
+                    region="US",
+                ),
+            ]
+        )
+        session.commit()
+
+        response = list_latest_items(session, limit=10)
+
+    assert response.total == 1
+    assert response.items[0].title == "Unemployment Rate"
+    assert response.items[0].period == "2026-08-01"
 
 
 def test_ingestion_health_endpoint_returns_service_response(monkeypatch) -> None:

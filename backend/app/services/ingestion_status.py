@@ -12,6 +12,7 @@ from app.schemas.ingestion import (
     SourceHealthItem,
     SourceHealthResponse,
 )
+from app.services.economic_series import economic_series_info
 from app.services.source_catalog import load_source_catalog
 
 
@@ -93,23 +94,36 @@ def list_latest_items(session: Session, *, limit: int = 25) -> LatestItemsRespon
         .order_by(desc(Article.retrieved_at), desc(Article.id))
         .limit(limit)
     ).all()
-    observations = session.scalars(
-        select(EconomicObservation)
-        .options(joinedload(EconomicObservation.source))
-        .order_by(desc(EconomicObservation.retrieved_at), desc(EconomicObservation.id))
-        .limit(limit)
-    ).all()
 
-    items = [
-        article_to_latest_item(article, source_key_by_name)
-        for article in articles
-    ] + [
-        observation_to_latest_item(observation, source_key_by_name)
-        for observation in observations
+    observations = grouped_latest_observations(
+        session.scalars(
+            select(EconomicObservation)
+            .options(joinedload(EconomicObservation.source))
+            .order_by(
+                desc(EconomicObservation.retrieved_at),
+                desc(EconomicObservation.released_at),
+                desc(EconomicObservation.id),
+            )
+            .limit(max(limit * 5, limit))
+        ).all()
+    )
+
+    items = [article_to_latest_item(article, source_key_by_name) for article in articles] + [
+        observation_to_latest_item(observation, source_key_by_name) for observation in observations
     ]
     items.sort(key=lambda item: item.retrieved_at or "", reverse=True)
 
     return LatestItemsResponse(items=items[:limit], total=min(len(items), limit))
+
+
+def grouped_latest_observations(observations: list[EconomicObservation]) -> list[EconomicObservation]:
+    latest_by_series_region: dict[tuple[str, str | None], EconomicObservation] = {}
+    for observation in observations:
+        key = (observation.series_id, observation.region)
+        if key not in latest_by_series_region:
+            latest_by_series_region[key] = observation
+
+    return list(latest_by_series_region.values())
 
 
 def build_source_health_item(
@@ -180,17 +194,27 @@ def observation_to_latest_item(
     source_key_by_name: dict[str, str],
 ) -> LatestIngestedItem:
     source_name = observation.source.name if observation.source else None
+    series_info = economic_series_info(observation.series_id, observation.series_name)
+    unit = observation.unit or series_info.unit
     return LatestIngestedItem(
         item_type="economic_observation",
         source_key=source_key_for_name(source_name, source_key_by_name),
         source_name=source_name,
-        title=observation.series_name,
+        series_id=observation.series_id,
+        title=series_info.label,
         published_at=format_datetime(observation.released_at),
         retrieved_at=format_datetime(observation.retrieved_at),
+        summary=build_observation_summary(observation, series_info.description, unit),
         value=observation.value,
-        unit=observation.unit,
+        unit=unit,
         period=observation.period,
     )
+
+
+def build_observation_summary(observation: EconomicObservation, description: str, unit: str | None) -> str:
+    unit_label = f" {unit}" if unit else ""
+    region = f" for {observation.region}" if observation.region else ""
+    return f"{description} Latest value{region}: {observation.value}{unit_label} for {observation.period}."
 
 
 def source_key_for_name(source_name: str | None, source_key_by_name: dict[str, str]) -> str:

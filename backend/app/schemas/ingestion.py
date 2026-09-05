@@ -90,6 +90,7 @@ class LatestIngestedItem(BaseModel):
     item_type: Literal["article", "economic_observation"]
     source_key: str
     source_name: str | None = None
+    series_id: str | None = None
     title: str
     url: str | None = None
     published_at: str | None = None

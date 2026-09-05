@@ -191,6 +191,7 @@ class Report(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     report_type: Mapped[str] = mapped_column(String(80), index=True)
+    status: Mapped[str] = mapped_column(String(80), default="draft", index=True)
     title: Mapped[str] = mapped_column(String(255), index=True)
     summary: Mapped[str | None] = mapped_column(Text)
     body: Mapped[str] = mapped_column(Text)
@@ -198,10 +199,12 @@ class Report(TimestampMixin, Base):
     tickers: Mapped[list[str]] = mapped_column(JSON, default=list)
     companies: Mapped[list[str]] = mapped_column(JSON, default=list)
     as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    confidence: Mapped[str] = mapped_column(String(40), default="low")
     disclaimer_version: Mapped[str] = mapped_column(String(40), default="v1")
     guardrail_status: Mapped[str] = mapped_column(String(80), default="pending")
+    report_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
 
-    citations: Mapped[list["Citation"]] = relationship(back_populates="report")
+    citations: Mapped[list["Citation"]] = relationship(back_populates="report", cascade="all, delete-orphan")
 
 
 class Citation(TimestampMixin, Base):
