@@ -58,6 +58,8 @@ Status: Complete
 
 ### 6.2 Personalization Profile
 
+Status: Complete
+
 - Add editable preferences for:
   - default location/region
   - watchlist tickers

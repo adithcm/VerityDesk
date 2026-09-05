@@ -260,6 +260,50 @@ type ProactiveSuggestionsResponse = {
   generated_at: string;
 };
 
+type PersonalizationProfile = {
+  location: string;
+  watchlist: string;
+  companies: string;
+  priorityTopics: string[];
+  housingInterests: string[];
+  macroInterests: string[];
+  ignoredTopics: string;
+  briefingStyle: "quick" | "balanced" | "detailed";
+  briefingTime: string;
+};
+
+const PERSONALIZATION_STORAGE_KEY = "investoragent.personalization.v1";
+
+const topicOptions = [
+  "World news",
+  "U.S. economy",
+  "Markets",
+  "Company news",
+  "Housing",
+  "Mortgage rates",
+  "AI and technology",
+  "Energy",
+  "Banks and credit",
+  "Consumer trends",
+];
+
+const housingInterestOptions = [
+  "Mortgage rates",
+  "Affordability",
+  "Inventory",
+  "Rent trends",
+  "Regional housing",
+];
+
+const macroInterestOptions = [
+  "Inflation",
+  "Interest rates",
+  "Jobs",
+  "Consumer spending",
+  "Credit conditions",
+  "Fed policy",
+];
+
 const watchlistRows = [
   { symbol: "SPY", focus: "Broad market risk", state: "Monitor" },
   { symbol: "QQQ", focus: "Growth and AI exposure", state: "Monitor" },
@@ -316,6 +360,8 @@ export default function Home() {
   const [suggestionsData, setSuggestionsData] = useState<ProactiveSuggestionsResponse | null>(null);
   const [suggestionsLoading, setSuggestionsLoading] = useState(true);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [personalizationProfile, setPersonalizationProfile] = useState<PersonalizationProfile>(defaultPersonalizationProfile());
+  const [profileSavedAt, setProfileSavedAt] = useState<string | null>(null);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -368,6 +414,31 @@ export default function Home() {
     loadReports();
     loadSuggestions();
   }, []);
+
+  useEffect(() => {
+    const savedProfile = loadPersonalizationProfile();
+    setPersonalizationProfile(savedProfile);
+    setAgentTicker(savedProfile.watchlist);
+    if (savedProfile.companies.trim()) {
+      setCompanyName(firstListItem(savedProfile.companies));
+    }
+    if (savedProfile.watchlist.trim()) {
+      setCompanyTicker(firstListItem(savedProfile.watchlist).toUpperCase());
+    }
+  }, []);
+
+  function savePersonalizationProfile(nextProfile: PersonalizationProfile) {
+    setPersonalizationProfile(nextProfile);
+    localStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(nextProfile));
+    setProfileSavedAt(new Date().toISOString());
+    if (nextProfile.watchlist.trim()) {
+      setAgentTicker(nextProfile.watchlist);
+      setCompanyTicker(firstListItem(nextProfile.watchlist).toUpperCase());
+    }
+    if (nextProfile.companies.trim()) {
+      setCompanyName(firstListItem(nextProfile.companies));
+    }
+  }
 
   async function loadAgentRuns() {
     setAgentRunsLoading(true);
@@ -781,6 +852,7 @@ export default function Home() {
                 applySuggestion={applySuggestion}
                 setActiveView={setActiveView}
                 setAgentQuery={setAgentQuery}
+                personalizationProfile={personalizationProfile}
               />
             )}
             {activeView === "Daily Briefing" && (
@@ -859,7 +931,10 @@ export default function Home() {
                 scheduleData={scheduleData}
                 scheduleSaving={scheduleSaving}
                 scheduleError={scheduleError}
+                personalizationProfile={personalizationProfile}
+                profileSavedAt={profileSavedAt}
                 saveSchedule={saveSchedule}
+                savePersonalizationProfile={savePersonalizationProfile}
               />
             )}
           </div>
@@ -914,6 +989,7 @@ function DashboardView({
   applySuggestion,
   setActiveView,
   setAgentQuery,
+  personalizationProfile,
 }: {
   healthData: SourceHealthResponse | null;
   scheduleData: DailyScheduleConfig | null;
@@ -929,10 +1005,12 @@ function DashboardView({
   applySuggestion: (suggestion: ProactiveSuggestion) => void;
   setActiveView: (view: View) => void;
   setAgentQuery: (value: string) => void;
+  personalizationProfile: PersonalizationProfile;
 }) {
   const latestReport = reportListData?.reports[0] ?? null;
   const dailyReport = reportListData?.reports.find((report) => report.report_type === "daily_briefing") ?? latestReport;
   const sourceStatusText = summarizeSourceStatus(healthData, ingestionLoading, ingestionError);
+  const personalizedQuestions = buildPersonalizedQuestions(personalizationProfile);
 
   function askQuestion(question?: string) {
     if (question) {
@@ -982,13 +1060,15 @@ function DashboardView({
               <QuietStatusRow label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
               <QuietStatusRow label="Next run" value={formatDateTime(scheduleData?.next_run_at)} />
               <QuietStatusRow label="Last run" value={formatDateTime(scheduleData?.last_run_at)} />
+              <QuietStatusRow label="Location" value={personalizationProfile.location || "Not set"} />
+              <QuietStatusRow label="Watchlist" value={compactListLabel(splitList(personalizationProfile.watchlist))} />
             </div>
             <button
               type="button"
-              onClick={() => setActiveView("Sources")}
+              onClick={() => setActiveView("Settings")}
               className="mt-4 text-sm font-semibold text-[#25636b]"
             >
-              Source details
+              Edit personalization
             </button>
           </div>
         </div>
@@ -1040,11 +1120,7 @@ function DashboardView({
             </div>
           </div>
           <div className="mt-4 grid gap-2">
-            {[
-              "What matters for my watchlist today?",
-              "What should I watch in markets this morning?",
-              "How are rates affecting housing right now?",
-            ].map((question) => (
+            {personalizedQuestions.map((question) => (
               <button
                 key={question}
                 type="button"
@@ -2156,31 +2232,177 @@ function SettingsView({
   scheduleData,
   scheduleSaving,
   scheduleError,
+  personalizationProfile,
+  profileSavedAt,
   saveSchedule,
+  savePersonalizationProfile,
 }: {
   healthData: SourceHealthResponse | null;
   scheduleData: DailyScheduleConfig | null;
   scheduleSaving: boolean;
   scheduleError: string | null;
+  personalizationProfile: PersonalizationProfile;
+  profileSavedAt: string | null;
   saveSchedule: (nextSchedule: DailyScheduleConfig) => Promise<void>;
+  savePersonalizationProfile: (nextProfile: PersonalizationProfile) => void;
 }) {
   const schedule = scheduleData ?? defaultScheduleConfig();
+  const [profileDraft, setProfileDraft] = useState<PersonalizationProfile>(personalizationProfile);
+
+  useEffect(() => {
+    setProfileDraft(personalizationProfile);
+  }, [personalizationProfile]);
 
   function updateSchedule(patch: Partial<DailyScheduleConfig>) {
     saveSchedule({ ...schedule, ...patch });
   }
 
+  function updateProfile(patch: Partial<PersonalizationProfile>) {
+    setProfileDraft((current) => ({ ...current, ...patch }));
+  }
+
+  function toggleProfileOption(field: "priorityTopics" | "housingInterests" | "macroInterests", value: string) {
+    setProfileDraft((current) => {
+      const currentValues = current[field];
+      const nextValues = currentValues.includes(value)
+        ? currentValues.filter((item) => item !== value)
+        : [...currentValues, value];
+      return { ...current, [field]: nextValues };
+    });
+  }
+
+  function submitProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    savePersonalizationProfile(normalizePersonalizationProfile(profileDraft));
+  }
+
   return (
-    <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+    <div className="space-y-4">
       <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-        <h3 className="text-lg font-semibold">Settings</h3>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+        <h3 className="text-lg font-semibold">App Settings</h3>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <SettingRow label="Backend URL" value={API_BASE_URL} />
           <SettingRow label="Source Mode" value="Catalog and ingestion status" />
           <SettingRow label="Storage" value="Local SQLite" />
           <SettingRow label="Tracked Sources" value={String(healthData?.total ?? 0)} />
         </div>
       </section>
+
+      <form onSubmit={submitProfile} className="rounded-md border border-[#d7dee3] bg-white p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Personalization</h3>
+            <p className="mt-1 text-sm text-[#5b6573]">
+              Tell InvestorAgent what matters to you once. Later milestones will use this to auto-select context.
+            </p>
+          </div>
+          <button
+            type="submit"
+            className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white"
+          >
+            Save Personalization
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <label className="block text-sm font-medium" htmlFor="profile-location">
+            Where are you based?
+            <input
+              id="profile-location"
+              value={profileDraft.location}
+              onChange={(event) => updateProfile({ location: event.target.value })}
+              placeholder="Phoenix, AZ"
+              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+            />
+          </label>
+
+          <label className="block text-sm font-medium" htmlFor="profile-briefing-time">
+            Preferred briefing time
+            <input
+              id="profile-briefing-time"
+              type="time"
+              value={profileDraft.briefingTime}
+              onChange={(event) => updateProfile({ briefingTime: event.target.value })}
+              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+            />
+          </label>
+
+          <label className="block text-sm font-medium" htmlFor="profile-watchlist">
+            What do you watch?
+            <input
+              id="profile-watchlist"
+              value={profileDraft.watchlist}
+              onChange={(event) => updateProfile({ watchlist: event.target.value.toUpperCase() })}
+              placeholder="AAPL, MSFT, SPY, QQQ"
+              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+            />
+          </label>
+
+          <label className="block text-sm font-medium" htmlFor="profile-companies">
+            What companies matter to you?
+            <input
+              id="profile-companies"
+              value={profileDraft.companies}
+              onChange={(event) => updateProfile({ companies: event.target.value })}
+              placeholder="Apple, Nvidia, Tesla"
+              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+            />
+          </label>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-3">
+          <CheckboxGroup
+            title="Topics to prioritize"
+            options={topicOptions}
+            values={profileDraft.priorityTopics}
+            onToggle={(value) => toggleProfileOption("priorityTopics", value)}
+          />
+          <CheckboxGroup
+            title="Housing interests"
+            options={housingInterestOptions}
+            values={profileDraft.housingInterests}
+            onToggle={(value) => toggleProfileOption("housingInterests", value)}
+          />
+          <CheckboxGroup
+            title="Macro interests"
+            options={macroInterestOptions}
+            values={profileDraft.macroInterests}
+            onToggle={(value) => toggleProfileOption("macroInterests", value)}
+          />
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_280px]">
+          <label className="block text-sm font-medium" htmlFor="profile-ignore">
+            What should InvestorAgent ignore?
+            <input
+              id="profile-ignore"
+              value={profileDraft.ignoredTopics}
+              onChange={(event) => updateProfile({ ignoredTopics: event.target.value })}
+              placeholder="crypto, small caps, meme stocks"
+              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+            />
+          </label>
+          <label className="block text-sm font-medium" htmlFor="profile-briefing-style">
+            Briefing style
+            <select
+              id="profile-briefing-style"
+              value={profileDraft.briefingStyle}
+              onChange={(event) => updateProfile({ briefingStyle: event.target.value as PersonalizationProfile["briefingStyle"] })}
+              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
+            >
+              <option value="quick">Quick</option>
+              <option value="balanced">Balanced</option>
+              <option value="detailed">Detailed</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-4 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
+          <p className="text-sm font-semibold">Saved profile summary</p>
+          <p className="mt-2 text-sm leading-6 text-[#5b6573]">{profileSummary(personalizationProfile)}</p>
+          <p className="mt-1 text-xs text-[#5b6573]">Saved At {formatDateTime(profileSavedAt)}</p>
+        </div>
+      </form>
 
       <section className="rounded-md border border-[#d7dee3] bg-white p-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -2246,6 +2468,36 @@ function SettingsView({
         {scheduleSaving && <p className="mt-4 text-sm text-[#5b6573]">Saving schedule.</p>}
       </section>
     </div>
+  );
+}
+
+function CheckboxGroup({
+  title,
+  options,
+  values,
+  onToggle,
+}: {
+  title: string;
+  options: string[];
+  values: string[];
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <fieldset className="rounded-md border border-[#e5eaf0] p-3">
+      <legend className="px-1 text-sm font-semibold">{title}</legend>
+      <div className="mt-2 grid gap-2">
+        {options.map((option) => (
+          <label key={option} className="flex min-h-9 items-center gap-2 text-sm text-[#374151]">
+            <input
+              type="checkbox"
+              checked={values.includes(option)}
+              onChange={() => onToggle(option)}
+            />
+            {option}
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
@@ -2542,6 +2794,107 @@ function defaultScheduleConfig(): DailyScheduleConfig {
     last_message: null,
     last_report_id: null,
   };
+}
+
+function defaultPersonalizationProfile(): PersonalizationProfile {
+  return {
+    location: "",
+    watchlist: "SPY, QQQ, TLT",
+    companies: "",
+    priorityTopics: ["Markets", "Housing", "U.S. economy"],
+    housingInterests: ["Mortgage rates", "Affordability"],
+    macroInterests: ["Inflation", "Interest rates", "Fed policy"],
+    ignoredTopics: "",
+    briefingStyle: "balanced",
+    briefingTime: "08:00",
+  };
+}
+
+function loadPersonalizationProfile() {
+  if (typeof window === "undefined") {
+    return defaultPersonalizationProfile();
+  }
+
+  const storedProfile = window.localStorage.getItem(PERSONALIZATION_STORAGE_KEY);
+  if (!storedProfile) {
+    return defaultPersonalizationProfile();
+  }
+
+  try {
+    return normalizePersonalizationProfile({
+      ...defaultPersonalizationProfile(),
+      ...(JSON.parse(storedProfile) as Partial<PersonalizationProfile>),
+    });
+  } catch {
+    return defaultPersonalizationProfile();
+  }
+}
+
+function normalizePersonalizationProfile(profile: PersonalizationProfile): PersonalizationProfile {
+  return {
+    ...profile,
+    location: profile.location.trim(),
+    watchlist: normalizeListText(profile.watchlist).toUpperCase(),
+    companies: normalizeListText(profile.companies),
+    ignoredTopics: normalizeListText(profile.ignoredTopics),
+    priorityTopics: uniqueList(profile.priorityTopics),
+    housingInterests: uniqueList(profile.housingInterests),
+    macroInterests: uniqueList(profile.macroInterests),
+    briefingTime: profile.briefingTime || "08:00",
+  };
+}
+
+function normalizeListText(value: string) {
+  return splitList(value).join(", ");
+}
+
+function splitList(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function uniqueList(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function firstListItem(value: string) {
+  return splitList(value)[0] ?? "";
+}
+
+function compactListLabel(values: string[]) {
+  if (values.length === 0) {
+    return "Not set";
+  }
+
+  if (values.length <= 3) {
+    return values.join(", ");
+  }
+
+  return `${values.slice(0, 3).join(", ")} +${values.length - 3}`;
+}
+
+function buildPersonalizedQuestions(profile: PersonalizationProfile) {
+  const location = profile.location || "my area";
+  const watchlist = compactListLabel(splitList(profile.watchlist));
+  const companies = compactListLabel(splitList(profile.companies));
+
+  return [
+    `What matters for ${watchlist === "Not set" ? "my watchlist" : watchlist} today?`,
+    `What should I watch in markets this morning based on my interests?`,
+    `How are rates affecting housing in ${location}?`,
+    companies === "Not set" ? "What company news should I pay attention to?" : `What changed with ${companies} this week?`,
+  ];
+}
+
+function profileSummary(profile: PersonalizationProfile) {
+  const location = profile.location || "no location yet";
+  const watchlist = compactListLabel(splitList(profile.watchlist));
+  const topics = compactListLabel(profile.priorityTopics);
+  const ignoredTopics = compactListLabel(splitList(profile.ignoredTopics));
+
+  return `Location: ${location}. Watchlist: ${watchlist}. Priority topics: ${topics}. Ignored topics: ${ignoredTopics}. Briefing style: ${profile.briefingStyle}.`;
 }
 
 function formatMetadataKey(key: string) {
