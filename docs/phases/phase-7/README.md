@@ -42,6 +42,21 @@ This phase must happen before desktop packaging because the app should not be pa
 - State/metro support where sources provide it.
 - Clear national-vs-local distinction when only national data is available.
 
+## Carryover From Phase 6
+
+Phase 6 made scaffolded, missing-key, parser-needed, stale, and failed states easier to understand in the UI. Phase 7 should now make those statuses more real by resolving as many source gaps as possible.
+
+Specific carryover items:
+
+- Replace "scaffolded only" with working ingestion where sources are available and compliant.
+- Replace "parser not implemented" with tested parsers for Census, FHFA, and Freddie Mac where source access permits.
+- Keep optional providers clean when API keys are missing.
+- Add clearer source coverage notes when data is national only and cannot answer a local/regional question.
+- Improve user examples such as:
+  - "What are mortgage rates in AZ?"
+  - "What are mortgage rates in Phoenix?"
+  - "How is housing affordability changing in Arizona?"
+
 ## Milestones
 
 ### 7.1 Source Status Audit

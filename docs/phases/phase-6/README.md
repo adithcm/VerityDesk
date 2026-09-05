@@ -1,6 +1,6 @@
 # Phase 6: Simpler UI And Personalization
 
-Status: Planned
+Status: Complete
 
 ## Goal
 
@@ -109,9 +109,43 @@ Status: Complete
 
 ### 6.6 Phase 6 Validation And Docs
 
+Status: Complete
+
 - Validate simplified flows.
 - Update local run and usage docs.
 - Document remaining source/API gaps for Phase 7.
+
+## Completed Phase 6 Capabilities
+
+- Dashboard is now focused on one question, the latest briefing, quick questions, saved reports, and a compact status summary.
+- Detailed ingestion health, source diagnostics, latest raw items, and recent runs moved out of the default path.
+- Personalization is available in Settings and saved locally in the browser.
+- The saved profile tracks location, watchlist, companies, priority topics, housing interests, macro interests, ignored topics, briefing style, and briefing time.
+- Dashboard quick questions use saved personalization.
+- Agent Chat now supports a one-question default workflow.
+- Intent, domain, tickers, companies, location, and time window are inferred from the question and saved profile.
+- Manual agent controls are hidden under Advanced with an option to return to automatic routing.
+- Daily Briefing and Reports are reading-first instead of raw-output-first.
+- Citations, raw inputs, metadata, focus details, and technical status are available in expandable sections.
+- Sources now uses plain status labels and next-step guidance.
+
+## Handoff To Phase 7
+
+Phase 7 remains responsible for the source/data work that Phase 6 intentionally did not complete:
+
+- Finish scaffolded connectors.
+- Add missing parsers.
+- Complete Census, FHFA, and Freddie Mac source handling.
+- Add or complete optional providers such as Alpha Vantage, Finnhub, NewsAPI, and GDELT.
+- Improve regional housing support for questions like "mortgage rates in AZ" or "housing in Phoenix."
+- Improve confusing source/series labels when raw provider identifiers still appear.
+- Add stronger source fallback behavior when local data is missing or stale.
+
+## Validation Results
+
+- `make frontend-typecheck`: passed.
+- `make frontend-build`: passed.
+- `git diff --check`: passed.
 
 ## Definition Of Done
 
