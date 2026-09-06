@@ -20,7 +20,7 @@ from app.services.source_catalog import load_source_catalog
 ConnectorKind = Literal[
     "sec_submissions",
     "fred_observations",
-    "census_placeholder",
+    "census_eits",
     "fhfa_placeholder",
     "freddie_mac_placeholder",
 ]
@@ -125,9 +125,10 @@ def get_configured_official_api_sources() -> list[OfficialAPIConfig]:
         ),
         build_official_api_config(
             catalog_by_id["census-economic-indicators"],
-            connector_kind="census_placeholder",
+            connector_kind="census_eits",
             endpoint_url="https://api.census.gov/data/timeseries/eits",
             required_api_key_setting="census_api_key",
+            default_identifiers=("mhs", "ressales", "marts"),
         ),
         build_official_api_config(
             catalog_by_id["fhfa-hpi"],
@@ -224,6 +225,8 @@ def ingest_official_api_source(
             result = ingest_sec_submissions(session, source, config, settings)
         elif config.connector_kind == "fred_observations":
             result = ingest_fred_observations(session, source, config, settings)
+        elif config.connector_kind == "census_eits":
+            result = ingest_census_eits(session, source, config, settings)
         else:
             result = skip_placeholder_connector(session, source, config)
 
@@ -328,6 +331,40 @@ def ingest_fred_observations(
     )
 
 
+def ingest_census_eits(
+    session: Session,
+    source: Source,
+    config: OfficialAPIConfig,
+    settings: Settings,
+) -> OfficialIngestionResult:
+    inserted = 0
+    updated = 0
+    skipped = 0
+    records: list[StructuredObservationRecord] = []
+
+    for dataset in config.default_identifiers:
+        payload = fetch_json(build_census_eits_url(config, dataset, settings), settings)
+        records.extend(normalize_census_eits_observations(config, dataset, payload, datetime.now(UTC)))
+
+    for record in records:
+        observation, was_inserted = upsert_structured_observation(session, source, record)
+        if observation is None:
+            skipped += 1
+        elif was_inserted:
+            inserted += 1
+        else:
+            updated += 1
+
+    return OfficialIngestionResult(
+        source_key=config.source_key,
+        status="success",
+        items_seen=len(records),
+        items_inserted=inserted,
+        items_updated=updated,
+        items_skipped=skipped,
+    )
+
+
 def skip_placeholder_connector(
     session: Session,
     source: Source,
@@ -412,6 +449,60 @@ def normalize_fred_observations(
                 retrieved_at=retrieved_at,
                 vintage=item.get("realtime_end"),
                 external_id=f"{series_id}:{item['date']}:{item.get('realtime_end', '')}",
+            )
+        )
+
+    return observations
+
+
+def normalize_census_eits_observations(
+    config: OfficialAPIConfig,
+    dataset: str,
+    payload: list[list[Any]],
+    retrieved_at: datetime,
+) -> list[StructuredObservationRecord]:
+    if not payload:
+        return []
+
+    header = [str(column) for column in payload[0]]
+    required_columns = {"cell_value", "time"}
+    missing_columns = required_columns - set(header)
+    if missing_columns:
+        missing = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Census EITS response missing required columns: {missing}")
+
+    observations: list[StructuredObservationRecord] = []
+    for row in payload[1:]:
+        values = row_to_dict(header, row)
+        raw_value = values.get("cell_value")
+        if raw_value in (None, "", "NA", "N/A", "(X)"):
+            continue
+
+        value = parse_float(raw_value)
+        if value is None:
+            continue
+
+        period = required_text(values.get("time"), "Census EITS period")
+        data_type_code = values.get("data_type_code") or "value"
+        category_code = values.get("category_code") or "all"
+        seasonally_adjusted = values.get("seasonally_adj") or "unknown"
+        time_slot_id = values.get("time_slot_id") or "none"
+        region = normalize_census_region(values)
+        series_id = build_census_series_id(dataset, data_type_code, category_code, seasonally_adjusted, time_slot_id)
+
+        observations.append(
+            StructuredObservationRecord(
+                source_key=config.source_key,
+                series_id=series_id,
+                series_name=build_census_series_name(dataset, data_type_code, category_code, seasonally_adjusted),
+                value=value,
+                unit=None,
+                period=period,
+                released_at=parse_census_period(period),
+                retrieved_at=retrieved_at,
+                vintage=values.get("error_data"),
+                region=region,
+                external_id=f"{series_id}:{period}:{region or 'all'}",
             )
         )
 
@@ -619,6 +710,90 @@ def build_fred_observations_url(
     return f"{config.endpoint_url}?{query}"
 
 
+def build_census_eits_url(
+    config: OfficialAPIConfig,
+    dataset: str,
+    settings: Settings,
+) -> str:
+    query = urlencode(
+        {
+            "get": "data_type_code,time_slot_id,seasonally_adj,category_code,cell_value,error_data",
+            "for": "us:*",
+            "time": "from 2024",
+            "key": settings.census_api_key,
+        }
+    )
+    return f"{config.endpoint_url}/{dataset}?{query}"
+
+
+def row_to_dict(header: list[str], row: list[Any]) -> dict[str, str | None]:
+    return {
+        column: None if index >= len(row) or row[index] is None else str(row[index])
+        for index, column in enumerate(header)
+    }
+
+
+def parse_float(value: str) -> float | None:
+    try:
+        return float(value.replace(",", ""))
+    except ValueError:
+        return None
+
+
+def normalize_census_region(values: dict[str, str | None]) -> str | None:
+    if values.get("us"):
+        return "US"
+    return None
+
+
+def build_census_series_id(
+    dataset: str,
+    data_type_code: str | None,
+    category_code: str | None,
+    seasonally_adjusted: str | None,
+    time_slot_id: str | None,
+) -> str:
+    parts = [
+        "CENSUS_EITS",
+        dataset.upper(),
+        normalize_series_part(data_type_code),
+        normalize_series_part(category_code),
+        normalize_series_part(seasonally_adjusted),
+        normalize_series_part(time_slot_id),
+    ]
+    return ":".join(parts)
+
+
+def build_census_series_name(
+    dataset: str,
+    data_type_code: str | None,
+    category_code: str | None,
+    seasonally_adjusted: str | None,
+) -> str:
+    dataset_name = {
+        "mhs": "New Residential Construction",
+        "ressales": "New Residential Sales",
+        "marts": "Monthly Retail Trade",
+    }.get(dataset, dataset.upper())
+    adjustment = "seasonally adjusted" if seasonally_adjusted == "yes" else "not seasonally adjusted"
+    return f"{dataset_name} - {data_type_code or 'value'} - {category_code or 'all categories'} ({adjustment})"
+
+
+def normalize_series_part(value: str | None) -> str:
+    if not value:
+        return "ALL"
+    return value.strip().upper().replace(" ", "_").replace(":", "_")
+
+
+def parse_census_period(value: str) -> datetime | None:
+    if len(value) == 4 and value.isdigit():
+        return datetime(int(value), 1, 1, tzinfo=UTC)
+    if len(value) == 7 and value[4] == "-":
+        year, month = value.split("-")
+        return datetime(int(year), int(month), 1, tzinfo=UTC)
+    return parse_iso_date(value)
+
+
 def build_sec_filing_url(cik: str, accession_number: str, primary_document: str | None) -> str:
     accession_path = accession_number.replace("-", "")
     cik_path = str(int(cik))
@@ -709,3 +884,9 @@ def value_at(values: list[Any], index: int) -> Any | None:
     if index >= len(values):
         return None
     return values[index]
+
+
+def required_text(value: str | None, field_name: str) -> str:
+    if value is None or not value.strip():
+        raise ValueError(f"Missing required field: {field_name}")
+    return value.strip()

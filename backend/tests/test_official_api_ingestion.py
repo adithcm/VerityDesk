@@ -9,8 +9,10 @@ from app.db.models import Article, EconomicObservation, ExternalID, IngestionRun
 from app.services import official_api_ingestion
 from app.services.official_api_ingestion import (
     OfficialAPIConfig,
+    build_census_eits_url,
     build_fred_observations_url,
     ingest_official_api_source,
+    normalize_census_eits_observations,
     normalize_fred_observations,
     normalize_sec_submissions,
 )
@@ -38,6 +40,13 @@ FRED_OBSERVATIONS_SAMPLE = {
         {"date": "2026-07-01", "value": ".", "realtime_end": "2026-09-02"},
     ]
 }
+
+
+CENSUS_EITS_SAMPLE = [
+    ["data_type_code", "time_slot_id", "seasonally_adj", "category_code", "cell_value", "error_data", "time", "us"],
+    ["TOTAL", "1", "yes", "SOLD", "685", "no", "2026-08", "1"],
+    ["TOTAL", "1", "yes", "SOLD", "NA", "no", "2026-07", "1"],
+]
 
 
 def build_session():
@@ -103,6 +112,49 @@ def test_normalize_fred_observations_skips_missing_values() -> None:
     assert records[0].value == 4.5
     assert records[0].period == "2026-08-01"
     assert records[0].external_id == "FEDFUNDS:2026-08-01:2026-09-02"
+
+
+def test_normalize_census_eits_observations_builds_structured_records() -> None:
+    records = normalize_census_eits_observations(
+        build_config(source_key="census-economic-indicators", connector_kind="census_eits"),
+        "ressales",
+        CENSUS_EITS_SAMPLE,
+        datetime(2026, 9, 2, 16, 0, tzinfo=UTC),
+    )
+
+    assert len(records) == 1
+    assert records[0].source_key == "census-economic-indicators"
+    assert records[0].series_id == "CENSUS_EITS:RESSALES:TOTAL:SOLD:YES:1"
+    assert records[0].series_name == "New Residential Sales - TOTAL - SOLD (seasonally adjusted)"
+    assert records[0].value == 685.0
+    assert records[0].period == "2026-08"
+    assert records[0].region == "US"
+    assert records[0].external_id == "CENSUS_EITS:RESSALES:TOTAL:SOLD:YES:1:2026-08:US"
+
+
+def test_normalize_census_eits_observations_allows_empty_response() -> None:
+    records = normalize_census_eits_observations(
+        build_config(source_key="census-economic-indicators", connector_kind="census_eits"),
+        "mhs",
+        [],
+        datetime(2026, 9, 2, 16, 0, tzinfo=UTC),
+    )
+
+    assert records == []
+
+
+def test_normalize_census_eits_observations_rejects_malformed_response() -> None:
+    try:
+        normalize_census_eits_observations(
+            build_config(source_key="census-economic-indicators", connector_kind="census_eits"),
+            "mhs",
+            [["data_type_code"], ["TOTAL"]],
+            datetime(2026, 9, 2, 16, 0, tzinfo=UTC),
+        )
+    except ValueError as error:
+        assert "missing required columns" in str(error)
+    else:
+        raise AssertionError("Expected malformed Census response to raise ValueError")
 
 
 def test_ingest_sec_submissions_persists_filings_and_dedupes(monkeypatch) -> None:
@@ -189,6 +241,63 @@ def test_ingest_fred_persists_structured_observations(monkeypatch) -> None:
         assert external_id.observation_id == observation.id
 
 
+def test_ingest_census_skips_without_api_key() -> None:
+    config = build_config(
+        source_key="census-economic-indicators",
+        source_name="U.S. Census Economic Indicators",
+        connector_kind="census_eits",
+        endpoint_url="https://api.census.gov/data/timeseries/eits",
+        required_api_key_setting="census_api_key",
+        default_identifiers=("ressales",),
+    )
+
+    with build_session() as session:
+        result = ingest_official_api_source(session, config, settings=Settings(census_api_key=None))
+
+        run = session.scalar(select(IngestionRun))
+        health = session.scalar(select(SourceHealth))
+
+        assert result.status == "skipped"
+        assert result.error == "Missing required API key setting: CENSUS_API_KEY"
+        assert run is not None
+        assert run.status == "skipped"
+        assert health is not None
+        assert health.status == "skipped"
+
+
+def test_ingest_census_persists_structured_observations(monkeypatch) -> None:
+    config = build_config(
+        source_key="census-economic-indicators",
+        source_name="U.S. Census Economic Indicators",
+        connector_kind="census_eits",
+        endpoint_url="https://api.census.gov/data/timeseries/eits",
+        required_api_key_setting="census_api_key",
+        default_identifiers=("ressales",),
+    )
+
+    def fake_fetch_json(url: str, settings: Settings):
+        assert "/ressales?" in url
+        assert "key=test-key" in url
+        return CENSUS_EITS_SAMPLE
+
+    monkeypatch.setattr(official_api_ingestion, "fetch_json", fake_fetch_json)
+
+    with build_session() as session:
+        result = ingest_official_api_source(session, config, settings=Settings(census_api_key="test-key"))
+
+        observation = session.scalar(select(EconomicObservation))
+        external_id = session.scalar(select(ExternalID))
+
+        assert result.status == "success"
+        assert result.items_seen == 1
+        assert result.items_inserted == 1
+        assert observation is not None
+        assert observation.series_id == "CENSUS_EITS:RESSALES:TOTAL:SOLD:YES:1"
+        assert observation.region == "US"
+        assert external_id is not None
+        assert external_id.observation_id == observation.id
+
+
 def test_build_fred_observations_url_includes_key_and_limit() -> None:
     url = build_fred_observations_url(
         build_config(
@@ -204,6 +313,23 @@ def test_build_fred_observations_url_includes_key_and_limit() -> None:
     assert "series_id=MORTGAGE30US" in url
     assert "api_key=test-key" in url
     assert "limit=12" in url
+
+
+def test_build_census_eits_url_includes_key_and_dataset() -> None:
+    url = build_census_eits_url(
+        build_config(
+            source_key="census-economic-indicators",
+            connector_kind="census_eits",
+            endpoint_url="https://api.census.gov/data/timeseries/eits",
+        ),
+        "mhs",
+        Settings(census_api_key="test-key"),
+    )
+
+    assert url.startswith("https://api.census.gov/data/timeseries/eits/mhs?")
+    assert "cell_value" in url
+    assert "for=us%3A%2A" in url
+    assert "key=test-key" in url
 
 
 def test_placeholder_dataset_connector_logs_skipped_status() -> None:

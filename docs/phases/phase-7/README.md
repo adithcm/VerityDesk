@@ -70,6 +70,8 @@ Status: Complete
 
 ### 7.2 Census Parser Completion
 
+Status: Complete
+
 - Implement Census Economic Indicators parsing.
 - Normalize observations into existing economic observation models.
 - Add tests for success, missing key, empty response, and malformed response.
