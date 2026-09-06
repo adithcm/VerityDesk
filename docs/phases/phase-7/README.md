@@ -86,6 +86,8 @@ Status: Complete
 
 ### 7.4 Freddie Mac PMMS Parser Completion
 
+Status: Complete
+
 - Implement Freddie Mac PMMS parsing.
 - Normalize mortgage rate series and release dates.
 - Add tests for retrieval, parsing, deduplication, and source health.

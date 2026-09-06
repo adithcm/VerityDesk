@@ -1,4 +1,6 @@
 from datetime import UTC, datetime
+from io import BytesIO
+from zipfile import ZipFile
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -15,6 +17,7 @@ from app.services.official_api_ingestion import (
     ingest_official_api_source,
     normalize_census_eits_observations,
     normalize_fhfa_hpi_observations,
+    normalize_freddie_mac_pmms_observations,
     normalize_fred_observations,
     normalize_sec_submissions,
 )
@@ -54,6 +57,11 @@ CENSUS_EITS_SAMPLE = [
 FHFA_STATE_SAMPLE = "AZ\t2026\t1\t450.10\nAZ\t2026\t2\t451.25\nCA\t2026\t2\t-\n"
 FHFA_US_CENSUS_SAMPLE = "USA\t2026\t2\t410.50\nDV_MTN\t2026\t2\t500.25\n"
 FHFA_METRO_SAMPLE = '"Phoenix-Mesa-Chandler, AZ"\t38060\t2026\t2\t350.44\t( 4.12)\nAbilene, TX\t10180\t1975\t1\t-\t-\n'
+FREDDIE_MAC_PMMS_SAMPLE = [
+    ["Week", "30-Yr FRM", "30-Yr Fees/Points", "15-Yr FRM", "15-Yr Fees/Points"],
+    ["2026-09-03", "6.71", "", "6.04", ""],
+    ["2026-08-27", "6.66", "", "5.98", ""],
+]
 
 
 def build_session():
@@ -88,6 +96,55 @@ def build_config(
         required_api_key_setting=required_api_key_setting,
         default_identifiers=default_identifiers,
     )
+
+
+def build_xlsx(rows: list[list[str]]) -> bytes:
+    def column_name(index: int) -> str:
+        name = ""
+        while index:
+            index, remainder = divmod(index - 1, 26)
+            name = chr(ord("A") + remainder) + name
+        return name
+
+    sheet_rows = []
+    for row_index, row in enumerate(rows, start=1):
+        cells = []
+        for column_index, value in enumerate(row, start=1):
+            reference = f"{column_name(column_index)}{row_index}"
+            cells.append(
+                f'<c r="{reference}" t="inlineStr"><is><t>{value}</t></is></c>'
+                if value
+                else f'<c r="{reference}"/>'
+            )
+        sheet_rows.append(f'<row r="{row_index}">{"".join(cells)}</row>')
+
+    sheet = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        f'<sheetData>{"".join(sheet_rows)}</sheetData>'
+        "</worksheet>"
+    )
+    workbook = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        '<sheets><sheet name="PMMS" sheetId="1" r:id="rId1"/></sheets>'
+        "</workbook>"
+    )
+    relationships = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+        'Target="worksheets/sheet1.xml"/>'
+        "</Relationships>"
+    )
+    output = BytesIO()
+    with ZipFile(output, "w") as archive:
+        archive.writestr("xl/workbook.xml", workbook)
+        archive.writestr("xl/_rels/workbook.xml.rels", relationships)
+        archive.writestr("xl/worksheets/sheet1.xml", sheet)
+    return output.getvalue()
 
 
 def test_normalize_sec_submissions_builds_filing_records() -> None:
@@ -239,6 +296,50 @@ def test_normalize_fhfa_hpi_observations_rejects_malformed_response() -> None:
         assert "missing required columns" in str(error)
     else:
         raise AssertionError("Expected malformed FHFA response to raise ValueError")
+
+
+def test_normalize_freddie_mac_pmms_observations_builds_structured_records() -> None:
+    records = normalize_freddie_mac_pmms_observations(
+        build_config(source_key="freddie-mac-pmms", connector_kind="freddie_mac_pmms"),
+        build_xlsx(FREDDIE_MAC_PMMS_SAMPLE),
+        datetime(2026, 9, 3, 16, 0, tzinfo=UTC),
+    )
+
+    assert len(records) == 4
+    assert records[0].source_key == "freddie-mac-pmms"
+    assert records[0].series_id == "FREDDIE_PMMS:30Y_FIXED"
+    assert records[0].series_name == "Freddie Mac PMMS - 30-Year Fixed-Rate Mortgage"
+    assert records[0].value == 6.71
+    assert records[0].unit == "percent"
+    assert records[0].period == "2026-09-03"
+    assert records[0].released_at == datetime(2026, 9, 3, tzinfo=UTC)
+    assert records[0].region == "United States"
+    assert records[0].external_id == "FREDDIE_PMMS:30Y_FIXED:2026-09-03"
+    assert records[1].series_id == "FREDDIE_PMMS:15Y_FIXED"
+    assert records[1].value == 6.04
+
+
+def test_normalize_freddie_mac_pmms_observations_allows_empty_workbook() -> None:
+    records = normalize_freddie_mac_pmms_observations(
+        build_config(source_key="freddie-mac-pmms", connector_kind="freddie_mac_pmms"),
+        build_xlsx([]),
+        datetime(2026, 9, 3, 16, 0, tzinfo=UTC),
+    )
+
+    assert records == []
+
+
+def test_normalize_freddie_mac_pmms_observations_rejects_malformed_workbook() -> None:
+    try:
+        normalize_freddie_mac_pmms_observations(
+            build_config(source_key="freddie-mac-pmms", connector_kind="freddie_mac_pmms"),
+            build_xlsx([["Week", "No Rate"], ["2026-09-03", "6.71"]]),
+            datetime(2026, 9, 3, 16, 0, tzinfo=UTC),
+        )
+    except ValueError as error:
+        assert "missing date and mortgage rate columns" in str(error)
+    else:
+        raise AssertionError("Expected malformed Freddie Mac PMMS workbook to raise ValueError")
 
 
 def test_ingest_sec_submissions_persists_filings_and_dedupes(monkeypatch) -> None:
@@ -412,6 +513,39 @@ def test_ingest_fhfa_hpi_persists_structured_observations_and_dedupes(monkeypatc
         assert len(observations) == 2
         assert observations[0].series_id == "FHFA_HPI:STATE:AZ"
         assert len(external_ids) == 2
+
+
+def test_ingest_freddie_mac_pmms_persists_structured_observations_and_dedupes(monkeypatch) -> None:
+    config = build_config(
+        source_key="freddie-mac-pmms",
+        source_name="Freddie Mac PMMS",
+        connector_kind="freddie_mac_pmms",
+        endpoint_url="https://www.freddiemac.com/pmms/docs/historicalweeklydata.xlsx",
+        default_identifiers=("30_year_fixed", "15_year_fixed"),
+    )
+
+    def fake_fetch_bytes(url: str, settings: Settings):
+        assert url == "https://www.freddiemac.com/pmms/docs/historicalweeklydata.xlsx"
+        return build_xlsx(FREDDIE_MAC_PMMS_SAMPLE)
+
+    monkeypatch.setattr(official_api_ingestion, "fetch_bytes", fake_fetch_bytes)
+
+    with build_session() as session:
+        first_result = ingest_official_api_source(session, config)
+        second_result = ingest_official_api_source(session, config)
+
+        observations = session.scalars(select(EconomicObservation)).all()
+        health = session.scalar(select(SourceHealth))
+
+        assert first_result.status == "success"
+        assert first_result.items_seen == 4
+        assert first_result.items_inserted == 4
+        assert second_result.items_inserted == 0
+        assert second_result.items_updated == 4
+        assert len(observations) == 4
+        assert observations[0].series_id == "FREDDIE_PMMS:30Y_FIXED"
+        assert health is not None
+        assert health.status == "fresh"
 
 
 def test_build_fred_observations_url_includes_key_and_limit() -> None:

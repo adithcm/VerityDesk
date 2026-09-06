@@ -153,8 +153,8 @@
     "reliability_tier": "primary",
     "enabled_by_default": true,
     "phase": "v1",
-    "status": "planned",
-    "notes": "Use for weekly mortgage rate averages and mortgage market context."
+    "status": "active",
+    "notes": "Uses Freddie Mac's public PMMS historical weekly workbook for national 30-year and 15-year fixed mortgage rate averages. PMMS is national, not state or metro-specific."
   },
   {
     "id": "company-investor-relations",

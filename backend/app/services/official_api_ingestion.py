@@ -4,9 +4,12 @@ import ssl
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from io import BytesIO
 from typing import Any, Literal
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from xml.etree import ElementTree
+from zipfile import ZipFile
 
 import certifi
 from sqlalchemy import select
@@ -23,7 +26,7 @@ ConnectorKind = Literal[
     "fred_observations",
     "census_eits",
     "fhfa_hpi",
-    "freddie_mac_placeholder",
+    "freddie_mac_pmms",
 ]
 
 
@@ -184,6 +187,9 @@ FHFA_US_CENSUS_REGION_NAMES = {
 }
 
 
+FREDDIE_MAC_PMMS_WORKBOOK_URL = "https://www.freddiemac.com/pmms/docs/historicalweeklydata.xlsx"
+
+
 def get_configured_official_api_sources() -> list[OfficialAPIConfig]:
     catalog_by_id = {source.id: source for source in load_source_catalog()}
 
@@ -216,8 +222,9 @@ def get_configured_official_api_sources() -> list[OfficialAPIConfig]:
         ),
         build_official_api_config(
             catalog_by_id["freddie-mac-pmms"],
-            connector_kind="freddie_mac_placeholder",
-            endpoint_url=catalog_by_id["freddie-mac-pmms"].base_url,
+            connector_kind="freddie_mac_pmms",
+            endpoint_url=FREDDIE_MAC_PMMS_WORKBOOK_URL,
+            default_identifiers=("30_year_fixed", "15_year_fixed"),
         ),
     ]
 
@@ -308,6 +315,8 @@ def ingest_official_api_source(
             result = ingest_census_eits(session, source, config, settings)
         elif config.connector_kind == "fhfa_hpi":
             result = ingest_fhfa_hpi(session, source, config, settings)
+        elif config.connector_kind == "freddie_mac_pmms":
+            result = ingest_freddie_mac_pmms(session, source, config, settings)
         else:
             result = skip_placeholder_connector(session, source, config)
 
@@ -460,6 +469,37 @@ def ingest_fhfa_hpi(
     for dataset in config.default_identifiers:
         payload = fetch_text(build_fhfa_hpi_url(dataset), settings)
         records.extend(normalize_fhfa_hpi_observations(config, dataset, payload, datetime.now(UTC)))
+
+    for record in records:
+        observation, was_inserted = upsert_structured_observation(session, source, record)
+        if observation is None:
+            skipped += 1
+        elif was_inserted:
+            inserted += 1
+        else:
+            updated += 1
+
+    return OfficialIngestionResult(
+        source_key=config.source_key,
+        status="success",
+        items_seen=len(records),
+        items_inserted=inserted,
+        items_updated=updated,
+        items_skipped=skipped,
+    )
+
+
+def ingest_freddie_mac_pmms(
+    session: Session,
+    source: Source,
+    config: OfficialAPIConfig,
+    settings: Settings,
+) -> OfficialIngestionResult:
+    inserted = 0
+    updated = 0
+    skipped = 0
+    payload = fetch_bytes(required_text(config.endpoint_url, "Freddie Mac PMMS endpoint URL"), settings)
+    records = normalize_freddie_mac_pmms_observations(config, payload, datetime.now(UTC))
 
     for record in records:
         observation, was_inserted = upsert_structured_observation(session, source, record)
@@ -736,6 +776,72 @@ def normalize_fhfa_hpi_row(
     raise ValueError(f"Unsupported FHFA HPI dataset: {dataset}")
 
 
+def normalize_freddie_mac_pmms_observations(
+    config: OfficialAPIConfig,
+    workbook: bytes,
+    retrieved_at: datetime,
+) -> list[StructuredObservationRecord]:
+    rows = parse_xlsx_rows(workbook)
+    if not rows:
+        return []
+
+    header_index = find_pmms_header_row(rows)
+    if header_index is None:
+        raise ValueError("Freddie Mac PMMS workbook missing date and mortgage rate columns")
+
+    header = rows[header_index]
+    date_index = find_pmms_date_column(header)
+    thirty_year_index = find_pmms_rate_column(header, "30")
+    fifteen_year_index = find_pmms_rate_column(header, "15")
+    if date_index is None or (thirty_year_index is None and fifteen_year_index is None):
+        raise ValueError("Freddie Mac PMMS workbook missing supported mortgage rate columns")
+
+    observations: list[StructuredObservationRecord] = []
+    series_columns = [
+        (
+            thirty_year_index,
+            "FREDDIE_PMMS:30Y_FIXED",
+            "Freddie Mac PMMS - 30-Year Fixed-Rate Mortgage",
+        ),
+        (
+            fifteen_year_index,
+            "FREDDIE_PMMS:15Y_FIXED",
+            "Freddie Mac PMMS - 15-Year Fixed-Rate Mortgage",
+        ),
+    ]
+
+    for row in rows[header_index + 1 :]:
+        period_date = parse_pmms_date(value_at(row, date_index))
+        if period_date is None:
+            continue
+
+        for column_index, series_id, series_name in series_columns:
+            if column_index is None:
+                continue
+            raw_value = value_at(row, column_index)
+            value = parse_float(str(raw_value).replace("%", "")) if raw_value is not None else None
+            if value is None:
+                continue
+
+            period = period_date.date().isoformat()
+            observations.append(
+                StructuredObservationRecord(
+                    source_key=config.source_key,
+                    series_id=series_id,
+                    series_name=series_name,
+                    value=value,
+                    unit="percent",
+                    period=period,
+                    released_at=period_date,
+                    retrieved_at=retrieved_at,
+                    region="United States",
+                    external_id=f"{series_id}:{period}",
+                )
+            )
+
+    return observations
+
+
 def upsert_sec_submission(
     session: Session,
     source: Source,
@@ -934,6 +1040,20 @@ def fetch_text(url: str, settings: Settings) -> str:
         return response.read().decode("utf-8-sig")
 
 
+def fetch_bytes(url: str, settings: Settings) -> bytes:
+    request = Request(
+        url,
+        headers={
+            "User-Agent": settings.investoragent_user_agent,
+            "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*",
+        },
+    )
+    context = ssl.create_default_context(cafile=certifi.where())
+
+    with urlopen(request, timeout=30, context=context) as response:
+        return response.read()
+
+
 def build_fred_observations_url(
     config: OfficialAPIConfig,
     series_id: str,
@@ -972,6 +1092,120 @@ def build_fhfa_hpi_url(dataset: str) -> str:
         return FHFA_HPI_DOWNLOAD_URLS[dataset]
     except KeyError as error:
         raise ValueError(f"Unsupported FHFA HPI dataset: {dataset}") from error
+
+
+def parse_xlsx_rows(workbook: bytes) -> list[list[str]]:
+    try:
+        with ZipFile(BytesIO(workbook)) as archive:
+            shared_strings = read_xlsx_shared_strings(archive)
+            sheet_name = read_xlsx_first_sheet_name(archive)
+            sheet_xml = archive.read(sheet_name)
+    except Exception as error:
+        raise ValueError("Unable to read Freddie Mac PMMS workbook") from error
+
+    root = ElementTree.fromstring(sheet_xml)
+    rows: list[list[str]] = []
+    for row in root.findall(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}row"):
+        cells: list[str] = []
+        for cell in row.findall("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}c"):
+            column_index = xlsx_column_index(cell.attrib.get("r", ""))
+            while len(cells) < column_index:
+                cells.append("")
+            cells.append(read_xlsx_cell_value(cell, shared_strings))
+        rows.append(cells)
+    return rows
+
+
+def read_xlsx_shared_strings(archive: ZipFile) -> list[str]:
+    if "xl/sharedStrings.xml" not in archive.namelist():
+        return []
+
+    root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+    strings: list[str] = []
+    for item in root.findall("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}si"):
+        parts = [
+            text.text or ""
+            for text in item.findall(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t")
+        ]
+        strings.append("".join(parts))
+    return strings
+
+
+def read_xlsx_first_sheet_name(archive: ZipFile) -> str:
+    workbook_root = ElementTree.fromstring(archive.read("xl/workbook.xml"))
+    relationship_root = ElementTree.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+    first_sheet = workbook_root.find("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheets/{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheet")
+    if first_sheet is None:
+        raise ValueError("Workbook has no sheets")
+
+    relationship_id = first_sheet.attrib.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
+    for relationship in relationship_root:
+        if relationship.attrib.get("Id") == relationship_id:
+            target = relationship.attrib["Target"].lstrip("/")
+            return target if target.startswith("xl/") else f"xl/{target}"
+
+    raise ValueError("Workbook first sheet relationship missing")
+
+
+def read_xlsx_cell_value(cell: ElementTree.Element, shared_strings: list[str]) -> str:
+    cell_type = cell.attrib.get("t")
+    if cell_type == "inlineStr":
+        texts = cell.findall(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t")
+        return "".join(text.text or "" for text in texts).strip()
+
+    value = cell.find("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}v")
+    if value is None or value.text is None:
+        return ""
+
+    if cell_type == "s":
+        index = int(value.text)
+        return shared_strings[index].strip() if index < len(shared_strings) else ""
+
+    return value.text.strip()
+
+
+def xlsx_column_index(cell_reference: str) -> int:
+    letters = "".join(character for character in cell_reference if character.isalpha())
+    if not letters:
+        return 1
+
+    index = 0
+    for character in letters.upper():
+        index = (index * 26) + (ord(character) - ord("A") + 1)
+    return index
+
+
+def find_pmms_header_row(rows: list[list[str]]) -> int | None:
+    for index, row in enumerate(rows):
+        if find_pmms_date_column(row) is not None and (
+            find_pmms_rate_column(row, "30") is not None or find_pmms_rate_column(row, "15") is not None
+        ):
+            return index
+    return None
+
+
+def find_pmms_date_column(header: list[str]) -> int | None:
+    for index, value in enumerate(header):
+        normalized = normalize_header_text(value)
+        if "date" in normalized or "week" in normalized:
+            return index
+    return None
+
+
+def find_pmms_rate_column(header: list[str], term_years: str) -> int | None:
+    for index, value in enumerate(header):
+        normalized = normalize_header_text(value)
+        if term_years not in normalized:
+            continue
+        if any(excluded in normalized for excluded in ("fee", "point", "margin")):
+            continue
+        if any(token in normalized for token in ("frm", "fixed", "rate")):
+            return index
+    return None
+
+
+def normalize_header_text(value: str) -> str:
+    return value.strip().lower().replace("-", " ").replace("_", " ")
 
 
 def row_to_dict(header: list[str], row: list[Any]) -> dict[str, str | None]:
@@ -1040,6 +1274,29 @@ def parse_census_period(value: str) -> datetime | None:
         year, month = value.split("-")
         return datetime(int(year), int(month), 1, tzinfo=UTC)
     return parse_iso_date(value)
+
+
+def parse_pmms_date(value: Any | None) -> datetime | None:
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    numeric_value = parse_float(text)
+    if numeric_value is not None and numeric_value > 20_000:
+        excel_epoch = datetime(1899, 12, 30, tzinfo=UTC)
+        return excel_epoch + timedelta(days=int(numeric_value))
+
+    for date_format in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%B %d, %Y", "%b %d, %Y"):
+        try:
+            parsed = datetime.strptime(text, date_format)
+            return parsed.replace(tzinfo=UTC)
+        except ValueError:
+            continue
+
+    return None
 
 
 def build_quarter_period(year: str, quarter: str) -> str:
