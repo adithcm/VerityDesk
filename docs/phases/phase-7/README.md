@@ -61,6 +61,8 @@ Specific carryover items:
 
 ### 7.1 Source Status Audit
 
+Status: Complete
+
 - List every source in the catalog.
 - Mark each as working, missing key, scaffolded, parser-needed, optional, or deferred.
 - Update docs and UI source metadata.
@@ -68,17 +70,23 @@ Specific carryover items:
 
 ### 7.2 Census Parser Completion
 
+Status: Complete
+
 - Implement Census Economic Indicators parsing.
 - Normalize observations into existing economic observation models.
 - Add tests for success, missing key, empty response, and malformed response.
 
 ### 7.3 FHFA Parser Completion
 
+Status: Complete
+
 - Implement FHFA HPI parsing.
 - Normalize regions and periods.
 - Add tests for national, state, and metro-style records where available.
 
 ### 7.4 Freddie Mac PMMS Parser Completion
+
+Status: Complete
 
 - Implement Freddie Mac PMMS parsing.
 - Normalize mortgage rate series and release dates.
@@ -117,6 +125,17 @@ Specific carryover items:
 - Run parser and ingestion tests.
 - Document configured, optional, and deferred sources.
 - Add troubleshooting for API keys and source failures.
+
+## Milestone Docs
+
+- [Milestone 7.1: Source status audit](milestones/7.1-source-status-audit.md)
+- [Milestone 7.2: Census parser completion](milestones/7.2-census-parser-completion.md)
+- [Milestone 7.3: FHFA parser completion](milestones/7.3-fhfa-parser-completion.md)
+- [Milestone 7.4: Freddie Mac PMMS parser completion](milestones/7.4-freddie-mac-pmms-parser-completion.md)
+- [Milestone 7.5: Optional provider connectors](milestones/7.5-optional-provider-connectors.md)
+- [Milestone 7.6: Regional query data support](milestones/7.6-regional-query-data-support.md)
+- [Milestone 7.7: Source fallback strategy](milestones/7.7-source-fallback-strategy.md)
+- [Milestone 7.8: Phase 7 validation and docs](milestones/7.8-phase-7-validation-and-docs.md)
 
 ## Definition Of Done
 

@@ -110,8 +110,8 @@
     "reliability_tier": "primary",
     "enabled_by_default": true,
     "phase": "v1",
-    "status": "planned",
-    "notes": "Use for housing construction, new home sales, trade, retail, and construction spending datasets."
+    "status": "active",
+    "notes": "Uses Census EITS datasets for housing construction, new residential sales, and retail indicators. Additional Census datasets can be added in later source-expansion passes."
   },
   {
     "id": "fhfa-hpi",
@@ -131,8 +131,8 @@
     "reliability_tier": "primary",
     "enabled_by_default": true,
     "phase": "v1",
-    "status": "planned",
-    "notes": "Use for national, state, metro, county, ZIP, and tract-level house price indexes."
+    "status": "active",
+    "notes": "Uses public FHFA quarterly all-transactions HPI files for U.S./Census-region, state, and metro house price indexes. County, ZIP, and tract-level expansions can be added in later source-expansion passes."
   },
   {
     "id": "freddie-mac-pmms",
@@ -153,8 +153,8 @@
     "reliability_tier": "primary",
     "enabled_by_default": true,
     "phase": "v1",
-    "status": "planned",
-    "notes": "Use for weekly mortgage rate averages and mortgage market context."
+    "status": "active",
+    "notes": "Uses Freddie Mac's public PMMS historical weekly workbook for national 30-year and 15-year fixed mortgage rate averages. PMMS is national, not state or metro-specific."
   },
   {
     "id": "company-investor-relations",
