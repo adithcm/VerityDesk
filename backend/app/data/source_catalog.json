@@ -131,8 +131,8 @@
     "reliability_tier": "primary",
     "enabled_by_default": true,
     "phase": "v1",
-    "status": "planned",
-    "notes": "Use for national, state, metro, county, ZIP, and tract-level house price indexes."
+    "status": "active",
+    "notes": "Uses public FHFA quarterly all-transactions HPI files for U.S./Census-region, state, and metro house price indexes. County, ZIP, and tract-level expansions can be added in later source-expansion passes."
   },
   {
     "id": "freddie-mac-pmms",

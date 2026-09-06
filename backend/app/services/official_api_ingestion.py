@@ -1,3 +1,4 @@
+import csv
 import json
 import ssl
 from dataclasses import dataclass
@@ -21,7 +22,7 @@ ConnectorKind = Literal[
     "sec_submissions",
     "fred_observations",
     "census_eits",
-    "fhfa_placeholder",
+    "fhfa_hpi",
     "freddie_mac_placeholder",
 ]
 
@@ -106,6 +107,83 @@ class StructuredObservationRecord:
     external_id: str | None = None
 
 
+FHFA_HPI_DOWNLOAD_URLS = {
+    "state": "https://www.fhfa.gov/hpi/download/quarterly_datasets/hpi_at_state.txt",
+    "us_census": "https://www.fhfa.gov/hpi/download/quarterly_datasets/hpi_at_us_and_census.txt",
+    "metro": "https://www.fhfa.gov/hpi/download/quarterly_datasets/hpi_at_metro.txt",
+}
+
+
+US_STATE_NAMES = {
+    "AL": "Alabama",
+    "AK": "Alaska",
+    "AZ": "Arizona",
+    "AR": "Arkansas",
+    "CA": "California",
+    "CO": "Colorado",
+    "CT": "Connecticut",
+    "DE": "Delaware",
+    "DC": "District of Columbia",
+    "FL": "Florida",
+    "GA": "Georgia",
+    "HI": "Hawaii",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "IN": "Indiana",
+    "IA": "Iowa",
+    "KS": "Kansas",
+    "KY": "Kentucky",
+    "LA": "Louisiana",
+    "ME": "Maine",
+    "MD": "Maryland",
+    "MA": "Massachusetts",
+    "MI": "Michigan",
+    "MN": "Minnesota",
+    "MS": "Mississippi",
+    "MO": "Missouri",
+    "MT": "Montana",
+    "NE": "Nebraska",
+    "NV": "Nevada",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NY": "New York",
+    "NC": "North Carolina",
+    "ND": "North Dakota",
+    "OH": "Ohio",
+    "OK": "Oklahoma",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "RI": "Rhode Island",
+    "SC": "South Carolina",
+    "SD": "South Dakota",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "VT": "Vermont",
+    "VA": "Virginia",
+    "WA": "Washington",
+    "WV": "West Virginia",
+    "WI": "Wisconsin",
+    "WY": "Wyoming",
+}
+
+
+FHFA_US_CENSUS_REGION_NAMES = {
+    "USA": "United States",
+    "DV_ENC": "East North Central",
+    "DV_ESC": "East South Central",
+    "DV_MA": "Middle Atlantic",
+    "DV_MT": "Mountain",
+    "DV_MTN": "Mountain",
+    "DV_NE": "New England",
+    "DV_PA": "Pacific",
+    "DV_SA": "South Atlantic",
+    "DV_WNC": "West North Central",
+    "DV_WSC": "West South Central",
+}
+
+
 def get_configured_official_api_sources() -> list[OfficialAPIConfig]:
     catalog_by_id = {source.id: source for source in load_source_catalog()}
 
@@ -132,8 +210,9 @@ def get_configured_official_api_sources() -> list[OfficialAPIConfig]:
         ),
         build_official_api_config(
             catalog_by_id["fhfa-hpi"],
-            connector_kind="fhfa_placeholder",
-            endpoint_url=catalog_by_id["fhfa-hpi"].base_url,
+            connector_kind="fhfa_hpi",
+            endpoint_url="https://www.fhfa.gov/hpi/download/quarterly_datasets",
+            default_identifiers=("us_census", "state", "metro"),
         ),
         build_official_api_config(
             catalog_by_id["freddie-mac-pmms"],
@@ -227,6 +306,8 @@ def ingest_official_api_source(
             result = ingest_fred_observations(session, source, config, settings)
         elif config.connector_kind == "census_eits":
             result = ingest_census_eits(session, source, config, settings)
+        elif config.connector_kind == "fhfa_hpi":
+            result = ingest_fhfa_hpi(session, source, config, settings)
         else:
             result = skip_placeholder_connector(session, source, config)
 
@@ -345,6 +426,40 @@ def ingest_census_eits(
     for dataset in config.default_identifiers:
         payload = fetch_json(build_census_eits_url(config, dataset, settings), settings)
         records.extend(normalize_census_eits_observations(config, dataset, payload, datetime.now(UTC)))
+
+    for record in records:
+        observation, was_inserted = upsert_structured_observation(session, source, record)
+        if observation is None:
+            skipped += 1
+        elif was_inserted:
+            inserted += 1
+        else:
+            updated += 1
+
+    return OfficialIngestionResult(
+        source_key=config.source_key,
+        status="success",
+        items_seen=len(records),
+        items_inserted=inserted,
+        items_updated=updated,
+        items_skipped=skipped,
+    )
+
+
+def ingest_fhfa_hpi(
+    session: Session,
+    source: Source,
+    config: OfficialAPIConfig,
+    settings: Settings,
+) -> OfficialIngestionResult:
+    inserted = 0
+    updated = 0
+    skipped = 0
+    records: list[StructuredObservationRecord] = []
+
+    for dataset in config.default_identifiers:
+        payload = fetch_text(build_fhfa_hpi_url(dataset), settings)
+        records.extend(normalize_fhfa_hpi_observations(config, dataset, payload, datetime.now(UTC)))
 
     for record in records:
         observation, was_inserted = upsert_structured_observation(session, source, record)
@@ -507,6 +622,118 @@ def normalize_census_eits_observations(
         )
 
     return observations
+
+
+def normalize_fhfa_hpi_observations(
+    config: OfficialAPIConfig,
+    dataset: str,
+    payload: str,
+    retrieved_at: datetime,
+) -> list[StructuredObservationRecord]:
+    if not payload.strip():
+        return []
+
+    observations: list[StructuredObservationRecord] = []
+    reader = csv.reader(payload.splitlines(), delimiter="\t")
+    for row_number, row in enumerate(reader, start=1):
+        if not row or all(not value.strip() for value in row):
+            continue
+
+        observations.extend(normalize_fhfa_hpi_row(config, dataset, row, row_number, retrieved_at))
+
+    return observations
+
+
+def normalize_fhfa_hpi_row(
+    config: OfficialAPIConfig,
+    dataset: str,
+    row: list[str],
+    row_number: int,
+    retrieved_at: datetime,
+) -> list[StructuredObservationRecord]:
+    if dataset == "state":
+        if len(row) < 4:
+            raise ValueError(f"FHFA state row {row_number} missing required columns")
+        region_code = row[0].strip().upper()
+        year = required_text(row[1], "FHFA state year")
+        quarter = required_text(row[2], "FHFA state quarter")
+        raw_value = row[3].strip()
+        value = parse_float(raw_value)
+        if value is None:
+            return []
+        region = US_STATE_NAMES.get(region_code, region_code)
+        series_id = f"FHFA_HPI:STATE:{region_code}"
+        period = build_quarter_period(year, quarter)
+        return [
+            StructuredObservationRecord(
+                source_key=config.source_key,
+                series_id=series_id,
+                series_name=f"FHFA All-Transactions HPI - {region}",
+                value=value,
+                unit="index",
+                period=period,
+                released_at=parse_quarter_period(year, quarter),
+                retrieved_at=retrieved_at,
+                region=region,
+                external_id=f"{series_id}:{period}",
+            )
+        ]
+
+    if dataset == "us_census":
+        if len(row) < 4:
+            raise ValueError(f"FHFA U.S./Census row {row_number} missing required columns")
+        region_code = row[0].strip().upper()
+        year = required_text(row[1], "FHFA U.S./Census year")
+        quarter = required_text(row[2], "FHFA U.S./Census quarter")
+        value = parse_float(row[3].strip())
+        if value is None:
+            return []
+        region = FHFA_US_CENSUS_REGION_NAMES.get(region_code, region_code)
+        series_id = f"FHFA_HPI:US_CENSUS:{region_code}"
+        period = build_quarter_period(year, quarter)
+        return [
+            StructuredObservationRecord(
+                source_key=config.source_key,
+                series_id=series_id,
+                series_name=f"FHFA All-Transactions HPI - {region}",
+                value=value,
+                unit="index",
+                period=period,
+                released_at=parse_quarter_period(year, quarter),
+                retrieved_at=retrieved_at,
+                region=region,
+                external_id=f"{series_id}:{period}",
+            )
+        ]
+
+    if dataset == "metro":
+        if len(row) < 5:
+            raise ValueError(f"FHFA metro row {row_number} missing required columns")
+        metro_name = required_text(row[0], "FHFA metro name")
+        cbsa_code = required_text(row[1], "FHFA metro CBSA code")
+        year = required_text(row[2], "FHFA metro year")
+        quarter = required_text(row[3], "FHFA metro quarter")
+        value = parse_float(row[4].strip())
+        if value is None:
+            return []
+        series_id = f"FHFA_HPI:METRO:{cbsa_code}"
+        period = build_quarter_period(year, quarter)
+        return [
+            StructuredObservationRecord(
+                source_key=config.source_key,
+                series_id=series_id,
+                series_name=f"FHFA All-Transactions HPI - {metro_name}",
+                value=value,
+                unit="index",
+                period=period,
+                released_at=parse_quarter_period(year, quarter),
+                retrieved_at=retrieved_at,
+                region=metro_name,
+                external_id=f"{series_id}:{period}",
+            )
+        ]
+
+    raise ValueError(f"Unsupported FHFA HPI dataset: {dataset}")
 
 
 def upsert_sec_submission(
@@ -693,6 +920,20 @@ def fetch_json(url: str, settings: Settings) -> dict[str, Any]:
         return json.loads(response.read().decode("utf-8"))
 
 
+def fetch_text(url: str, settings: Settings) -> str:
+    request = Request(
+        url,
+        headers={
+            "User-Agent": settings.investoragent_user_agent,
+            "Accept": "text/plain,text/csv,*/*",
+        },
+    )
+    context = ssl.create_default_context(cafile=certifi.where())
+
+    with urlopen(request, timeout=30, context=context) as response:
+        return response.read().decode("utf-8-sig")
+
+
 def build_fred_observations_url(
     config: OfficialAPIConfig,
     series_id: str,
@@ -724,6 +965,13 @@ def build_census_eits_url(
         }
     )
     return f"{config.endpoint_url}/{dataset}?{query}"
+
+
+def build_fhfa_hpi_url(dataset: str) -> str:
+    try:
+        return FHFA_HPI_DOWNLOAD_URLS[dataset]
+    except KeyError as error:
+        raise ValueError(f"Unsupported FHFA HPI dataset: {dataset}") from error
 
 
 def row_to_dict(header: list[str], row: list[Any]) -> dict[str, str | None]:
@@ -792,6 +1040,17 @@ def parse_census_period(value: str) -> datetime | None:
         year, month = value.split("-")
         return datetime(int(year), int(month), 1, tzinfo=UTC)
     return parse_iso_date(value)
+
+
+def build_quarter_period(year: str, quarter: str) -> str:
+    return f"{int(year)}Q{int(quarter)}"
+
+
+def parse_quarter_period(year: str, quarter: str) -> datetime:
+    month = ((int(quarter) - 1) * 3) + 1
+    if month < 1 or month > 10:
+        raise ValueError(f"Invalid quarter: {quarter}")
+    return datetime(int(year), month, 1, tzinfo=UTC)
 
 
 def build_sec_filing_url(cik: str, accession_number: str, primary_document: str | None) -> str:

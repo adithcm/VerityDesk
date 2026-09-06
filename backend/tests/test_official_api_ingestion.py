@@ -10,9 +10,11 @@ from app.services import official_api_ingestion
 from app.services.official_api_ingestion import (
     OfficialAPIConfig,
     build_census_eits_url,
+    build_fhfa_hpi_url,
     build_fred_observations_url,
     ingest_official_api_source,
     normalize_census_eits_observations,
+    normalize_fhfa_hpi_observations,
     normalize_fred_observations,
     normalize_sec_submissions,
 )
@@ -47,6 +49,11 @@ CENSUS_EITS_SAMPLE = [
     ["TOTAL", "1", "yes", "SOLD", "685", "no", "2026-08", "1"],
     ["TOTAL", "1", "yes", "SOLD", "NA", "no", "2026-07", "1"],
 ]
+
+
+FHFA_STATE_SAMPLE = "AZ\t2026\t1\t450.10\nAZ\t2026\t2\t451.25\nCA\t2026\t2\t-\n"
+FHFA_US_CENSUS_SAMPLE = "USA\t2026\t2\t410.50\nDV_MTN\t2026\t2\t500.25\n"
+FHFA_METRO_SAMPLE = '"Phoenix-Mesa-Chandler, AZ"\t38060\t2026\t2\t350.44\t( 4.12)\nAbilene, TX\t10180\t1975\t1\t-\t-\n'
 
 
 def build_session():
@@ -155,6 +162,83 @@ def test_normalize_census_eits_observations_rejects_malformed_response() -> None
         assert "missing required columns" in str(error)
     else:
         raise AssertionError("Expected malformed Census response to raise ValueError")
+
+
+def test_normalize_fhfa_state_observations_builds_structured_records() -> None:
+    records = normalize_fhfa_hpi_observations(
+        build_config(source_key="fhfa-hpi", connector_kind="fhfa_hpi"),
+        "state",
+        FHFA_STATE_SAMPLE,
+        datetime(2026, 9, 2, 16, 0, tzinfo=UTC),
+    )
+
+    assert len(records) == 2
+    assert records[0].source_key == "fhfa-hpi"
+    assert records[0].series_id == "FHFA_HPI:STATE:AZ"
+    assert records[0].series_name == "FHFA All-Transactions HPI - Arizona"
+    assert records[0].value == 450.10
+    assert records[0].period == "2026Q1"
+    assert records[0].released_at == datetime(2026, 1, 1, tzinfo=UTC)
+    assert records[0].region == "Arizona"
+    assert records[0].external_id == "FHFA_HPI:STATE:AZ:2026Q1"
+
+
+def test_normalize_fhfa_us_census_observations_builds_structured_records() -> None:
+    records = normalize_fhfa_hpi_observations(
+        build_config(source_key="fhfa-hpi", connector_kind="fhfa_hpi"),
+        "us_census",
+        FHFA_US_CENSUS_SAMPLE,
+        datetime(2026, 9, 2, 16, 0, tzinfo=UTC),
+    )
+
+    assert len(records) == 2
+    assert records[0].series_id == "FHFA_HPI:US_CENSUS:USA"
+    assert records[0].series_name == "FHFA All-Transactions HPI - United States"
+    assert records[0].value == 410.50
+    assert records[0].period == "2026Q2"
+    assert records[0].region == "United States"
+    assert records[1].series_name == "FHFA All-Transactions HPI - Mountain"
+
+
+def test_normalize_fhfa_metro_observations_builds_structured_records() -> None:
+    records = normalize_fhfa_hpi_observations(
+        build_config(source_key="fhfa-hpi", connector_kind="fhfa_hpi"),
+        "metro",
+        FHFA_METRO_SAMPLE,
+        datetime(2026, 9, 2, 16, 0, tzinfo=UTC),
+    )
+
+    assert len(records) == 1
+    assert records[0].series_id == "FHFA_HPI:METRO:38060"
+    assert records[0].series_name == "FHFA All-Transactions HPI - Phoenix-Mesa-Chandler, AZ"
+    assert records[0].value == 350.44
+    assert records[0].period == "2026Q2"
+    assert records[0].region == "Phoenix-Mesa-Chandler, AZ"
+
+
+def test_normalize_fhfa_hpi_observations_allows_empty_response() -> None:
+    records = normalize_fhfa_hpi_observations(
+        build_config(source_key="fhfa-hpi", connector_kind="fhfa_hpi"),
+        "state",
+        "",
+        datetime(2026, 9, 2, 16, 0, tzinfo=UTC),
+    )
+
+    assert records == []
+
+
+def test_normalize_fhfa_hpi_observations_rejects_malformed_response() -> None:
+    try:
+        normalize_fhfa_hpi_observations(
+            build_config(source_key="fhfa-hpi", connector_kind="fhfa_hpi"),
+            "metro",
+            "Phoenix-Mesa-Chandler, AZ\t38060\t2026\n",
+            datetime(2026, 9, 2, 16, 0, tzinfo=UTC),
+        )
+    except ValueError as error:
+        assert "missing required columns" in str(error)
+    else:
+        raise AssertionError("Expected malformed FHFA response to raise ValueError")
 
 
 def test_ingest_sec_submissions_persists_filings_and_dedupes(monkeypatch) -> None:
@@ -298,6 +382,38 @@ def test_ingest_census_persists_structured_observations(monkeypatch) -> None:
         assert external_id.observation_id == observation.id
 
 
+def test_ingest_fhfa_hpi_persists_structured_observations_and_dedupes(monkeypatch) -> None:
+    config = build_config(
+        source_key="fhfa-hpi",
+        source_name="FHFA House Price Index",
+        connector_kind="fhfa_hpi",
+        endpoint_url="https://www.fhfa.gov/hpi/download/quarterly_datasets",
+        default_identifiers=("state",),
+    )
+
+    def fake_fetch_text(url: str, settings: Settings):
+        assert url == "https://www.fhfa.gov/hpi/download/quarterly_datasets/hpi_at_state.txt"
+        return FHFA_STATE_SAMPLE
+
+    monkeypatch.setattr(official_api_ingestion, "fetch_text", fake_fetch_text)
+
+    with build_session() as session:
+        first_result = ingest_official_api_source(session, config)
+        second_result = ingest_official_api_source(session, config)
+
+        observations = session.scalars(select(EconomicObservation)).all()
+        external_ids = session.scalars(select(ExternalID)).all()
+
+        assert first_result.status == "success"
+        assert first_result.items_seen == 2
+        assert first_result.items_inserted == 2
+        assert second_result.items_inserted == 0
+        assert second_result.items_updated == 2
+        assert len(observations) == 2
+        assert observations[0].series_id == "FHFA_HPI:STATE:AZ"
+        assert len(external_ids) == 2
+
+
 def test_build_fred_observations_url_includes_key_and_limit() -> None:
     url = build_fred_observations_url(
         build_config(
@@ -332,12 +448,16 @@ def test_build_census_eits_url_includes_key_and_dataset() -> None:
     assert "key=test-key" in url
 
 
+def test_build_fhfa_hpi_url_returns_public_download_url() -> None:
+    assert build_fhfa_hpi_url("state") == "https://www.fhfa.gov/hpi/download/quarterly_datasets/hpi_at_state.txt"
+
+
 def test_placeholder_dataset_connector_logs_skipped_status() -> None:
     config = build_config(
-        source_key="fhfa-hpi",
-        source_name="FHFA House Price Index",
-        connector_kind="fhfa_placeholder",
-        endpoint_url="https://www.fhfa.gov/house-price-index",
+        source_key="freddie-mac-pmms",
+        source_name="Freddie Mac PMMS",
+        connector_kind="freddie_mac_placeholder",
+        endpoint_url="https://www.freddiemac.com/pmms",
         default_identifiers=(),
     )
 

@@ -78,6 +78,8 @@ Status: Complete
 
 ### 7.3 FHFA Parser Completion
 
+Status: Complete
+
 - Implement FHFA HPI parsing.
 - Normalize regions and periods.
 - Add tests for national, state, and metro-style records where available.
