@@ -94,6 +94,8 @@ Status: Complete
 
 ### 7.5 Optional Provider Connectors
 
+Status: Complete
+
 - Add or complete optional providers:
   - Alpha Vantage
   - Finnhub

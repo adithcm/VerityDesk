@@ -2797,11 +2797,19 @@ function sourceStatusSummary(source: SourceEntry, health: SourceHealthItem | und
     };
   }
 
+  if (source.requires_api_key && source.phase === "optional_v1") {
+    return {
+      label: "Ready with key",
+      description: "This optional provider is connected when its local key is available.",
+      nextStep: "Run a source refresh.",
+    };
+  }
+
   if (source.status === "optional" || source.phase === "optional_v1") {
     return {
-      label: "Scaffolded only",
-      description: "This provider is listed as an optional future connection.",
-      nextStep: "Planned after core sources are stable.",
+      label: "Available optional source",
+      description: "This optional provider can be used during source refreshes.",
+      nextStep: "Run a source refresh.",
     };
   }
 
