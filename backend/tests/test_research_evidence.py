@@ -264,6 +264,36 @@ def test_source_health_returns_citation_ready_status() -> None:
     assert results[0].latest_item_title == "Markets watch rate expectations"
 
 
+def test_source_health_reports_stale_and_failed_sources() -> None:
+    now = datetime.now(UTC)
+
+    with build_session() as session:
+        seed_evidence(session)
+        fred = session.scalar(select(Source).where(Source.name == "FRED API"))
+        assert fred is not None
+        session.add(
+            SourceHealth(
+                source=fred,
+                source_key="fred-api",
+                status="failed",
+                last_attempt_at=now - timedelta(minutes=30),
+                last_error="provider timed out",
+                freshness_window_hours=24,
+            )
+        )
+        session.commit()
+        repository = ResearchEvidenceRepository(session)
+
+        results = repository.source_health(["bbc-news-rss", "fred-api"])
+
+    assert {result.source_id: result.status for result in results} == {
+        "bbc-news-rss": "fresh",
+        "fred-api": "failed",
+    }
+    failed = next(result for result in results if result.source_id == "fred-api")
+    assert failed.last_error == "provider timed out"
+
+
 def test_recent_ingestion_runs_filter_by_source() -> None:
     with build_session() as session:
         seed_evidence(session)

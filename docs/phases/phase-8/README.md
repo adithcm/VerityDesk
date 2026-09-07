@@ -12,6 +12,7 @@ Make the agents flexible enough to understand natural-language questions, choose
 - The user wants less typing and fewer clicks.
 - The agent should be able to query beyond currently ingested local data when needed.
 - If the local database does not have the answer, the system should try approved source/API retrieval.
+- The LLM should eventually be able to perform a controlled live web lookup, similar to how Codex can search, when stored evidence and direct APIs are not enough.
 - If the system still cannot answer, it should say what is missing and what source would be needed.
 - The answer should be natural language first, with details and citations available.
 
@@ -59,7 +60,23 @@ If Arizona-specific mortgage rates are unavailable, the app should explain that 
 - Retrieve targeted source/API data when local evidence is missing.
 - Keep source compliance and storage policy rules.
 
-### 8.5 Multi-Step Agent Workflows
+### 8.5 Live Web Research Agent
+
+- Add a controlled live web research tool for the LLM/agent workflow.
+- Trigger it only when local evidence and direct source/API retrieval are missing, stale, or too narrow.
+- Search only approved credible sources or source categories.
+- Require citations for every web-derived claim.
+- Clearly label whether an answer used stored app data, direct source/API retrieval, live web retrieval, or a mix.
+- Save useful discovered metadata/excerpts when storage policy allows it.
+- Keep financial guardrails active, including no direct buy/sell/hold instructions and no unsupported price targets.
+- Add tests for:
+  - local evidence sufficient, no live web lookup
+  - local evidence missing, live web lookup triggered
+  - source allowlist/blocklist enforcement
+  - citations required
+  - graceful "I do not know yet" behavior when live lookup fails
+
+### 8.6 Multi-Step Agent Workflows
 
 - Let the coordinator plan multiple steps:
   - parse question
@@ -70,13 +87,13 @@ If Arizona-specific mortgage rates are unavailable, the app should explain that 
   - apply citations and guardrails
 - Track steps for debugging while keeping the UI simple.
 
-### 8.6 Personalized Proactive Automation
+### 8.7 Personalized Proactive Automation
 
 - Generate briefings and suggestions based on user preferences.
 - Recommend next questions and reports without requiring the user to start from scratch.
 - Reduce repeated context entry.
 
-### 8.7 Phase 8 Validation And Docs
+### 8.8 Phase 8 Validation And Docs
 
 - Add evaluation fixtures for flexible real-world questions.
 - Validate citation and guardrail behavior.
@@ -87,6 +104,7 @@ If Arizona-specific mortgage rates are unavailable, the app should explain that 
 - The normal user path is one question box.
 - The agent can infer routing without dropdowns.
 - The agent can use local data first and approved live retrieval when needed.
+- The agent can perform controlled live web research when local/direct data cannot answer the question.
 - Regional questions have clear answers or clear missing-data explanations.
 - Financial guardrails still prevent direct buy/sell/hold instructions.
 

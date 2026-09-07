@@ -318,6 +318,7 @@ User feedback driving this phase:
 
 - Agents should be able to infer what the user wants instead of requiring dropdowns.
 - Agents should know when local data is insufficient and retrieve more information from approved live sources.
+- The LLM/agents should be able to perform controlled live web research when stored data and direct APIs are not enough.
 - The user wants less typing and fewer clicks, with the app automatically selecting sources and agent workflows.
 - The system should feel proactive and personalized to the user's situation.
 
@@ -326,10 +327,12 @@ Deliverables:
 - Stronger planner/coordinator for intent, entity, region, time-window, source, and agent selection.
 - Query understanding for locations, tickers, companies, sectors, topics, and time ranges.
 - More flexible live retrieval tools for approved sources.
+- A Live Web Research Agent that can search approved credible sources, require citations, label live-web evidence clearly, and respect financial guardrails.
 - Multi-step workflows that can:
   - inspect local evidence
   - decide whether more retrieval is needed
   - run targeted source/API lookup
+  - run controlled live web research when needed
   - synthesize a final cited answer
 - Automatic source selection based on query needs.
 - Better "I do not know yet" behavior with next retrieval steps.

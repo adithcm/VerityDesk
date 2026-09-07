@@ -13,7 +13,7 @@ from app.agents.domain_agents import (
 )
 from app.agents.model_client import TemplateResearchSummarizer, extract_response_text, output_item_types
 from app.db.base import Base
-from app.db.models import Article, EconomicObservation, Source
+from app.db.models import Article, EconomicObservation, Source, SourceHealth
 from app.schemas.agent import AgentContext
 from app.services.research_evidence import ResearchEvidenceRepository
 
@@ -131,6 +131,33 @@ def seed_domain_evidence(session):
                 retrieved_at=now - timedelta(days=5),
                 region="US",
             ),
+            SourceHealth(
+                source=news_source,
+                source_key="bbc-news-rss",
+                status="fresh",
+                last_attempt_at=now - timedelta(hours=3),
+                last_success_at=now - timedelta(hours=3),
+                freshness_window_hours=24,
+                stale_after=now + timedelta(hours=21),
+            ),
+            SourceHealth(
+                source=fred_source,
+                source_key="fred-api",
+                status="fresh",
+                last_attempt_at=now - timedelta(days=1),
+                last_success_at=now - timedelta(days=1),
+                freshness_window_hours=24,
+                stale_after=now + timedelta(hours=1),
+            ),
+            SourceHealth(
+                source=sec_source,
+                source_key="sec-edgar-rss",
+                status="stale",
+                last_attempt_at=now - timedelta(days=3),
+                last_success_at=now - timedelta(days=3),
+                freshness_window_hours=24,
+                stale_after=now - timedelta(days=2),
+            ),
         ]
     )
     session.commit()
@@ -192,7 +219,20 @@ def test_market_agent_uses_market_observations() -> None:
     assert result.agent_name == "MarketAgent"
     assert "Federal Funds Rate (FEDFUNDS)" in summarizer.evidence
     assert "Unemployment Rate (UNRATE)" in summarizer.evidence
+    assert "Source fallback summary: Source path: used local stored evidence." in summarizer.evidence
     assert result.citations
+
+
+def test_domain_agent_reports_stale_source_coverage_gap() -> None:
+    with build_session() as session:
+        seed_domain_evidence(session)
+        summarizer = RecordingSummarizer()
+        agent = CompanyAgent(ResearchEvidenceRepository(session), summarizer)
+
+        result = agent.run(build_context(tickers=["AAPL"], companies=["Apple"]))
+
+    assert "Coverage gaps: stale: sec-edgar-rss." in summarizer.evidence
+    assert any("stale: sec-edgar-rss" in risk for risk in result.risks)
 
 
 def test_macro_agent_uses_macro_series() -> None:
@@ -269,6 +309,7 @@ def test_housing_agent_uses_regional_fhfa_and_national_mortgage_context() -> Non
     assert "Phoenix-Mesa-Chandler, AZ" in summarizer.evidence
     assert "Freddie Mac PMMS - 30-Year Fixed-Rate Mortgage" in summarizer.evidence
     assert "for United States" in summarizer.evidence
+    assert "local mortgage-rate data was not found" in summarizer.evidence
 
 
 def test_domain_agent_returns_missing_data_result() -> None:
@@ -280,6 +321,8 @@ def test_domain_agent_returns_missing_data_result() -> None:
     assert result.confidence == "low"
     assert result.citations == []
     assert "did not find enough current ingested evidence" in result.summary
+    assert "checked local stored evidence but found no matching records" in result.summary
+    assert result.claims[0].claim_type == "fact"
 
 
 def test_build_domain_agents_returns_all_specialists() -> None:

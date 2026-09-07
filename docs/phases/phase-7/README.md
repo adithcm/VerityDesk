@@ -119,6 +119,8 @@ Status: Complete
 
 ### 7.7 Source Fallback Strategy
 
+Status: Complete
+
 - Use local stored data first.
 - Refresh official APIs when local data is missing or stale.
 - Use approved live lookup/search where compliant and available.
