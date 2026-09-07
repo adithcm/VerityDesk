@@ -8,7 +8,7 @@ from hashlib import sha256
 from io import BytesIO
 from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 from zipfile import ZipFile
@@ -63,6 +63,10 @@ class OfficialIngestionResult:
     items_updated: int
     items_skipped: int
     error: str | None = None
+
+
+class SourceRateLimitError(ValueError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -513,10 +517,15 @@ def ingest_census_eits(
     updated = 0
     skipped = 0
     records: list[StructuredObservationRecord] = []
+    dataset_errors: list[str] = []
 
     for dataset in config.default_identifiers:
-        payload = fetch_json(build_census_eits_url(config, dataset, settings), settings)
-        records.extend(normalize_census_eits_observations(config, dataset, payload, datetime.now(UTC)))
+        try:
+            payload = fetch_json(build_census_eits_url(config, dataset, settings), settings)
+            records.extend(normalize_census_eits_observations(config, dataset, payload, datetime.now(UTC)))
+        except ValueError as error:
+            dataset_errors.append(f"{dataset}: {error}")
+            skipped += 1
 
     for record in records:
         observation, was_inserted = upsert_structured_observation(session, source, record)
@@ -529,11 +538,12 @@ def ingest_census_eits(
 
     return OfficialIngestionResult(
         source_key=config.source_key,
-        status="success",
+        status="success" if records else "failed",
         items_seen=len(records),
         items_inserted=inserted,
         items_updated=updated,
         items_skipped=skipped,
+        error="; ".join(dataset_errors) if dataset_errors else None,
     )
 
 
@@ -671,8 +681,19 @@ def ingest_gdelt_doc(
     records: list[ProviderArticleRecord] = []
     for index, query in enumerate(config.default_identifiers):
         if index:
-            time.sleep(5)
-        payload = fetch_json(build_gdelt_doc_url(config, query), settings)
+            time.sleep(6)
+        try:
+            payload = fetch_json(build_gdelt_doc_url(config, query), settings)
+        except SourceRateLimitError as error:
+            return OfficialIngestionResult(
+                source_key=config.source_key,
+                status="skipped",
+                items_seen=0,
+                items_inserted=0,
+                items_updated=0,
+                items_skipped=0,
+                error=str(error),
+            )
         records.extend(normalize_gdelt_doc(config, query, payload, datetime.now(UTC)))
     return upsert_provider_articles(session, source, config, records)
 
@@ -946,7 +967,7 @@ def normalize_freddie_mac_pmms_observations(
     if header_index is None:
         raise ValueError("Freddie Mac PMMS workbook missing date and mortgage rate columns")
 
-    header = rows[header_index]
+    header = build_pmms_header(rows, header_index)
     date_index = find_pmms_date_column(header)
     thirty_year_index = find_pmms_rate_column(header, "30")
     fifteen_year_index = find_pmms_rate_column(header, "15")
@@ -1593,10 +1614,20 @@ def fetch_json(url: str, settings: Settings) -> Any:
 
     try:
         with urlopen(request, timeout=20, context=context) as response:
-            return json.loads(response.read().decode("utf-8"))
+            body = response.read().decode("utf-8", errors="replace")
+            try:
+                return json.loads(body)
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    f"Expected JSON from {url_without_secret(url)}, but received: {body_preview(body)}"
+                ) from error
     except HTTPError as error:
         message = error.read().decode("utf-8", errors="replace")[:500]
+        if error.code == 429:
+            raise SourceRateLimitError(f"Rate limited by {url_host(url)}. Try again later.") from error
         raise ValueError(f"HTTP {error.code} from {url_without_secret(url)}: {message}") from error
+    except URLError as error:
+        raise ValueError(f"Unable to reach {url_host(url)}: {error.reason}") from error
 
 
 def fetch_text(url: str, settings: Settings) -> str:
@@ -1614,7 +1645,11 @@ def fetch_text(url: str, settings: Settings) -> str:
             return response.read().decode("utf-8-sig")
     except HTTPError as error:
         message = error.read().decode("utf-8", errors="replace")[:500]
+        if error.code == 429:
+            raise SourceRateLimitError(f"Rate limited by {url_host(url)}. Try again later.") from error
         raise ValueError(f"HTTP {error.code} from {url_without_secret(url)}: {message}") from error
+    except URLError as error:
+        raise ValueError(f"Unable to reach {url_host(url)}: {error.reason}") from error
 
 
 def fetch_bytes(url: str, settings: Settings) -> bytes:
@@ -1632,7 +1667,11 @@ def fetch_bytes(url: str, settings: Settings) -> bytes:
             return response.read()
     except HTTPError as error:
         message = error.read().decode("utf-8", errors="replace")[:500]
+        if error.code == 429:
+            raise SourceRateLimitError(f"Rate limited by {url_host(url)}. Try again later.") from error
         raise ValueError(f"HTTP {error.code} from {url_without_secret(url)}: {message}") from error
+    except URLError as error:
+        raise ValueError(f"Unable to reach {url_host(url)}: {error.reason}") from error
 
 
 def build_json_request_headers(url: str, settings: Settings) -> dict[str, str]:
@@ -1890,11 +1929,27 @@ def xlsx_column_index(cell_reference: str) -> int:
 
 def find_pmms_header_row(rows: list[list[str]]) -> int | None:
     for index, row in enumerate(rows):
-        if find_pmms_date_column(row) is not None and (
-            find_pmms_rate_column(row, "30") is not None or find_pmms_rate_column(row, "15") is not None
+        header = build_pmms_header(rows, index)
+        if find_pmms_date_column(header) is not None and (
+            find_pmms_rate_column(header, "30") is not None or find_pmms_rate_column(header, "15") is not None
         ):
             return index
     return None
+
+
+def build_pmms_header(rows: list[list[str]], header_index: int) -> list[str]:
+    start_index = max(0, header_index - 2)
+    header_rows = rows[start_index : header_index + 1]
+    column_count = max((len(row) for row in header_rows), default=0)
+    header: list[str] = []
+    for column_index in range(column_count):
+        parts = [
+            value
+            for row in header_rows
+            if (value := optional_text(value_at(row, column_index))) is not None
+        ]
+        header.append(" ".join(parts))
+    return header
 
 
 def find_pmms_date_column(header: list[str]) -> int | None:
@@ -2113,6 +2168,17 @@ def url_without_secret(url: str) -> str:
         ]
     )
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, safe_query, parsed.fragment))
+
+
+def url_host(url: str) -> str:
+    return urlsplit(url).netloc or "source"
+
+
+def body_preview(body: str) -> str:
+    text = " ".join(body.strip().split())
+    if not text:
+        return "empty response body"
+    return text[:500]
 
 
 def build_quarter_period(year: str, quarter: str) -> str:

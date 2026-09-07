@@ -39,31 +39,50 @@ def run_ingestion(session: Session, request: IngestionRunRequest) -> IngestionRu
     request_id = str(uuid4())
 
     if not run_lock.acquire(blocking=False):
-        return IngestionRunResponse(
-            request_id=request_id,
-            mode=request.mode,
-            status="already_running",
-            started_at=started_at.isoformat(),
-            completed_at=datetime.now(UTC).isoformat(),
-            results=[],
-            message="An ingestion run is already in progress.",
-        )
+        return already_running_response(request, request_id, started_at)
 
     try:
-        results = run_selected_sources(session, request)
-        completed_at = datetime.now(UTC)
-
-        return IngestionRunResponse(
-            request_id=request_id,
-            mode=request.mode,
-            status=overall_status(results),
-            started_at=started_at.isoformat(),
-            completed_at=completed_at.isoformat(),
-            results=[result.__dict__ for result in results],
-            message=build_run_message(results),
-        )
+        return run_ingestion_without_lock(session, request, request_id, started_at)
     finally:
         run_lock.release()
+
+
+def already_running_response(
+    request: IngestionRunRequest,
+    request_id: str | None = None,
+    started_at: datetime | None = None,
+) -> IngestionRunResponse:
+    started = started_at or datetime.now(UTC)
+    return IngestionRunResponse(
+        request_id=request_id or str(uuid4()),
+        mode=request.mode,
+        status="already_running",
+        started_at=started.isoformat(),
+        completed_at=datetime.now(UTC).isoformat(),
+        results=[],
+        message="An ingestion run is already in progress.",
+    )
+
+
+def run_ingestion_without_lock(
+    session: Session,
+    request: IngestionRunRequest,
+    request_id: str | None = None,
+    started_at: datetime | None = None,
+) -> IngestionRunResponse:
+    started = started_at or datetime.now(UTC)
+    results = run_selected_sources(session, request)
+    completed_at = datetime.now(UTC)
+
+    return IngestionRunResponse(
+        request_id=request_id or str(uuid4()),
+        mode=request.mode,
+        status=overall_status(results),
+        started_at=started.isoformat(),
+        completed_at=completed_at.isoformat(),
+        results=[result.__dict__ for result in results],
+        message=build_run_message(results),
+    )
 
 
 def run_selected_sources(
@@ -182,6 +201,19 @@ def update_daily_schedule_config(
 
 
 def run_due_daily_workflow(session: Session, now: datetime | None = None) -> DailyScheduleConfig:
+    if not run_lock.acquire(blocking=False):
+        return DailyScheduleConfig(
+            last_status="already_running",
+            last_message="Daily scheduler skipped this check because ingestion is already running.",
+        )
+
+    try:
+        return run_due_daily_workflow_without_lock(session, now)
+    finally:
+        run_lock.release()
+
+
+def run_due_daily_workflow_without_lock(session: Session, now: datetime | None = None) -> DailyScheduleConfig:
     current_time = now or datetime.now(UTC)
     settings = get_or_create_user_settings(session)
     if not settings.daily_schedule_enabled:
@@ -209,11 +241,11 @@ def run_due_daily_workflow(session: Session, now: datetime | None = None) -> Dai
         return settings_to_schedule_config(settings)
 
     request = IngestionRunRequest(mode=settings.daily_schedule_mode, source_keys=[])
-    response = run_ingestion(session, request)
+    response = run_ingestion_without_lock(session, request)
     report_id: int | None = None
     message = response.message
 
-    if response.status != "already_running" and settings.daily_report_enabled:
+    if settings.daily_report_enabled:
         report = generate_daily_briefing(
             session,
             DailyBriefingRequest(

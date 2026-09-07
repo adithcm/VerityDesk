@@ -173,6 +173,54 @@ def test_economic_observations_match_state_abbreviation_to_state_name() -> None:
     assert results[0].region == "Arizona"
 
 
+def test_economic_observations_filters_before_limit_for_regional_series() -> None:
+    now = datetime.now(UTC)
+
+    with build_session() as session:
+        seed_evidence(session)
+        fred = session.scalar(select(Source).where(Source.name == "FRED API"))
+        assert fred is not None
+        session.add_all(
+            [
+                EconomicObservation(
+                    source=fred,
+                    series_id=f"FHFA_HPI:METRO:{index}",
+                    series_name=f"FHFA All-Transactions HPI - Other Metro {index}",
+                    value=400 + index,
+                    unit="index",
+                    period="2026Q2",
+                    released_at=now - timedelta(days=10),
+                    retrieved_at=now - timedelta(hours=1),
+                    region=f"Other Metro {index}",
+                )
+                for index in range(300)
+            ]
+        )
+        session.add(
+            EconomicObservation(
+                source=fred,
+                series_id="FHFA_HPI:STATE:AZ",
+                series_name="FHFA All-Transactions HPI - Arizona",
+                value=731.21,
+                unit="index",
+                period="2026Q2",
+                released_at=now - timedelta(days=150),
+                retrieved_at=now - timedelta(hours=1),
+                region="Arizona",
+            )
+        )
+        session.commit()
+        repository = ResearchEvidenceRepository(session)
+
+        results = repository.economic_observations(
+            EvidenceQuery(series_ids=["FHFA_HPI:*"], regions=["Arizona"], time_window="quarter", limit=5)
+        )
+
+    assert len(results) == 1
+    assert results[0].series_id == "FHFA_HPI:STATE:AZ"
+    assert results[0].value == 731.21
+
+
 def test_economic_observations_include_national_context_for_local_region() -> None:
     now = datetime.now(UTC)
 

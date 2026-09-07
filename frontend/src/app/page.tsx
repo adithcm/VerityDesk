@@ -2816,7 +2816,7 @@ function sourceStatusSummary(source: SourceEntry, health: SourceHealthItem | und
     };
   }
 
-  if (source.access_method === "dataset_download" || errorText.includes("parser")) {
+  if (source.status !== "active" && (source.access_method === "dataset_download" || errorText.includes("parser"))) {
     return {
       label: "Parser not implemented",
       description: "The source is known, but its data parser still needs to be completed.",

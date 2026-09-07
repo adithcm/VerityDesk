@@ -46,6 +46,17 @@ def test_create_database_engine_uses_sqlite_connect_args() -> None:
     assert engine.url.database == ":memory:"
 
 
+def test_create_database_engine_configures_sqlite_for_local_concurrency() -> None:
+    engine = create_database_engine("sqlite:///:memory:")
+
+    with engine.connect() as connection:
+        busy_timeout = connection.exec_driver_sql("PRAGMA busy_timeout").scalar()
+        foreign_keys = connection.exec_driver_sql("PRAGMA foreign_keys").scalar()
+
+    assert busy_timeout == 30000
+    assert foreign_keys == 1
+
+
 def test_create_database_engine_creates_parent_directory(tmp_path: Path) -> None:
     database_path = tmp_path / "nested" / "investoragent.db"
 

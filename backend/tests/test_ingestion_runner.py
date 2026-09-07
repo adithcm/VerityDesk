@@ -146,6 +146,20 @@ def test_run_ingestion_returns_already_running_when_locked() -> None:
     assert response.message == "An ingestion run is already in progress."
 
 
+def test_run_due_daily_workflow_skips_when_ingestion_is_running() -> None:
+    acquired = ingestion_runner.run_lock.acquire(blocking=False)
+    assert acquired is True
+
+    try:
+        with build_session() as session:
+            status = ingestion_runner.run_due_daily_workflow(session, now=datetime(2026, 9, 5, 8, 5, tzinfo=UTC))
+    finally:
+        ingestion_runner.run_lock.release()
+
+    assert status.last_status == "already_running"
+    assert status.last_message == "Daily scheduler skipped this check because ingestion is already running."
+
+
 def test_trigger_ingestion_endpoint_returns_runner_response(monkeypatch) -> None:
     def fake_run_ingestion(session, request):
         return IngestionRunResponse(
@@ -248,7 +262,7 @@ def test_run_due_daily_workflow_runs_ingestion_and_report(monkeypatch) -> None:
             now=datetime(2026, 9, 4, 7, 0, tzinfo=UTC),
         )
 
-        def fake_run_ingestion(session_arg: Session, request: IngestionRunRequest) -> IngestionRunResponse:
+        def fake_run_ingestion_without_lock(session_arg: Session, request: IngestionRunRequest) -> IngestionRunResponse:
             assert session_arg is session
             assert request.mode == "rss"
             return IngestionRunResponse(
@@ -300,7 +314,7 @@ def test_run_due_daily_workflow_runs_ingestion_and_report(monkeypatch) -> None:
                 updated_at=report.updated_at.isoformat(),
             )
 
-        monkeypatch.setattr(ingestion_runner, "run_ingestion", fake_run_ingestion)
+        monkeypatch.setattr(ingestion_runner, "run_ingestion_without_lock", fake_run_ingestion_without_lock)
         monkeypatch.setattr(ingestion_runner, "generate_daily_briefing", fake_generate_daily_briefing)
 
         status = ingestion_runner.run_due_daily_workflow(session, now=datetime(2026, 9, 5, 8, 5, tzinfo=UTC))

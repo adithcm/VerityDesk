@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from html import escape
 from io import BytesIO
 from zipfile import ZipFile
 
@@ -76,6 +77,12 @@ FREDDIE_MAC_PMMS_SAMPLE = [
     ["Week", "30-Yr FRM", "30-Yr Fees/Points", "15-Yr FRM", "15-Yr Fees/Points"],
     ["2026-09-03", "6.71", "", "6.04", ""],
     ["2026-08-27", "6.66", "", "5.98", ""],
+]
+FREDDIE_MAC_PMMS_SPLIT_HEADER_SAMPLE = [
+    ["", "", "U.S.", "30 yr", "U.S.", "15 yr", "U.S."],
+    ["", "", "30 yr", "fees &", "15 yr", "fees &", "5/1"],
+    ["", "Week", "FRM", "points", "FRM", "points", "ARM"],
+    ["", "46268", "6.71", "", "6.04", "", ""],
 ]
 ALPHA_VANTAGE_NEWS_SAMPLE = {
     "feed": [
@@ -197,7 +204,7 @@ def build_xlsx(rows: list[list[str]]) -> bytes:
         for column_index, value in enumerate(row, start=1):
             reference = f"{column_name(column_index)}{row_index}"
             cells.append(
-                f'<c r="{reference}" t="inlineStr"><is><t>{value}</t></is></c>'
+                f'<c r="{reference}" t="inlineStr"><is><t>{escape(value)}</t></is></c>'
                 if value
                 else f'<c r="{reference}"/>'
             )
@@ -400,6 +407,21 @@ def test_normalize_freddie_mac_pmms_observations_builds_structured_records() -> 
     assert records[0].released_at == datetime(2026, 9, 3, tzinfo=UTC)
     assert records[0].region == "United States"
     assert records[0].external_id == "FREDDIE_PMMS:30Y_FIXED:2026-09-03"
+    assert records[1].series_id == "FREDDIE_PMMS:15Y_FIXED"
+    assert records[1].value == 6.04
+
+
+def test_normalize_freddie_mac_pmms_observations_supports_split_headers() -> None:
+    records = normalize_freddie_mac_pmms_observations(
+        build_config(source_key="freddie-mac-pmms", connector_kind="freddie_mac_pmms"),
+        build_xlsx(FREDDIE_MAC_PMMS_SPLIT_HEADER_SAMPLE),
+        datetime(2026, 9, 3, 16, 0, tzinfo=UTC),
+    )
+
+    assert len(records) == 2
+    assert records[0].series_id == "FREDDIE_PMMS:30Y_FIXED"
+    assert records[0].period == "2026-09-03"
+    assert records[0].value == 6.71
     assert records[1].series_id == "FREDDIE_PMMS:15Y_FIXED"
     assert records[1].value == 6.04
 
@@ -734,6 +756,44 @@ def test_ingest_census_persists_structured_observations(monkeypatch) -> None:
         assert observation.region == "US"
         assert external_id is not None
         assert external_id.observation_id == observation.id
+
+
+def test_ingest_census_continues_when_one_dataset_returns_empty_body(monkeypatch) -> None:
+    config = build_config(
+        source_key="census-economic-indicators",
+        source_name="U.S. Census Economic Indicators",
+        connector_kind="census_eits",
+        endpoint_url="https://api.census.gov/data/timeseries/eits",
+        required_api_key_setting="census_api_key",
+        default_identifiers=("mhs", "ressales"),
+    )
+
+    def fake_fetch_json(url: str, settings: Settings):
+        if "/mhs?" in url:
+            raise ValueError("Expected JSON from Census, but received: empty response body")
+        if "/ressales?" in url:
+            return CENSUS_EITS_SAMPLE
+        raise AssertionError(f"Unexpected Census URL: {url}")
+
+    monkeypatch.setattr(official_api_ingestion, "fetch_json", fake_fetch_json)
+
+    with build_session() as session:
+        result = ingest_official_api_source(session, config, settings=Settings(census_api_key="test-key"))
+
+        observation = session.scalar(select(EconomicObservation))
+        run = session.scalar(select(IngestionRun))
+        health = session.scalar(select(SourceHealth))
+
+        assert result.status == "success"
+        assert result.items_seen == 1
+        assert result.items_skipped == 1
+        assert result.error is not None
+        assert "mhs:" in result.error
+        assert observation is not None
+        assert run is not None
+        assert run.status == "success"
+        assert health is not None
+        assert health.status == "fresh"
 
 
 def test_ingest_fhfa_hpi_persists_structured_observations_and_dedupes(monkeypatch) -> None:

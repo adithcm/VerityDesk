@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Article, EconomicObservation, IngestionRun, SourceHealth
@@ -123,15 +123,22 @@ class ResearchEvidenceRepository:
         return sorted(filtered, key=lambda item: item.relevance_score, reverse=True)[: query.limit]
 
     def economic_observations(self, query: EvidenceQuery) -> list[EconomicObservationEvidence]:
+        statement = select(EconomicObservation).options(joinedload(EconomicObservation.source))
+
+        series_filter = observation_series_filter(query.series_ids)
+        if series_filter is not None:
+            statement = statement.where(series_filter)
+
+        region_filter = observation_region_filter(query.regions)
+        if region_filter is not None:
+            statement = statement.where(region_filter)
+
         observations = self.session.scalars(
-            select(EconomicObservation)
-            .options(joinedload(EconomicObservation.source))
-            .order_by(
+            statement.order_by(
                 desc(EconomicObservation.released_at),
                 desc(EconomicObservation.retrieved_at),
                 desc(EconomicObservation.id),
-            )
-            .limit(max(query.limit * 5, query.limit))
+            ).limit(max(query.limit * 25, 250))
         ).all()
 
         filtered = [
@@ -333,6 +340,36 @@ def matches_series_id(series_id: str, filters: list[str]) -> bool:
         if normalized_series == filter_value:
             return True
     return False
+
+
+def observation_series_filter(filters: list[str]):
+    normalized_filters = normalize_values(filters)
+    if not normalized_filters:
+        return None
+
+    conditions = []
+    for filter_value in normalized_filters:
+        if filter_value.endswith("*"):
+            conditions.append(func.lower(EconomicObservation.series_id).like(f"{filter_value[:-1]}%"))
+        else:
+            conditions.append(func.lower(EconomicObservation.series_id) == filter_value)
+    return or_(*conditions)
+
+
+def observation_region_filter(filters: list[str]):
+    expanded_filters = expand_regions(filters)
+    if not expanded_filters:
+        return None
+
+    normalized_regions = {
+        normalize_region
+        for region in expanded_filters
+        for normalize_region in region_match_values(region)
+    }
+    if not normalized_regions:
+        return None
+
+    return func.lower(EconomicObservation.region).in_(normalized_regions)
 
 
 def matches_source(source_id: str, source_ids: list[str]) -> bool:
