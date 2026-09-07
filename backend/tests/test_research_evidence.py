@@ -141,6 +141,87 @@ def test_economic_observations_filter_by_series_and_region() -> None:
     assert results[0].citation.title == "Unemployment Rate"
 
 
+def test_economic_observations_match_state_abbreviation_to_state_name() -> None:
+    now = datetime.now(UTC)
+
+    with build_session() as session:
+        seed_evidence(session)
+        fred = session.scalar(select(Source).where(Source.name == "FRED API"))
+        assert fred is not None
+        session.add(
+            EconomicObservation(
+                source=fred,
+                series_id="FHFA_HPI:STATE:AZ",
+                series_name="FHFA All-Transactions HPI - Arizona",
+                value=451.25,
+                unit="index",
+                period="2026Q2",
+                released_at=now - timedelta(days=150),
+                retrieved_at=now - timedelta(days=1),
+                region="Arizona",
+            )
+        )
+        session.commit()
+        repository = ResearchEvidenceRepository(session)
+
+        results = repository.economic_observations(
+            EvidenceQuery(series_ids=["FHFA_HPI:*"], regions=["AZ"], time_window="quarter", limit=5)
+        )
+
+    assert len(results) == 1
+    assert results[0].series_id == "FHFA_HPI:STATE:AZ"
+    assert results[0].region == "Arizona"
+
+
+def test_economic_observations_include_national_context_for_local_region() -> None:
+    now = datetime.now(UTC)
+
+    with build_session() as session:
+        seed_evidence(session)
+        fred = session.scalar(select(Source).where(Source.name == "FRED API"))
+        assert fred is not None
+        session.add_all(
+            [
+                EconomicObservation(
+                    source=fred,
+                    series_id="FHFA_HPI:METRO:38060",
+                    series_name="FHFA All-Transactions HPI - Phoenix-Mesa-Chandler, AZ",
+                    value=350.44,
+                    unit="index",
+                    period="2026Q2",
+                    released_at=now - timedelta(days=150),
+                    retrieved_at=now - timedelta(days=1),
+                    region="Phoenix-Mesa-Chandler, AZ",
+                ),
+                EconomicObservation(
+                    source=fred,
+                    series_id="FREDDIE_PMMS:30Y_FIXED",
+                    series_name="Freddie Mac PMMS - 30-Year Fixed-Rate Mortgage",
+                    value=6.71,
+                    unit="percent",
+                    period="2026-09-03",
+                    released_at=now - timedelta(days=2),
+                    retrieved_at=now - timedelta(days=1),
+                    region="United States",
+                ),
+            ]
+        )
+        session.commit()
+        repository = ResearchEvidenceRepository(session)
+
+        results = repository.economic_observations(
+            EvidenceQuery(
+                series_ids=["FHFA_HPI:*", "FREDDIE_PMMS:*"],
+                regions=["Phoenix"],
+                time_window="quarter",
+                limit=5,
+            )
+        )
+
+    assert {result.series_id for result in results} == {"FHFA_HPI:METRO:38060", "FREDDIE_PMMS:30Y_FIXED"}
+    assert results[0].region == "Phoenix-Mesa-Chandler, AZ"
+
+
 def test_economic_observations_group_to_latest_per_series_and_region() -> None:
     now = datetime.now(UTC)
 

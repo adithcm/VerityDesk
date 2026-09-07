@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AgentRun
 from app.schemas.agent import AgentContext, AgentQueryRequest, AgentResult
+from app.services.region_normalization import expand_regions, infer_regions_from_text
 
 
 class BaseAgent(Protocol):
@@ -94,6 +95,7 @@ class AgentRuntime:
 
 
 def build_agent_context(request_id: str, request: AgentQueryRequest) -> AgentContext:
+    regions = expand_regions([*request.regions, *infer_regions_from_text(request.user_query)])
     return AgentContext(
         request_id=request_id,
         user_query=request.user_query,
@@ -101,7 +103,7 @@ def build_agent_context(request_id: str, request: AgentQueryRequest) -> AgentCon
         domains=request.domains,
         tickers=request.tickers,
         companies=request.companies,
-        regions=request.regions,
+        regions=regions,
         time_window=request.time_window,
         source_ids=request.source_ids,
         safety_level=request.safety_level,

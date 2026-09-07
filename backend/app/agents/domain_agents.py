@@ -120,7 +120,7 @@ class MarketAgent(EvidenceBackedDomainAgent):
         name="MarketAgent",
         focus="Analyze market, rates, credit, sector, and broad risk signals without giving direct trading advice.",
         domains=("Markets and Rates", "Banking and Credit", "Commodities and Energy"),
-        series_ids=("FEDFUNDS", "MORTGAGE30US", "UNRATE"),
+        series_ids=("FEDFUNDS", "MORTGAGE30US", "UNRATE", "FREDDIE_PMMS:*", "ALPHA_VANTAGE:QUOTE:*", "FINNHUB:QUOTE:*"),
         default_time_window="month",
     )
 
@@ -138,10 +138,15 @@ class MacroAgent(EvidenceBackedDomainAgent):
 class HousingAgent(EvidenceBackedDomainAgent):
     config = DomainAgentConfig(
         name="HousingAgent",
-        focus="Analyze housing, mortgage-rate, real estate, construction, and affordability signals.",
+        focus=(
+            "Analyze housing, mortgage-rate, real estate, construction, and affordability signals. "
+            "When a user asks about a city or state, distinguish local house-price data from national "
+            "mortgage-rate context and state when local mortgage-rate data is not available."
+        ),
         domains=("Housing and Real Estate", "Markets and Rates", "U.S. Economy and Policy"),
-        series_ids=("MORTGAGE30US",),
+        series_ids=("MORTGAGE30US", "FREDDIE_PMMS:*", "FHFA_HPI:*", "CENSUS_EITS:MHS:*", "CENSUS_EITS:RESSALES:*"),
         default_time_window="quarter",
+        observation_limit=10,
     )
 
 
@@ -233,9 +238,10 @@ def format_evidence(
     for observation in observations:
         date = observation.released_at or observation.retrieved_at or "unknown date"
         unit = f" {observation.unit}" if observation.unit else ""
+        region = f" for {observation.region}" if observation.region else ""
         lines.append(
             f"- Economic observation: {observation.display_name} ({observation.series_id}) "
-            f"{observation.period} = {observation.value}{unit} ({observation.source_name}, {date}) - "
+            f"{observation.period}{region} = {observation.value}{unit} ({observation.source_name}, {date}) - "
             f"{observation.description}"
         )
 

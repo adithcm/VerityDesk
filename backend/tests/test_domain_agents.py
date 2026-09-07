@@ -221,6 +221,56 @@ def test_housing_agent_uses_housing_article_and_mortgage_series() -> None:
     assert "30-Year Fixed Mortgage Rate (MORTGAGE30US)" in summarizer.evidence
 
 
+def test_housing_agent_uses_regional_fhfa_and_national_mortgage_context() -> None:
+    now = datetime.now(UTC)
+
+    with build_session() as session:
+        seed_domain_evidence(session)
+        fred_source = session.query(Source).filter(Source.name == "FRED API").one()
+        session.add_all(
+            [
+                EconomicObservation(
+                    source=fred_source,
+                    series_id="FHFA_HPI:METRO:38060",
+                    series_name="FHFA All-Transactions HPI - Phoenix-Mesa-Chandler, AZ",
+                    value=350.44,
+                    unit="index",
+                    period="2026Q2",
+                    released_at=now - timedelta(days=150),
+                    retrieved_at=now - timedelta(days=1),
+                    region="Phoenix-Mesa-Chandler, AZ",
+                ),
+                EconomicObservation(
+                    source=fred_source,
+                    series_id="FREDDIE_PMMS:30Y_FIXED",
+                    series_name="Freddie Mac PMMS - 30-Year Fixed-Rate Mortgage",
+                    value=6.71,
+                    unit="percent",
+                    period="2026-09-03",
+                    released_at=now - timedelta(days=2),
+                    retrieved_at=now - timedelta(days=1),
+                    region="United States",
+                ),
+            ]
+        )
+        session.commit()
+        summarizer = RecordingSummarizer()
+        agent = HousingAgent(ResearchEvidenceRepository(session), summarizer)
+
+        result = agent.run(
+            build_context(
+                user_query="Is Phoenix housing cooling?",
+                domains=["Housing and Real Estate"],
+                regions=["Phoenix"],
+            )
+        )
+
+    assert result.agent_name == "HousingAgent"
+    assert "Phoenix-Mesa-Chandler, AZ" in summarizer.evidence
+    assert "Freddie Mac PMMS - 30-Year Fixed-Rate Mortgage" in summarizer.evidence
+    assert "for United States" in summarizer.evidence
+
+
 def test_domain_agent_returns_missing_data_result() -> None:
     with build_session() as session:
         agent = NewsDigestAgent(ResearchEvidenceRepository(session), TemplateResearchSummarizer())

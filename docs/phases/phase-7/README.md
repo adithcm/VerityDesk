@@ -106,6 +106,8 @@ Status: Complete
 
 ### 7.6 Regional Query Data Support
 
+Status: Complete
+
 - Improve region normalization for user questions.
 - Support state names, abbreviations, and metro names where data allows.
 - Add examples such as:

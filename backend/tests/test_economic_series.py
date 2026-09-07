@@ -13,3 +13,13 @@ def test_economic_series_info_falls_back_to_source_name() -> None:
     assert info.series_id == "CUSTOM_SERIES"
     assert info.label == "Custom Series Name"
     assert info.description == "Economic data series."
+
+
+def test_economic_series_info_labels_new_source_prefixes() -> None:
+    fhfa = economic_series_info("FHFA_HPI:STATE:AZ", "FHFA All-Transactions HPI - Arizona")
+    freddie = economic_series_info("FREDDIE_PMMS:30Y_FIXED", "Freddie Mac PMMS - 30-Year Fixed-Rate Mortgage")
+
+    assert fhfa.label == "FHFA All-Transactions HPI - Arizona"
+    assert fhfa.unit == "index"
+    assert freddie.label == "Freddie Mac PMMS - 30-Year Fixed-Rate Mortgage"
+    assert freddie.unit == "percent"
