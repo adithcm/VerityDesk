@@ -198,7 +198,7 @@
     "enabled_by_default": false,
     "phase": "optional_v1",
     "status": "optional",
-    "notes": "Optional provider for stock time series, fundamentals, economic indicators, and news/sentiment when the user supplies an API key."
+    "notes": "Optional free-key provider. Phase 7.5 uses NEWS_SENTIMENT topics plus TOP_GAINERS_LOSERS and GLOBAL_QUOTE snapshots for market, economy, real estate, technology, energy, and stock-analysis context. Add ALPHA_VANTAGE_API_KEY to activate."
   },
   {
     "id": "finnhub",
@@ -220,7 +220,7 @@
     "enabled_by_default": false,
     "phase": "optional_v1",
     "status": "optional",
-    "notes": "Optional provider for company news, quotes, and sentiment when the user supplies an API key."
+    "notes": "Optional free-key provider. Phase 7.5 uses company-news and quote snapshots for configured North American symbols. Add FINNHUB_API_KEY to activate."
   },
   {
     "id": "newsapi",
@@ -244,7 +244,7 @@
     "enabled_by_default": false,
     "phase": "optional_v1",
     "status": "optional",
-    "notes": "Use as article discovery and metadata, not as a full-content source."
+    "notes": "Optional free-key provider. Phase 7.5 uses the Everything endpoint plus U.S. top-headlines categories as article discovery metadata, not as a full-content source. Add NEWSAPI_KEY to activate."
   },
   {
     "id": "gdelt-cloud",
@@ -267,6 +267,6 @@
     "enabled_by_default": false,
     "phase": "optional_v1",
     "status": "optional",
-    "notes": "Use for global event/story discovery. Do not treat as a final credibility authority by itself."
+    "notes": "Optional no-key provider. Phase 7.5 uses GDELT DOC 2.0 article-list search for broad global discovery. Do not treat as a final credibility authority by itself."
   }
 ]

@@ -663,6 +663,9 @@ export default function Home() {
           intent: requestContext.intent,
           domains: [requestContext.domain],
           tickers: requestContext.tickers,
+          companies: requestContext.companies,
+          regions: requestContext.location ? [requestContext.location] : [],
+          time_window: apiTimeWindow(requestContext.timeWindow),
         }),
       });
 
@@ -2797,15 +2800,23 @@ function sourceStatusSummary(source: SourceEntry, health: SourceHealthItem | und
     };
   }
 
-  if (source.status === "optional" || source.phase === "optional_v1") {
+  if (source.requires_api_key && source.phase === "optional_v1") {
     return {
-      label: "Scaffolded only",
-      description: "This provider is listed as an optional future connection.",
-      nextStep: "Planned after core sources are stable.",
+      label: "Ready with key",
+      description: "This optional provider is connected when its local key is available.",
+      nextStep: "Run a source refresh.",
     };
   }
 
-  if (source.access_method === "dataset_download" || errorText.includes("parser")) {
+  if (source.status === "optional" || source.phase === "optional_v1") {
+    return {
+      label: "Available optional source",
+      description: "This optional provider can be used during source refreshes.",
+      nextStep: "Run a source refresh.",
+    };
+  }
+
+  if (source.status !== "active" && (source.access_method === "dataset_download" || errorText.includes("parser"))) {
     return {
       label: "Parser not implemented",
       description: "The source is known, but its data parser still needs to be completed.",
@@ -3245,9 +3256,38 @@ function inferCompanies(query: string, profile: PersonalizationProfile) {
 }
 
 function inferLocation(query: string, profile: PersonalizationProfile) {
-  const stateMatches = query.match(/\b(AZ|CA|NY|TX|FL|WA|NV|CO|UT|IL|GA|NC|MA|NJ|PA)\b/i);
+  const stateMatches = query.match(/\b(AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/i);
   if (stateMatches?.[0]) {
     return stateMatches[0].toUpperCase();
+  }
+
+  const cityMatches: Array<[string[], string]> = [
+    [["phoenix"], "Phoenix"],
+    [["austin"], "Austin"],
+    [["dallas"], "Dallas"],
+    [["houston"], "Houston"],
+    [["seattle"], "Seattle"],
+    [["denver"], "Denver"],
+    [["las vegas"], "Las Vegas"],
+    [["los angeles", "la housing"], "Los Angeles"],
+    [["san francisco"], "San Francisco"],
+    [["san diego"], "San Diego"],
+    [["new york", "nyc"], "New York"],
+    [["chicago"], "Chicago"],
+    [["miami"], "Miami"],
+    [["atlanta"], "Atlanta"],
+    [["boston"], "Boston"],
+    [["raleigh"], "Raleigh"],
+    [["charlotte"], "Charlotte"],
+    [["tampa"], "Tampa"],
+    [["orlando"], "Orlando"],
+    [["portland"], "Portland"],
+    [["washington dc", "washington, dc"], "Washington DC"],
+  ];
+  const normalizedQuery = query.toLowerCase();
+  const matchedCity = cityMatches.find(([aliases]) => aliases.some((alias) => normalizedQuery.includes(alias)));
+  if (matchedCity) {
+    return matchedCity[1];
   }
 
   if (containsAny(query.toLowerCase(), ["near me", "my area", "my city", "my state", "local", "housing", "mortgage"])) {
@@ -3295,6 +3335,22 @@ function buildInferenceExplanation(
   ].filter(Boolean);
 
   return `Auto-selected ${context.join(", ")}.`;
+}
+
+function apiTimeWindow(label: string) {
+  if (label === "Today") {
+    return "today";
+  }
+  if (label === "This week") {
+    return "week";
+  }
+  if (label === "This month") {
+    return "month";
+  }
+  if (label === "This quarter") {
+    return "quarter";
+  }
+  return "month";
 }
 
 function containsAny(value: string, terms: string[]) {

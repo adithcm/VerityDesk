@@ -1,6 +1,6 @@
 # Phase 7: Source Expansion And Parser Completion
 
-Status: Planned
+Status: Complete
 
 ## Goal
 
@@ -94,6 +94,8 @@ Status: Complete
 
 ### 7.5 Optional Provider Connectors
 
+Status: Complete
+
 - Add or complete optional providers:
   - Alpha Vantage
   - Finnhub
@@ -103,6 +105,8 @@ Status: Complete
 - Add API-key status visibility for each provider.
 
 ### 7.6 Regional Query Data Support
+
+Status: Complete
 
 - Improve region normalization for user questions.
 - Support state names, abbreviations, and metro names where data allows.
@@ -115,12 +119,16 @@ Status: Complete
 
 ### 7.7 Source Fallback Strategy
 
+Status: Complete
+
 - Use local stored data first.
 - Refresh official APIs when local data is missing or stale.
 - Use approved live lookup/search where compliant and available.
 - Explain which source path was used.
 
 ### 7.8 Phase 7 Validation And Docs
+
+Status: Complete
 
 - Run parser and ingestion tests.
 - Document configured, optional, and deferred sources.
@@ -144,3 +152,52 @@ Status: Complete
 - Optional providers fail cleanly when keys are missing.
 - The app has better regional data support.
 - The agent can access a broader evidence base for Phase 8 flexible retrieval.
+
+## Phase 7 Closeout
+
+Completed source work:
+
+- Census EITS parser for selected economic indicator datasets.
+- FHFA HPI parser for U.S./Census-region, state, and metro house-price data.
+- Freddie Mac PMMS parser for national weekly mortgage-rate data.
+- Alpha Vantage optional connector for news sentiment, market movers, and quote snapshots.
+- Finnhub optional connector for company news and quote snapshots.
+- NewsAPI optional connector for article discovery and U.S. top headlines.
+- GDELT no-key connector for broad global article discovery.
+- Regional query support for state aliases and starter metro aliases.
+- Source fallback summaries for agents and LLM prompts.
+
+Manual keys currently expected:
+
+- `FRED_API_KEY`
+- `CENSUS_API_KEY`
+- `ALPHA_VANTAGE_API_KEY`
+- `FINNHUB_API_KEY`
+- `NEWSAPI_KEY`
+
+No manual key expected:
+
+- SEC data APIs
+- BBC RSS
+- SEC EDGAR RSS
+- FHFA HPI
+- Freddie Mac PMMS
+- GDELT DOC search
+
+Validation on September 7, 2026:
+
+- `make backend-test`: 153 passed.
+- `make backend-lint`: passed.
+- `make frontend-typecheck`: passed.
+- `make frontend-build`: passed.
+- `git diff --check`: passed.
+
+Phase 8 should now focus on agent automation, controlled live web research, personalization-aware retrieval, and reducing manual UI work.
+
+Important user expectation for Phase 8 and later:
+
+- The app should feel like one clean daily intelligence desk, not a collection of source tables and manual filters.
+- The user should mostly type only the question; the app should infer sources, agents, regions, tickers, and time windows.
+- Agent responses should be concise, readable, and useful for a non-technical user.
+- The agent framework should not be limited to only the already-ingested database when evidence is missing. It should use controlled, cited live web research similar to how Codex can look things up, while preserving credibility, attribution, rate limits, and financial-advice guardrails.
+- UI cleanup after functionality lands should remove dense lists from the main path and keep detailed source/debug information behind secondary views.

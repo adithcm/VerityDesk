@@ -3,12 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Article, EconomicObservation, IngestionRun, SourceHealth
 from app.services.economic_series import economic_series_info
 from app.services.ingestion_status import build_source_health_item
+from app.services.region_normalization import expand_regions, region_match_values
 from app.services.source_catalog import load_source_catalog
 
 
@@ -122,15 +123,22 @@ class ResearchEvidenceRepository:
         return sorted(filtered, key=lambda item: item.relevance_score, reverse=True)[: query.limit]
 
     def economic_observations(self, query: EvidenceQuery) -> list[EconomicObservationEvidence]:
+        statement = select(EconomicObservation).options(joinedload(EconomicObservation.source))
+
+        series_filter = observation_series_filter(query.series_ids)
+        if series_filter is not None:
+            statement = statement.where(series_filter)
+
+        region_filter = observation_region_filter(query.regions)
+        if region_filter is not None:
+            statement = statement.where(region_filter)
+
         observations = self.session.scalars(
-            select(EconomicObservation)
-            .options(joinedload(EconomicObservation.source))
-            .order_by(
+            statement.order_by(
                 desc(EconomicObservation.released_at),
                 desc(EconomicObservation.retrieved_at),
                 desc(EconomicObservation.id),
-            )
-            .limit(max(query.limit * 5, query.limit))
+            ).limit(max(query.limit * 25, 250))
         ).all()
 
         filtered = [
@@ -179,17 +187,17 @@ class ResearchEvidenceRepository:
             and matches_source(self.source_id_for_article(article), query.source_ids)
             and matches_any(article.tickers, query.tickers)
             and matches_any(article.companies, query.companies)
-            and matches_any(article.regions, query.regions)
+            and matches_regions(article.regions, query.regions)
         )
 
     def observation_matches(self, observation: EconomicObservation, query: EvidenceQuery) -> bool:
-        if not within_time_window(observation.released_at or observation.retrieved_at, query.time_window):
+        if not within_time_window(latest_datetime(observation.released_at, observation.retrieved_at), query.time_window):
             return False
 
         return (
             matches_source(self.source_id_for_observation(observation), query.source_ids)
-            and matches_any([observation.series_id], query.series_ids)
-            and matches_any([observation.region] if observation.region else [], query.regions)
+            and matches_series_id(observation.series_id, query.series_ids)
+            and matches_regions([observation.region] if observation.region else [], query.regions)
         )
 
     def article_to_evidence(self, article: Article, query: EvidenceQuery) -> ArticleEvidence:
@@ -310,6 +318,60 @@ def matches_any(values: list[str], filters: list[str]) -> bool:
     return any(value in normalized_values for value in normalized_filters)
 
 
+def matches_regions(values: list[str], filters: list[str]) -> bool:
+    expanded_filters = expand_regions(filters)
+    if not expanded_filters:
+        return True
+
+    normalized_filters = {value for region in expanded_filters for value in region_match_values(region)}
+    normalized_values = {value for region in values for value in region_match_values(region)}
+    return bool(normalized_filters & normalized_values)
+
+
+def matches_series_id(series_id: str, filters: list[str]) -> bool:
+    normalized_filters = normalize_values(filters)
+    if not normalized_filters:
+        return True
+
+    normalized_series = normalize_value(series_id)
+    for filter_value in normalized_filters:
+        if filter_value.endswith("*") and normalized_series.startswith(filter_value[:-1]):
+            return True
+        if normalized_series == filter_value:
+            return True
+    return False
+
+
+def observation_series_filter(filters: list[str]):
+    normalized_filters = normalize_values(filters)
+    if not normalized_filters:
+        return None
+
+    conditions = []
+    for filter_value in normalized_filters:
+        if filter_value.endswith("*"):
+            conditions.append(func.lower(EconomicObservation.series_id).like(f"{filter_value[:-1]}%"))
+        else:
+            conditions.append(func.lower(EconomicObservation.series_id) == filter_value)
+    return or_(*conditions)
+
+
+def observation_region_filter(filters: list[str]):
+    expanded_filters = expand_regions(filters)
+    if not expanded_filters:
+        return None
+
+    normalized_regions = {
+        normalize_region
+        for region in expanded_filters
+        for normalize_region in region_match_values(region)
+    }
+    if not normalized_regions:
+        return None
+
+    return func.lower(EconomicObservation.region).in_(normalized_regions)
+
+
 def matches_source(source_id: str, source_ids: list[str]) -> bool:
     normalized_source_ids = normalize_values(source_ids)
     if not normalized_source_ids:
@@ -323,7 +385,7 @@ def score_article(article: Article, query: EvidenceQuery) -> int:
     score += 3 * overlap_count(article.domains, query.domains)
     score += 4 * overlap_count(article.tickers, query.tickers)
     score += 4 * overlap_count(article.companies, query.companies)
-    score += 2 * overlap_count(article.regions, query.regions)
+    score += 2 * region_overlap_count(article.regions, query.regions)
     score += 1 if article.summary else 0
     score += 1 if article.excerpt else 0
     return score
@@ -331,8 +393,10 @@ def score_article(article: Article, query: EvidenceQuery) -> int:
 
 def score_observation(observation: EconomicObservation, query: EvidenceQuery) -> int:
     score = 0
-    score += 5 * overlap_count([observation.series_id], query.series_ids)
-    score += 2 * overlap_count([observation.region] if observation.region else [], query.regions)
+    score += 5 if matches_series_id(observation.series_id, query.series_ids) and query.series_ids else 0
+    score += 3 * region_overlap_count([observation.region] if observation.region else [], query.regions)
+    if query.regions and observation.region and normalize_value(observation.region) in {"us", "usa", "united states", "us market"}:
+        score -= 1
     return score
 
 
@@ -359,6 +423,20 @@ def overlap_count(values: list[str], filters: list[str]) -> int:
 
     normalized_values = normalize_values(values)
     return sum(value in normalized_values for value in normalize_values(filters))
+
+
+def region_overlap_count(values: list[str], filters: list[str]) -> int:
+    expanded_filters = expand_regions(filters)
+    if not expanded_filters:
+        return 0
+
+    normalized_filters = {value for region in expanded_filters for value in region_match_values(region)}
+    return sum(bool(region_match_values(value) & normalized_filters) for value in values if value)
+
+
+def latest_datetime(*values: datetime | None) -> datetime | None:
+    present = [as_aware_utc(value) for value in values if value is not None]
+    return max(present) if present else None
 
 
 def within_time_window(value: datetime | None, time_window: str | None) -> bool:

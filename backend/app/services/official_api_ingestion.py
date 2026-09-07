@@ -1,12 +1,14 @@
 import csv
 import json
 import ssl
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from io import BytesIO
 from typing import Any, Literal
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 from zipfile import ZipFile
@@ -27,6 +29,10 @@ ConnectorKind = Literal[
     "census_eits",
     "fhfa_hpi",
     "freddie_mac_pmms",
+    "alpha_vantage_news_sentiment",
+    "finnhub_company_news",
+    "newsapi_everything",
+    "gdelt_doc",
 ]
 
 
@@ -57,6 +63,10 @@ class OfficialIngestionResult:
     items_updated: int
     items_skipped: int
     error: str | None = None
+
+
+class SourceRateLimitError(ValueError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -90,6 +100,36 @@ class SECSubmissionRecord:
                 self.filing_date or "",
                 self.report_date or "",
                 self.primary_document or "",
+            ]
+        )
+        return sha256(raw.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class ProviderArticleRecord:
+    source_key: str
+    title: str
+    url: str
+    publisher: str | None
+    published_at: datetime | None
+    retrieved_at: datetime
+    summary: str | None
+    excerpt: str | None
+    domains: list[str]
+    companies: list[str]
+    storage_policy: str
+    external_id: str
+    metadata: dict[str, Any]
+
+    @property
+    def content_hash(self) -> str:
+        raw = "|".join(
+            [
+                self.source_key,
+                self.external_id,
+                self.title,
+                self.url,
+                self.published_at.isoformat() if self.published_at else "",
             ]
         )
         return sha256(raw.encode("utf-8")).hexdigest()
@@ -188,6 +228,11 @@ FHFA_US_CENSUS_REGION_NAMES = {
 
 
 FREDDIE_MAC_PMMS_WORKBOOK_URL = "https://www.freddiemac.com/pmms/docs/historicalweeklydata.xlsx"
+ALPHA_VANTAGE_QUERY_URL = "https://www.alphavantage.co/query"
+FINNHUB_API_URL = "https://finnhub.io/api/v1"
+NEWSAPI_EVERYTHING_URL = "https://newsapi.org/v2/everything"
+GDELT_DOC_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
+OPTIONAL_MARKET_SYMBOLS = ("AAPL", "MSFT", "NVDA", "TSLA")
 
 
 def get_configured_official_api_sources() -> list[OfficialAPIConfig]:
@@ -225,6 +270,39 @@ def get_configured_official_api_sources() -> list[OfficialAPIConfig]:
             connector_kind="freddie_mac_pmms",
             endpoint_url=FREDDIE_MAC_PMMS_WORKBOOK_URL,
             default_identifiers=("30_year_fixed", "15_year_fixed"),
+        ),
+        build_official_api_config(
+            catalog_by_id["alpha-vantage"],
+            connector_kind="alpha_vantage_news_sentiment",
+            endpoint_url=ALPHA_VANTAGE_QUERY_URL,
+            required_api_key_setting="alpha_vantage_api_key",
+            default_identifiers=(
+                "financial_markets",
+                "economy_macro",
+                "real_estate",
+                "technology",
+                "energy_transportation",
+            ),
+        ),
+        build_official_api_config(
+            catalog_by_id["finnhub"],
+            connector_kind="finnhub_company_news",
+            endpoint_url=FINNHUB_API_URL,
+            required_api_key_setting="finnhub_api_key",
+            default_identifiers=("AAPL", "MSFT", "NVDA", "TSLA"),
+        ),
+        build_official_api_config(
+            catalog_by_id["newsapi"],
+            connector_kind="newsapi_everything",
+            endpoint_url=NEWSAPI_EVERYTHING_URL,
+            required_api_key_setting="newsapi_key",
+            default_identifiers=("markets OR economy", "housing market", "artificial intelligence"),
+        ),
+        build_official_api_config(
+            catalog_by_id["gdelt-cloud"],
+            connector_kind="gdelt_doc",
+            endpoint_url=GDELT_DOC_URL,
+            default_identifiers=("global markets", "geopolitics energy", "housing economy"),
         ),
     ]
 
@@ -317,6 +395,14 @@ def ingest_official_api_source(
             result = ingest_fhfa_hpi(session, source, config, settings)
         elif config.connector_kind == "freddie_mac_pmms":
             result = ingest_freddie_mac_pmms(session, source, config, settings)
+        elif config.connector_kind == "alpha_vantage_news_sentiment":
+            result = ingest_alpha_vantage_news_sentiment(session, source, config, settings)
+        elif config.connector_kind == "finnhub_company_news":
+            result = ingest_finnhub_company_news(session, source, config, settings)
+        elif config.connector_kind == "newsapi_everything":
+            result = ingest_newsapi_everything(session, source, config, settings)
+        elif config.connector_kind == "gdelt_doc":
+            result = ingest_gdelt_doc(session, source, config, settings)
         else:
             result = skip_placeholder_connector(session, source, config)
 
@@ -431,10 +517,15 @@ def ingest_census_eits(
     updated = 0
     skipped = 0
     records: list[StructuredObservationRecord] = []
+    dataset_errors: list[str] = []
 
     for dataset in config.default_identifiers:
-        payload = fetch_json(build_census_eits_url(config, dataset, settings), settings)
-        records.extend(normalize_census_eits_observations(config, dataset, payload, datetime.now(UTC)))
+        try:
+            payload = fetch_json(build_census_eits_url(config, dataset, settings), settings)
+            records.extend(normalize_census_eits_observations(config, dataset, payload, datetime.now(UTC)))
+        except ValueError as error:
+            dataset_errors.append(f"{dataset}: {error}")
+            skipped += 1
 
     for record in records:
         observation, was_inserted = upsert_structured_observation(session, source, record)
@@ -447,11 +538,12 @@ def ingest_census_eits(
 
     return OfficialIngestionResult(
         source_key=config.source_key,
-        status="success",
+        status="success" if records else "failed",
         items_seen=len(records),
         items_inserted=inserted,
         items_updated=updated,
         items_skipped=skipped,
+        error="; ".join(dataset_errors) if dataset_errors else None,
     )
 
 
@@ -518,6 +610,92 @@ def ingest_freddie_mac_pmms(
         items_updated=updated,
         items_skipped=skipped,
     )
+
+
+def ingest_alpha_vantage_news_sentiment(
+    session: Session,
+    source: Source,
+    config: OfficialAPIConfig,
+    settings: Settings,
+) -> OfficialIngestionResult:
+    records: list[ProviderArticleRecord] = []
+    observations: list[StructuredObservationRecord] = []
+    for topic in config.default_identifiers:
+        payload = fetch_json(build_alpha_vantage_news_sentiment_url(config, topic, settings), settings)
+        records.extend(normalize_alpha_vantage_news_sentiment(config, topic, payload, datetime.now(UTC)))
+
+    top_movers_payload = fetch_json(build_alpha_vantage_top_gainers_losers_url(config, settings), settings)
+    observations.extend(normalize_alpha_vantage_top_gainers_losers(config, top_movers_payload, datetime.now(UTC)))
+
+    for symbol in OPTIONAL_MARKET_SYMBOLS:
+        quote_payload = fetch_json(build_alpha_vantage_global_quote_url(config, symbol, settings), settings)
+        observations.extend(normalize_alpha_vantage_global_quote(config, symbol, quote_payload, datetime.now(UTC)))
+
+    article_result = upsert_provider_articles(session, source, config, records)
+    observation_result = upsert_structured_observations(session, source, config, observations)
+    return combine_ingestion_results(config.source_key, article_result, observation_result)
+
+
+def ingest_finnhub_company_news(
+    session: Session,
+    source: Source,
+    config: OfficialAPIConfig,
+    settings: Settings,
+) -> OfficialIngestionResult:
+    records: list[ProviderArticleRecord] = []
+    observations: list[StructuredObservationRecord] = []
+    for symbol in config.default_identifiers:
+        payload = fetch_json(build_finnhub_company_news_url(config, symbol, settings), settings)
+        records.extend(normalize_finnhub_company_news(config, symbol, payload, datetime.now(UTC)))
+        quote_payload = fetch_json(build_finnhub_quote_url(config, symbol, settings), settings)
+        observations.extend(normalize_finnhub_quote(config, symbol, quote_payload, datetime.now(UTC)))
+
+    article_result = upsert_provider_articles(session, source, config, records)
+    observation_result = upsert_structured_observations(session, source, config, observations)
+    return combine_ingestion_results(config.source_key, article_result, observation_result)
+
+
+def ingest_newsapi_everything(
+    session: Session,
+    source: Source,
+    config: OfficialAPIConfig,
+    settings: Settings,
+) -> OfficialIngestionResult:
+    records: list[ProviderArticleRecord] = []
+    for query in config.default_identifiers:
+        payload = fetch_json(build_newsapi_everything_url(config, query, settings), settings)
+        records.extend(normalize_newsapi_everything(config, query, payload, datetime.now(UTC)))
+
+    for category in ("business", "technology", "general"):
+        payload = fetch_json(build_newsapi_top_headlines_url(config, category, settings), settings)
+        records.extend(normalize_newsapi_everything(config, f"top-headlines:{category}", payload, datetime.now(UTC)))
+    return upsert_provider_articles(session, source, config, records)
+
+
+def ingest_gdelt_doc(
+    session: Session,
+    source: Source,
+    config: OfficialAPIConfig,
+    settings: Settings,
+) -> OfficialIngestionResult:
+    records: list[ProviderArticleRecord] = []
+    for index, query in enumerate(config.default_identifiers):
+        if index:
+            time.sleep(6)
+        try:
+            payload = fetch_json(build_gdelt_doc_url(config, query), settings)
+        except SourceRateLimitError as error:
+            return OfficialIngestionResult(
+                source_key=config.source_key,
+                status="skipped",
+                items_seen=0,
+                items_inserted=0,
+                items_updated=0,
+                items_skipped=0,
+                error=str(error),
+            )
+        records.extend(normalize_gdelt_doc(config, query, payload, datetime.now(UTC)))
+    return upsert_provider_articles(session, source, config, records)
 
 
 def skip_placeholder_connector(
@@ -789,7 +967,7 @@ def normalize_freddie_mac_pmms_observations(
     if header_index is None:
         raise ValueError("Freddie Mac PMMS workbook missing date and mortgage rate columns")
 
-    header = rows[header_index]
+    header = build_pmms_header(rows, header_index)
     date_index = find_pmms_date_column(header)
     thirty_year_index = find_pmms_rate_column(header, "30")
     fifteen_year_index = find_pmms_rate_column(header, "15")
@@ -840,6 +1018,290 @@ def normalize_freddie_mac_pmms_observations(
             )
 
     return observations
+
+
+def normalize_alpha_vantage_news_sentiment(
+    config: OfficialAPIConfig,
+    topic: str,
+    payload: dict[str, Any],
+    retrieved_at: datetime,
+) -> list[ProviderArticleRecord]:
+    if "Error Message" in payload:
+        raise ValueError(f"Alpha Vantage error: {payload['Error Message']}")
+    if "Note" in payload:
+        raise ValueError(f"Alpha Vantage limit notice: {payload['Note']}")
+
+    feed = payload.get("feed")
+    if feed is None:
+        return []
+    if not isinstance(feed, list):
+        raise ValueError("Alpha Vantage response has malformed feed")
+
+    records: list[ProviderArticleRecord] = []
+    for item in feed:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("url")
+        title = item.get("title")
+        if not url or not title:
+            continue
+        related = [
+            str(ticker.get("ticker"))
+            for ticker in item.get("ticker_sentiment", [])
+            if isinstance(ticker, dict) and ticker.get("ticker")
+        ]
+        published_at = parse_alpha_vantage_time(item.get("time_published"))
+        records.append(
+            ProviderArticleRecord(
+                source_key=config.source_key,
+                title=str(title),
+                url=str(url),
+                publisher=optional_text(item.get("source")),
+                published_at=published_at,
+                retrieved_at=retrieved_at,
+                summary=optional_text(item.get("summary")),
+                excerpt=optional_text(item.get("summary")),
+                domains=list(config.domains),
+                companies=related,
+                storage_policy=config.storage_policy,
+                external_id=f"alpha-vantage:{stable_external_part(str(url))}",
+                metadata={
+                    "topic": topic,
+                    "overall_sentiment_score": item.get("overall_sentiment_score"),
+                    "overall_sentiment_label": item.get("overall_sentiment_label"),
+                    "source_domain": item.get("source_domain"),
+                },
+            )
+        )
+    return records
+
+
+def normalize_alpha_vantage_top_gainers_losers(
+    config: OfficialAPIConfig,
+    payload: dict[str, Any],
+    retrieved_at: datetime,
+) -> list[StructuredObservationRecord]:
+    if "Error Message" in payload:
+        raise ValueError(f"Alpha Vantage error: {payload['Error Message']}")
+    if "Note" in payload:
+        raise ValueError(f"Alpha Vantage limit notice: {payload['Note']}")
+
+    observations: list[StructuredObservationRecord] = []
+    period = retrieved_at.date().isoformat()
+    groups = (
+        ("top_gainers", "Top Gainer"),
+        ("top_losers", "Top Loser"),
+        ("most_actively_traded", "Most Active"),
+    )
+    for group_key, group_name in groups:
+        group_items = payload.get(group_key, [])
+        if not isinstance(group_items, list):
+            raise ValueError(f"Alpha Vantage response has malformed {group_key}")
+        for item in group_items[:10]:
+            if not isinstance(item, dict):
+                continue
+            ticker = optional_text(item.get("ticker"))
+            change_percent = parse_percentage(item.get("change_percentage"))
+            if ticker is None or change_percent is None:
+                continue
+            normalized_ticker = normalize_series_part(ticker)
+            observations.append(
+                StructuredObservationRecord(
+                    source_key=config.source_key,
+                    series_id=f"ALPHA_VANTAGE:{group_key.upper()}:{normalized_ticker}:CHANGE_PERCENT",
+                    series_name=f"Alpha Vantage {group_name} - {ticker} Change Percent",
+                    value=change_percent,
+                    unit="percent",
+                    period=period,
+                    released_at=parse_iso_date(period),
+                    retrieved_at=retrieved_at,
+                    region="US Market",
+                    external_id=f"ALPHA_VANTAGE:{group_key}:{normalized_ticker}:{period}",
+                )
+            )
+    return observations
+
+
+def normalize_alpha_vantage_global_quote(
+    config: OfficialAPIConfig,
+    symbol: str,
+    payload: dict[str, Any],
+    retrieved_at: datetime,
+) -> list[StructuredObservationRecord]:
+    if "Error Message" in payload:
+        raise ValueError(f"Alpha Vantage error: {payload['Error Message']}")
+    if "Note" in payload:
+        raise ValueError(f"Alpha Vantage limit notice: {payload['Note']}")
+
+    quote = payload.get("Global Quote")
+    if quote is None:
+        return []
+    if not isinstance(quote, dict):
+        raise ValueError("Alpha Vantage response has malformed Global Quote")
+
+    return build_quote_observations(
+        config,
+        provider_prefix="ALPHA_VANTAGE",
+        symbol=symbol,
+        price=parse_float(str(quote.get("05. price") or "")),
+        change=parse_float(str(quote.get("09. change") or "")),
+        change_percent=parse_percentage(quote.get("10. change percent")),
+        volume=parse_float(str(quote.get("06. volume") or "")),
+        period=optional_text(quote.get("07. latest trading day")) or retrieved_at.date().isoformat(),
+        retrieved_at=retrieved_at,
+    )
+
+
+def normalize_finnhub_company_news(
+    config: OfficialAPIConfig,
+    symbol: str,
+    payload: Any,
+    retrieved_at: datetime,
+) -> list[ProviderArticleRecord]:
+    if not isinstance(payload, list):
+        raise ValueError("Finnhub company news response must be a list")
+
+    records: list[ProviderArticleRecord] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("url")
+        headline = item.get("headline")
+        if not url or not headline:
+            continue
+        news_id = str(item.get("id") or stable_external_part(str(url)))
+        records.append(
+            ProviderArticleRecord(
+                source_key=config.source_key,
+                title=str(headline),
+                url=str(url),
+                publisher=optional_text(item.get("source")),
+                published_at=parse_unix_timestamp(item.get("datetime")),
+                retrieved_at=retrieved_at,
+                summary=optional_text(item.get("summary")),
+                excerpt=optional_text(item.get("summary")),
+                domains=list(config.domains),
+                companies=[symbol],
+                storage_policy=config.storage_policy,
+                external_id=f"finnhub:{news_id}",
+                metadata={"symbol": symbol, "category": item.get("category"), "related": item.get("related")},
+            )
+        )
+    return records
+
+
+def normalize_finnhub_quote(
+    config: OfficialAPIConfig,
+    symbol: str,
+    payload: dict[str, Any],
+    retrieved_at: datetime,
+) -> list[StructuredObservationRecord]:
+    if not isinstance(payload, dict):
+        raise ValueError("Finnhub quote response must be an object")
+
+    timestamp = parse_unix_timestamp(payload.get("t"))
+    period = timestamp.date().isoformat() if timestamp else retrieved_at.date().isoformat()
+    return build_quote_observations(
+        config,
+        provider_prefix="FINNHUB",
+        symbol=symbol,
+        price=parse_float(str(payload.get("c") or "")),
+        change=parse_float(str(payload.get("d") or "")),
+        change_percent=parse_float(str(payload.get("dp") or "")),
+        volume=None,
+        period=period,
+        retrieved_at=retrieved_at,
+        released_at=timestamp,
+    )
+
+
+def normalize_newsapi_everything(
+    config: OfficialAPIConfig,
+    query: str,
+    payload: dict[str, Any],
+    retrieved_at: datetime,
+) -> list[ProviderArticleRecord]:
+    if payload.get("status") == "error":
+        raise ValueError(f"NewsAPI error: {payload.get('message') or payload.get('code')}")
+
+    articles = payload.get("articles")
+    if articles is None:
+        return []
+    if not isinstance(articles, list):
+        raise ValueError("NewsAPI response has malformed articles")
+
+    records: list[ProviderArticleRecord] = []
+    for item in articles:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("url")
+        title = item.get("title")
+        if not url or not title:
+            continue
+        source = item.get("source") if isinstance(item.get("source"), dict) else {}
+        records.append(
+            ProviderArticleRecord(
+                source_key=config.source_key,
+                title=str(title),
+                url=str(url),
+                publisher=optional_text(source.get("name")),
+                published_at=parse_iso_date(item.get("publishedAt")),
+                retrieved_at=retrieved_at,
+                summary=optional_text(item.get("description")),
+                excerpt=optional_text(item.get("content")) or optional_text(item.get("description")),
+                domains=list(config.domains),
+                companies=[],
+                storage_policy=config.storage_policy,
+                external_id=f"newsapi:{stable_external_part(f'{query}:{url}')}",
+                metadata={"query": query, "source_id": source.get("id"), "author": item.get("author")},
+            )
+        )
+    return records
+
+
+def normalize_gdelt_doc(
+    config: OfficialAPIConfig,
+    query: str,
+    payload: dict[str, Any],
+    retrieved_at: datetime,
+) -> list[ProviderArticleRecord]:
+    articles = payload.get("articles")
+    if articles is None:
+        return []
+    if not isinstance(articles, list):
+        raise ValueError("GDELT DOC response has malformed articles")
+
+    records: list[ProviderArticleRecord] = []
+    for item in articles:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("url")
+        title = item.get("title")
+        if not url or not title:
+            continue
+        records.append(
+            ProviderArticleRecord(
+                source_key=config.source_key,
+                title=str(title),
+                url=str(url),
+                publisher=optional_text(item.get("sourcecountry")) or optional_text(item.get("domain")),
+                published_at=parse_gdelt_seendate(item.get("seendate")),
+                retrieved_at=retrieved_at,
+                summary=None,
+                excerpt=None,
+                domains=list(config.domains),
+                companies=[],
+                storage_policy=config.storage_policy,
+                external_id=f"gdelt:{stable_external_part(f'{query}:{url}')}",
+                metadata={
+                    "query": query,
+                    "domain": item.get("domain"),
+                    "language": item.get("language"),
+                    "source_country": item.get("sourcecountry"),
+                },
+            )
+        )
+    return records
 
 
 def upsert_sec_submission(
@@ -896,6 +1358,137 @@ def upsert_sec_submission(
         entity_type="sec_submission",
         article=article,
         metadata={"cik": record.cik, "form": record.form, "filing_date": record.filing_date},
+    )
+    return article, was_inserted
+
+
+def upsert_provider_articles(
+    session: Session,
+    source: Source,
+    config: OfficialAPIConfig,
+    records: list[ProviderArticleRecord],
+) -> OfficialIngestionResult:
+    inserted = 0
+    updated = 0
+    skipped = 0
+
+    for record in records:
+        article, was_inserted = upsert_provider_article(session, source, record)
+        if article is None:
+            skipped += 1
+        elif was_inserted:
+            inserted += 1
+        else:
+            updated += 1
+
+    return OfficialIngestionResult(
+        source_key=config.source_key,
+        status="success",
+        items_seen=len(records),
+        items_inserted=inserted,
+        items_updated=updated,
+        items_skipped=skipped,
+    )
+
+
+def upsert_structured_observations(
+    session: Session,
+    source: Source,
+    config: OfficialAPIConfig,
+    records: list[StructuredObservationRecord],
+) -> OfficialIngestionResult:
+    inserted = 0
+    updated = 0
+    skipped = 0
+
+    for record in records:
+        observation, was_inserted = upsert_structured_observation(session, source, record)
+        if observation is None:
+            skipped += 1
+        elif was_inserted:
+            inserted += 1
+        else:
+            updated += 1
+
+    return OfficialIngestionResult(
+        source_key=config.source_key,
+        status="success",
+        items_seen=len(records),
+        items_inserted=inserted,
+        items_updated=updated,
+        items_skipped=skipped,
+    )
+
+
+def combine_ingestion_results(source_key: str, *results: OfficialIngestionResult) -> OfficialIngestionResult:
+    errors = [result.error for result in results if result.error]
+    return OfficialIngestionResult(
+        source_key=source_key,
+        status="success",
+        items_seen=sum(result.items_seen for result in results),
+        items_inserted=sum(result.items_inserted for result in results),
+        items_updated=sum(result.items_updated for result in results),
+        items_skipped=sum(result.items_skipped for result in results),
+        error="; ".join(errors) if errors else None,
+    )
+
+
+def upsert_provider_article(
+    session: Session,
+    source: Source,
+    record: ProviderArticleRecord,
+) -> tuple[Article | None, bool]:
+    existing_external_id = session.scalar(
+        select(ExternalID).where(
+            ExternalID.source_key == record.source_key,
+            ExternalID.external_id == record.external_id,
+            ExternalID.entity_type == "provider_article",
+        )
+    )
+
+    if existing_external_id and existing_external_id.article:
+        article = existing_external_id.article
+        article.retrieved_at = record.retrieved_at
+        article.summary = record.summary or article.summary
+        article.excerpt = record.excerpt or article.excerpt
+        article.content_hash = record.content_hash
+        return article, False
+
+    article = session.scalar(select(Article).where(Article.url == record.url))
+    was_inserted = article is None
+
+    if article is None:
+        article = Article(
+            source=source,
+            title=record.title,
+            url=record.url,
+            canonical_url=record.url,
+            publisher=record.publisher or source.name,
+            published_at=record.published_at,
+            retrieved_at=record.retrieved_at,
+            summary=record.summary,
+            excerpt=record.excerpt,
+            domains=record.domains,
+            companies=record.companies,
+            content_hash=record.content_hash,
+            dedupe_group_id=record.external_id,
+            storage_policy=record.storage_policy,
+        )
+        session.add(article)
+        session.flush()
+    else:
+        article.retrieved_at = record.retrieved_at
+        article.summary = record.summary or article.summary
+        article.excerpt = record.excerpt or article.excerpt
+        article.content_hash = record.content_hash
+
+    ensure_external_id(
+        session,
+        source_key=record.source_key,
+        external_id=record.external_id,
+        entity_type="provider_article",
+        article=article,
+        metadata=record.metadata,
     )
     return article, was_inserted
 
@@ -1012,18 +1605,29 @@ def missing_required_api_key(config: OfficialAPIConfig, settings: Settings) -> s
     return f"Missing required API key setting: {config.required_api_key_setting.upper()}"
 
 
-def fetch_json(url: str, settings: Settings) -> dict[str, Any]:
+def fetch_json(url: str, settings: Settings) -> Any:
     request = Request(
         url,
-        headers={
-            "User-Agent": settings.investoragent_user_agent,
-            "Accept": "application/json",
-        },
+        headers=build_json_request_headers(url, settings),
     )
     context = ssl.create_default_context(cafile=certifi.where())
 
-    with urlopen(request, timeout=20, context=context) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urlopen(request, timeout=20, context=context) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            try:
+                return json.loads(body)
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    f"Expected JSON from {url_without_secret(url)}, but received: {body_preview(body)}"
+                ) from error
+    except HTTPError as error:
+        message = error.read().decode("utf-8", errors="replace")[:500]
+        if error.code == 429:
+            raise SourceRateLimitError(f"Rate limited by {url_host(url)}. Try again later.") from error
+        raise ValueError(f"HTTP {error.code} from {url_without_secret(url)}: {message}") from error
+    except URLError as error:
+        raise ValueError(f"Unable to reach {url_host(url)}: {error.reason}") from error
 
 
 def fetch_text(url: str, settings: Settings) -> str:
@@ -1036,8 +1640,16 @@ def fetch_text(url: str, settings: Settings) -> str:
     )
     context = ssl.create_default_context(cafile=certifi.where())
 
-    with urlopen(request, timeout=30, context=context) as response:
-        return response.read().decode("utf-8-sig")
+    try:
+        with urlopen(request, timeout=30, context=context) as response:
+            return response.read().decode("utf-8-sig")
+    except HTTPError as error:
+        message = error.read().decode("utf-8", errors="replace")[:500]
+        if error.code == 429:
+            raise SourceRateLimitError(f"Rate limited by {url_host(url)}. Try again later.") from error
+        raise ValueError(f"HTTP {error.code} from {url_without_secret(url)}: {message}") from error
+    except URLError as error:
+        raise ValueError(f"Unable to reach {url_host(url)}: {error.reason}") from error
 
 
 def fetch_bytes(url: str, settings: Settings) -> bytes:
@@ -1050,8 +1662,27 @@ def fetch_bytes(url: str, settings: Settings) -> bytes:
     )
     context = ssl.create_default_context(cafile=certifi.where())
 
-    with urlopen(request, timeout=30, context=context) as response:
-        return response.read()
+    try:
+        with urlopen(request, timeout=30, context=context) as response:
+            return response.read()
+    except HTTPError as error:
+        message = error.read().decode("utf-8", errors="replace")[:500]
+        if error.code == 429:
+            raise SourceRateLimitError(f"Rate limited by {url_host(url)}. Try again later.") from error
+        raise ValueError(f"HTTP {error.code} from {url_without_secret(url)}: {message}") from error
+    except URLError as error:
+        raise ValueError(f"Unable to reach {url_host(url)}: {error.reason}") from error
+
+
+def build_json_request_headers(url: str, settings: Settings) -> dict[str, str]:
+    headers = {
+        "User-Agent": settings.investoragent_user_agent,
+        "Accept": "application/json",
+    }
+    if urlsplit(url).netloc == "newsapi.org" and settings.newsapi_key:
+        headers["User-Agent"] = "InvestorAgent/0.1"
+        headers["X-Api-Key"] = settings.newsapi_key
+    return headers
 
 
 def build_fred_observations_url(
@@ -1092,6 +1723,127 @@ def build_fhfa_hpi_url(dataset: str) -> str:
         return FHFA_HPI_DOWNLOAD_URLS[dataset]
     except KeyError as error:
         raise ValueError(f"Unsupported FHFA HPI dataset: {dataset}") from error
+
+
+def build_alpha_vantage_news_sentiment_url(
+    config: OfficialAPIConfig,
+    topic: str,
+    settings: Settings,
+) -> str:
+    query = urlencode(
+        {
+            "function": "NEWS_SENTIMENT",
+            "topics": topic,
+            "sort": "LATEST",
+            "limit": "25",
+            "apikey": settings.alpha_vantage_api_key,
+        }
+    )
+    return f"{config.endpoint_url}?{query}"
+
+
+def build_alpha_vantage_top_gainers_losers_url(
+    config: OfficialAPIConfig,
+    settings: Settings,
+) -> str:
+    query = urlencode(
+        {
+            "function": "TOP_GAINERS_LOSERS",
+            "apikey": settings.alpha_vantage_api_key,
+        }
+    )
+    return f"{config.endpoint_url}?{query}"
+
+
+def build_alpha_vantage_global_quote_url(
+    config: OfficialAPIConfig,
+    symbol: str,
+    settings: Settings,
+) -> str:
+    query = urlencode(
+        {
+            "function": "GLOBAL_QUOTE",
+            "symbol": symbol,
+            "apikey": settings.alpha_vantage_api_key,
+        }
+    )
+    return f"{config.endpoint_url}?{query}"
+
+
+def build_finnhub_company_news_url(
+    config: OfficialAPIConfig,
+    symbol: str,
+    settings: Settings,
+) -> str:
+    end_date = datetime.now(UTC).date()
+    start_date = end_date - timedelta(days=3)
+    query = urlencode(
+        {
+            "symbol": symbol,
+            "from": start_date.isoformat(),
+            "to": end_date.isoformat(),
+            "token": settings.finnhub_api_key,
+        }
+    )
+    return f"{config.endpoint_url}/company-news?{query}"
+
+
+def build_finnhub_quote_url(
+    config: OfficialAPIConfig,
+    symbol: str,
+    settings: Settings,
+) -> str:
+    query = urlencode(
+        {
+            "symbol": symbol,
+            "token": settings.finnhub_api_key,
+        }
+    )
+    return f"{config.endpoint_url}/quote?{query}"
+
+
+def build_newsapi_everything_url(
+    config: OfficialAPIConfig,
+    query_text: str,
+    settings: Settings,
+) -> str:
+    query = urlencode(
+        {
+            "q": query_text,
+            "language": "en",
+            "sortBy": "publishedAt",
+            "pageSize": "25",
+        }
+    )
+    return f"{config.endpoint_url}?{query}"
+
+
+def build_newsapi_top_headlines_url(
+    config: OfficialAPIConfig,
+    category: str,
+    settings: Settings,
+) -> str:
+    query = urlencode(
+        {
+            "country": "us",
+            "category": category,
+            "pageSize": "25",
+        }
+    )
+    return "https://newsapi.org/v2/top-headlines?" + query
+
+
+def build_gdelt_doc_url(config: OfficialAPIConfig, query_text: str) -> str:
+    query = urlencode(
+        {
+            "query": query_text,
+            "mode": "ArtList",
+            "format": "json",
+            "maxrecords": "25",
+            "sort": "HybridRel",
+        }
+    )
+    return f"{config.endpoint_url}?{query}"
 
 
 def parse_xlsx_rows(workbook: bytes) -> list[list[str]]:
@@ -1177,11 +1929,27 @@ def xlsx_column_index(cell_reference: str) -> int:
 
 def find_pmms_header_row(rows: list[list[str]]) -> int | None:
     for index, row in enumerate(rows):
-        if find_pmms_date_column(row) is not None and (
-            find_pmms_rate_column(row, "30") is not None or find_pmms_rate_column(row, "15") is not None
+        header = build_pmms_header(rows, index)
+        if find_pmms_date_column(header) is not None and (
+            find_pmms_rate_column(header, "30") is not None or find_pmms_rate_column(header, "15") is not None
         ):
             return index
     return None
+
+
+def build_pmms_header(rows: list[list[str]], header_index: int) -> list[str]:
+    start_index = max(0, header_index - 2)
+    header_rows = rows[start_index : header_index + 1]
+    column_count = max((len(row) for row in header_rows), default=0)
+    header: list[str] = []
+    for column_index in range(column_count):
+        parts = [
+            value
+            for row in header_rows
+            if (value := optional_text(value_at(row, column_index))) is not None
+        ]
+        header.append(" ".join(parts))
+    return header
 
 
 def find_pmms_date_column(header: list[str]) -> int | None:
@@ -1220,6 +1988,54 @@ def parse_float(value: str) -> float | None:
         return float(value.replace(",", ""))
     except ValueError:
         return None
+
+
+def parse_percentage(value: Any | None) -> float | None:
+    if value is None:
+        return None
+    return parse_float(str(value).replace("%", "").strip())
+
+
+def build_quote_observations(
+    config: OfficialAPIConfig,
+    *,
+    provider_prefix: str,
+    symbol: str,
+    price: float | None,
+    change: float | None,
+    change_percent: float | None,
+    volume: float | None,
+    period: str,
+    retrieved_at: datetime,
+    released_at: datetime | None = None,
+) -> list[StructuredObservationRecord]:
+    values = (
+        ("PRICE", "Price", price, "currency"),
+        ("CHANGE", "Change", change, "currency"),
+        ("CHANGE_PERCENT", "Change Percent", change_percent, "percent"),
+        ("VOLUME", "Volume", volume, "shares"),
+    )
+    observations: list[StructuredObservationRecord] = []
+    normalized_symbol = normalize_series_part(symbol)
+    for metric_key, metric_name, value, unit in values:
+        if value is None:
+            continue
+        series_id = f"{provider_prefix}:QUOTE:{normalized_symbol}:{metric_key}"
+        observations.append(
+            StructuredObservationRecord(
+                source_key=config.source_key,
+                series_id=series_id,
+                series_name=f"{provider_prefix.replace('_', ' ').title()} Quote - {symbol} {metric_name}",
+                value=value,
+                unit=unit,
+                period=period,
+                released_at=released_at or parse_iso_date(period),
+                retrieved_at=retrieved_at,
+                region="US Market",
+                external_id=f"{series_id}:{period}",
+            )
+        )
+    return observations
 
 
 def normalize_census_region(values: dict[str, str | None]) -> str | None:
@@ -1297,6 +2113,72 @@ def parse_pmms_date(value: Any | None) -> datetime | None:
             continue
 
     return None
+
+
+def parse_alpha_vantage_time(value: Any | None) -> datetime | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if len(text) != 15 or "T" not in text:
+        return parse_iso_date(text)
+    try:
+        return datetime.strptime(text, "%Y%m%dT%H%M%S").replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
+def parse_unix_timestamp(value: Any | None) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromtimestamp(int(value), tz=UTC)
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def parse_gdelt_seendate(value: Any | None) -> datetime | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    for date_format in ("%Y%m%dT%H%M%SZ", "%Y%m%d%H%M%S", "%Y%m%d"):
+        try:
+            return datetime.strptime(text, date_format).replace(tzinfo=UTC)
+        except ValueError:
+            continue
+    return parse_iso_date(text)
+
+
+def optional_text(value: Any | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def stable_external_part(value: str) -> str:
+    return sha256(value.encode("utf-8")).hexdigest()
+
+
+def url_without_secret(url: str) -> str:
+    parsed = urlsplit(url)
+    safe_query = urlencode(
+        [
+            (key, "[redacted]" if key.lower() in {"apikey", "api_key", "token", "key"} else value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        ]
+    )
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, safe_query, parsed.fragment))
+
+
+def url_host(url: str) -> str:
+    return urlsplit(url).netloc or "source"
+
+
+def body_preview(body: str) -> str:
+    text = " ".join(body.strip().split())
+    if not text:
+        return "empty response body"
+    return text[:500]
 
 
 def build_quarter_period(year: str, quarter: str) -> str:

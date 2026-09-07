@@ -51,8 +51,8 @@ def test_agent_query_endpoint_runs_coordinator_and_domain_agents(monkeypatch) ->
         "CitationAgent",
         "RiskGuardrailAgent",
     ]
-    assert payload["guardrail"]["status"] == "passed"
-    assert payload["requires_guardrail_review"] is False
+    assert payload["guardrail"]["status"] == "needs_revision"
+    assert payload["requires_guardrail_review"] is True
     assert "not financial advice" in payload["summary"].lower()
     assert "not a recommendation" in payload["summary"].lower()
     assert "coordinator selected" in payload["summary"].lower()

@@ -52,9 +52,22 @@ def test_build_agent_context_carries_request_fields() -> None:
     assert context.intent == "market_research"
     assert context.domains == ["Markets and Rates"]
     assert context.tickers == ["SPY"]
-    assert context.regions == ["US"]
+    assert "US" in context.regions
     assert context.time_window == "today"
     assert context.safety_level == "investment_research"
+
+
+def test_build_agent_context_infers_regions_from_user_query() -> None:
+    request = AgentQueryRequest(
+        user_query="How is Phoenix housing compared with mortgage rates?",
+        intent="housing_macro_research",
+    )
+
+    context = build_agent_context("request-region", request)
+
+    assert "Phoenix-Mesa-Chandler, AZ" in context.regions
+    assert "Arizona" in context.regions
+    assert "United States" in context.regions
 
 
 def test_agent_registry_registers_and_retrieves_agents() -> None:

@@ -37,6 +37,32 @@ def economic_series_info(series_id: str, fallback_name: str | None = None) -> Ec
     normalized = series_id.strip().upper()
     if normalized in ECONOMIC_SERIES_LABELS:
         return ECONOMIC_SERIES_LABELS[normalized]
+    if normalized.startswith("FHFA_HPI:"):
+        return EconomicSeriesInfo(
+            series_id=normalized,
+            label=fallback_name or "FHFA House Price Index",
+            description="FHFA house price index observation for the selected geography.",
+            unit="index",
+        )
+    if normalized.startswith("FREDDIE_PMMS:"):
+        return EconomicSeriesInfo(
+            series_id=normalized,
+            label=fallback_name or "Freddie Mac PMMS Mortgage Rate",
+            description="National weekly Freddie Mac Primary Mortgage Market Survey rate.",
+            unit="percent",
+        )
+    if normalized.startswith("CENSUS_EITS:"):
+        return EconomicSeriesInfo(
+            series_id=normalized,
+            label=fallback_name or "Census Economic Indicator",
+            description="U.S. Census economic indicator observation.",
+        )
+    if normalized.startswith("ALPHA_VANTAGE:QUOTE:") or normalized.startswith("FINNHUB:QUOTE:"):
+        return EconomicSeriesInfo(
+            series_id=normalized,
+            label=fallback_name or "Market Quote Snapshot",
+            description="Provider quote snapshot for the selected security.",
+        )
 
     return EconomicSeriesInfo(
         series_id=normalized,
