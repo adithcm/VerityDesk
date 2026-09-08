@@ -197,11 +197,14 @@ Status: Complete
 
 ### 8.7 Personalization-Aware Research
 
+Status: Complete
+
 - Use the user's saved interests, regions, watchlist, goals, and risk preferences to shape research.
 - Let the app proactively know what the user likely cares about.
 - Use personalization to choose default regions, companies, sectors, sources, and report style.
 - Avoid requiring the user to repeatedly type context they already supplied.
 - Keep personalization transparent and editable.
+- Add backend preference APIs for saved watchlists, preferred regions, and enabled sources.
 
 ### 8.8 Proactive And Automated Daily Intelligence
 
@@ -233,6 +236,7 @@ Status: Complete
 - [Milestone 8.4: Direct API and local evidence fusion](milestones/8.4-direct-api-and-local-evidence-fusion.md)
 - [Milestone 8.5: Automatic agent routing and multi-agent execution](milestones/8.5-automatic-agent-routing-and-multi-agent-execution.md)
 - [Milestone 8.6: Clean LLM answer synthesis](milestones/8.6-clean-llm-answer-synthesis.md)
+- [Milestone 8.7: Personalization-aware research](milestones/8.7-personalization-aware-research.md)
 
 ## Definition Of Done
 

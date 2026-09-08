@@ -31,6 +31,7 @@ from app.services.guardrails import (
     enforce_agent_guardrails,
     find_banned_direct_advice_phrases,
 )
+from app.services.personalization import personalize_agent_request
 from app.services.research_evidence import ResearchEvidenceRepository
 from app.services.research_workflow import build_research_workflow_plan
 
@@ -397,6 +398,8 @@ def build_placeholder_summary(context: AgentContext) -> str:
 
 def run_agent_query(request: AgentQueryRequest, session: Session | None = None) -> AgentQueryResponse:
     request_id = str(uuid4())
+    if session is not None:
+        request = personalize_agent_request(request, session)
     context = build_agent_context(request_id, request)
     runtime = AgentRuntime(build_default_registry(session), AgentRunLogger(session))
     results = [runtime.run("CoordinatorAgent", context)]
