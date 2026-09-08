@@ -97,6 +97,8 @@ Status: Complete
 
 ### 8.2 Query Understanding And Research Planning
 
+Status: Complete
+
 - Extract intent, topic, entities, tickers, companies, regions, sectors, time horizon, and answer style from user questions.
 - Infer when the user wants current web research, official data, market analysis, local/regional context, or a personal briefing.
 - Support plain-language regions such as "Arizona," "AZ," "Phoenix," and "Phoenix metro."
@@ -215,6 +217,7 @@ Status: Complete
 ## Milestone Docs
 
 - [Milestone 8.1: Agent architecture reset](milestones/8.1-agent-architecture-reset.md)
+- [Milestone 8.2: Query understanding and research planning](milestones/8.2-query-understanding-and-research-planning.md)
 
 ## Definition Of Done
 

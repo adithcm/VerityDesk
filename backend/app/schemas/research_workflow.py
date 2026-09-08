@@ -18,6 +18,7 @@ ResearchWorkflowStepType = Literal[
 ResearchWorkflowStepStatus = Literal["planned", "running", "complete", "skipped", "failed"]
 RetrievalChannel = Literal["live_web", "direct_api", "local_cache"]
 AnswerStyle = Literal["brief", "standard", "deep_dive"]
+EvidenceFreshnessNeed = Literal["current", "recent", "historical"]
 
 
 class ResearchWorkflowStep(BaseModel):
@@ -37,6 +38,21 @@ class EvidenceNeed(BaseModel):
     required: bool = True
 
 
+class QueryUnderstanding(BaseModel):
+    inferred_intent: str
+    topics: list[str] = Field(default_factory=list)
+    domains: list[str] = Field(default_factory=list)
+    tickers: list[str] = Field(default_factory=list)
+    companies: list[str] = Field(default_factory=list)
+    regions: list[str] = Field(default_factory=list)
+    sectors: list[str] = Field(default_factory=list)
+    time_window: str | None = None
+    freshness_need: EvidenceFreshnessNeed = "recent"
+    answer_style: AnswerStyle = "standard"
+    requires_live_web: bool = False
+    reasoning: str
+
+
 class ResearchWorkflowPlan(BaseModel):
     request_id: str
     user_query: str
@@ -47,6 +63,8 @@ class ResearchWorkflowPlan(BaseModel):
     regions: list[str] = Field(default_factory=list)
     time_window: str | None = None
     answer_style: AnswerStyle = "standard"
+    query_understanding: QueryUnderstanding | None = None
+    requires_live_web: bool = False
     retrieval_priority: list[RetrievalChannel] = Field(default_factory=list)
     evidence_needs: list[EvidenceNeed] = Field(default_factory=list)
     specialist_agents: list[str] = Field(default_factory=list)

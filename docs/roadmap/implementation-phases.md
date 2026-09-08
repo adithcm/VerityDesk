@@ -353,6 +353,7 @@ Deliverables:
 Completed milestones:
 
 - [Milestone 8.1: Agent architecture reset](../phases/phase-8/milestones/8.1-agent-architecture-reset.md).
+- [Milestone 8.2: Query understanding and research planning](../phases/phase-8/milestones/8.2-query-understanding-and-research-planning.md).
 
 Not in scope:
 
