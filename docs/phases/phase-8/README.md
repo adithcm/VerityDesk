@@ -128,6 +128,8 @@ Status: Complete
 
 ### 8.4 Direct API And Local Evidence Fusion
 
+Status: Complete
+
 - Keep Phase 7 APIs active as supporting evidence:
   - FRED
   - Census
@@ -143,6 +145,7 @@ Status: Complete
 - Detect conflicts between web claims and structured official data.
 - Rank evidence by source quality, recency, relevance, and specificity.
 - Explain when a data point is national, state, metro, company-specific, or market-wide.
+- Feed the fused evidence packet into the LLM synthesis path so normal chat can use live web plus API/local data together.
 
 ### 8.5 Automatic Agent Routing And Multi-Agent Execution
 
@@ -221,6 +224,7 @@ Status: Complete
 - [Milestone 8.1: Agent architecture reset](milestones/8.1-agent-architecture-reset.md)
 - [Milestone 8.2: Query understanding and research planning](milestones/8.2-query-understanding-and-research-planning.md)
 - [Milestone 8.3: Controlled live web research](milestones/8.3-controlled-live-web-research.md)
+- [Milestone 8.4: Direct API and local evidence fusion](milestones/8.4-direct-api-and-local-evidence-fusion.md)
 
 ## Definition Of Done
 

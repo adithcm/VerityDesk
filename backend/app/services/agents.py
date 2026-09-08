@@ -22,8 +22,10 @@ from app.schemas.agent import (
     AgentRunHistoryResponse,
     AgentRunRecord,
 )
+from app.schemas.evidence_packet import EvidencePacket
 from app.services.agent_runtime import AgentRegistry, AgentRunLogger, AgentRuntime, build_agent_context
 from app.services.citations import format_sources_section
+from app.services.evidence_fusion import build_evidence_packet
 from app.services.guardrails import FINANCIAL_DISCLAIMER, enforce_agent_guardrails
 from app.services.research_evidence import ResearchEvidenceRepository
 from app.services.research_workflow import build_research_workflow_plan
@@ -45,7 +47,7 @@ class CoordinatorAgent:
             ),
             confidence="medium",
             risks=[
-                "Phase 8 planning is deterministic until live web retrieval is implemented in later milestones.",
+                "Live web retrieval depends on a configured search provider API key.",
             ],
         )
 
@@ -70,10 +72,14 @@ def build_agent_response(
     request_id: str,
     results: list[AgentResult],
     request: AgentQueryRequest | None = None,
+    evidence_packet: EvidencePacket | None = None,
 ) -> AgentQueryResponse:
-    citations = dedupe_citations([citation for result in results for citation in result.citations])
+    citations = dedupe_citations(
+        [citation for result in results for citation in result.citations]
+        + (evidence_packet.citations if evidence_packet is not None else [])
+    )
     confidence = combined_confidence(results)
-    summary = synthesize_agent_results(results, citations, request)
+    summary = synthesize_agent_results(results, citations, request, evidence_packet)
     guardrail = enforce_agent_guardrails(
         summary,
         request=request or AgentQueryRequest(user_query="unspecified agent request"),
@@ -102,6 +108,7 @@ def synthesize_agent_results(
     results: list[AgentResult],
     citations: list[AgentCitation] | None = None,
     request: AgentQueryRequest | None = None,
+    evidence_packet: EvidencePacket | None = None,
 ) -> str:
     coordinator = next((result for result in results if result.agent_name == "CoordinatorAgent"), None)
     specialist_results = [result for result in results if result.agent_name != "CoordinatorAgent"]
@@ -124,6 +131,7 @@ def synthesize_agent_results(
             specialist_results,
             citations or [],
             request or AgentQueryRequest(user_query="unspecified agent request"),
+            evidence_packet,
         )
     )
 
@@ -141,8 +149,9 @@ def build_natural_language_answer(
     specialist_results: list[AgentResult],
     citations: list[AgentCitation],
     request: AgentQueryRequest,
+    evidence_packet: EvidencePacket | None = None,
 ) -> str:
-    evidence = format_synthesis_evidence(specialist_results, citations, request)
+    evidence = format_synthesis_evidence(specialist_results, citations, request, evidence_packet)
     if not evidence.strip():
         return "I do not have enough current source-backed evidence to answer this yet. Run ingestion first, then ask again."
 
@@ -150,7 +159,8 @@ def build_natural_language_answer(
         agent_name="SynthesisAgent",
         instructions=(
             "Write a direct, natural-language answer to the user's question in 2-4 short paragraphs. "
-            "Use only the provided specialist summaries and citations. Mention uncertainty clearly when evidence is thin. "
+            "Use the fused evidence packet first, then specialist summaries as supporting interpretation. "
+            "Mention uncertainty clearly when evidence is thin or retrieval was skipped. "
             "Do not give direct buy, sell, or hold instructions, and do not present price targets as recommendations."
         ),
         evidence=evidence,
@@ -161,6 +171,7 @@ def format_synthesis_evidence(
     specialist_results: list[AgentResult],
     citations: list[AgentCitation],
     request: AgentQueryRequest,
+    evidence_packet: EvidencePacket | None = None,
 ) -> str:
     lines = [
         f"User question: {request.user_query}",
@@ -171,6 +182,25 @@ def format_synthesis_evidence(
         lines.append(f"Requested domains: {', '.join(request.domains)}")
     if request.tickers:
         lines.append(f"Requested tickers: {', '.join(request.tickers)}")
+
+    if evidence_packet is not None:
+        lines.append("")
+        lines.append("Fused evidence packet:")
+        for item in evidence_packet.items[:12]:
+            date = item.published_at or item.retrieved_at or "unknown date"
+            publisher = item.publisher or item.source_name or item.source_id or item.source_kind
+            scope = f", scope: {item.scope}" if item.scope else ""
+            lines.append(
+                f"- {item.source_kind} | {item.source_quality} | {item.title} "
+                f"({publisher}, {date}{scope}) - {item.summary}"
+            )
+
+        if evidence_packet.retrieval_statuses:
+            lines.append("")
+            lines.append("Retrieval statuses:")
+            for status in evidence_packet.retrieval_statuses:
+                query = f" query={status.query}" if status.query else ""
+                lines.append(f"- {status.channel}: {status.status}.{query} {status.message}")
 
     lines.append("")
     lines.append("Specialist summaries:")
@@ -325,12 +355,18 @@ def run_agent_query(request: AgentQueryRequest, session: Session | None = None) 
     context = build_agent_context(request_id, request)
     runtime = AgentRuntime(build_default_registry(session), AgentRunLogger(session))
     results = [runtime.run("CoordinatorAgent", context)]
+    evidence_packet = None
 
     if session is not None:
-        for agent_name in route_agent_names(context):
+        routed_agent_names = route_agent_names(context)
+        plan = build_research_workflow_plan(context, routed_agent_names)
+        evidence_packet = build_evidence_packet(context=context, plan=plan, session=session)
+        for agent_name in routed_agent_names:
             results.append(runtime.run(agent_name, context))
 
-    response = build_agent_response(request_id, results, request)
+    response = build_agent_response(request_id, results, request, evidence_packet)
+    if evidence_packet is not None:
+        response.agents_ran.insert(1, "EvidenceFusionAgent")
 
     if session is not None:
         session.commit()
