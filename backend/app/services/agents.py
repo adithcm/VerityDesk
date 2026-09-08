@@ -361,6 +361,7 @@ def run_agent_query(request: AgentQueryRequest, session: Session | None = None) 
         routed_agent_names = route_agent_names(context)
         plan = build_research_workflow_plan(context, routed_agent_names)
         evidence_packet = build_evidence_packet(context=context, plan=plan, session=session)
+        context = context.model_copy(update={"evidence_packet": evidence_packet.model_dump()})
         for agent_name in routed_agent_names:
             results.append(runtime.run(agent_name, context))
 

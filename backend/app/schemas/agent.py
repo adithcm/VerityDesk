@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -58,6 +58,7 @@ class AgentContext(BaseModel):
     time_window: str | None = None
     source_ids: list[str] = Field(default_factory=list)
     safety_level: SafetyLevel = "investment_research"
+    evidence_packet: dict[str, Any] | None = None
 
 
 class AgentResult(BaseModel):

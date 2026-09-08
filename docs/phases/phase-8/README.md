@@ -149,6 +149,8 @@ Status: Complete
 
 ### 8.5 Automatic Agent Routing And Multi-Agent Execution
 
+Status: Complete
+
 - Route to specialist agents based on the research plan, not manual dropdowns.
 - Specialist agents should receive already-ranked evidence packets, not raw database rows.
 - Support specialist roles such as:
@@ -168,6 +170,7 @@ Status: Complete
   - synthesis
   - citation/guardrail check
 - Track the workflow for debugging while keeping it out of the main user answer.
+- Prefer Tavily/live web evidence in specialist interpretation while using API/local evidence as verification and context.
 
 ### 8.6 Clean LLM Answer Synthesis
 
@@ -225,6 +228,7 @@ Status: Complete
 - [Milestone 8.2: Query understanding and research planning](milestones/8.2-query-understanding-and-research-planning.md)
 - [Milestone 8.3: Controlled live web research](milestones/8.3-controlled-live-web-research.md)
 - [Milestone 8.4: Direct API and local evidence fusion](milestones/8.4-direct-api-and-local-evidence-fusion.md)
+- [Milestone 8.5: Automatic agent routing and multi-agent execution](milestones/8.5-automatic-agent-routing-and-multi-agent-execution.md)
 
 ## Definition Of Done
 
