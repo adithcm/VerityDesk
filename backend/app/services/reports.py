@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Citation, Report, Source
 from app.schemas.agent import AgentCitation, AgentQueryRequest, AgentQueryResponse
+from app.schemas.preferences import UserPreferencesResponse
 from app.schemas.report import (
     CompanyResearchRequest,
     DailyBriefingRequest,
@@ -21,6 +22,7 @@ from app.schemas.report import (
 )
 from app.services.agents import run_agent_query
 from app.services.guardrails import FINANCIAL_DISCLAIMER
+from app.services.personalization import read_user_preferences
 
 
 REPORT_TYPE_LABELS = {
@@ -109,16 +111,18 @@ def create_report(session: Session, request: ReportCreateRequest) -> ReportRespo
 
 def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> ReportResponse:
     now = datetime.now(UTC)
+    preferences = read_user_preferences(session)
     domains = request.domains or DAILY_BRIEFING_DOMAINS
-    query = request.user_query or (
-        "Generate a concise daily briefing covering the most important current world, market, macro, company, "
-        "housing, policy, credit, commodity, technology, consumer, and legal signals from the ingested evidence."
-    )
+    regions = request.regions or preferences.preferred_regions
+    tickers = preferences.watchlist_tickers
+    query = request.user_query or build_personalized_daily_briefing_query(preferences)
     agent_request = AgentQueryRequest(
         user_query=query,
         intent="daily_briefing",
         domains=domains,
-        regions=request.regions,
+        tickers=tickers,
+        regions=regions,
+        source_ids=preferences.enabled_sources,
         time_window=request.time_window,
         safety_level="investment_research",
     )
@@ -131,7 +135,7 @@ def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> 
         summary=build_report_summary(agent_response),
         body=agent_response.summary,
         domains=domains,
-        tickers=[],
+        tickers=tickers,
         companies=[],
         as_of=now,
         confidence=agent_response.confidence,
@@ -139,7 +143,10 @@ def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> 
         guardrail_status=agent_response.guardrail.status,
         report_metadata={
             "user_query": query,
-            "regions": request.regions,
+            "regions": regions,
+            "watchlist_tickers": tickers,
+            "enabled_sources": preferences.enabled_sources,
+            "personalized": bool(tickers or regions or preferences.enabled_sources),
             "time_window": request.time_window,
             "generation_stage": "daily_briefing",
             "agent_request_id": agent_response.request_id,
@@ -155,6 +162,26 @@ def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> 
     session.commit()
     session.refresh(report)
     return get_report(session, report.id)
+
+
+def build_personalized_daily_briefing_query(preferences: UserPreferencesResponse) -> str:
+    focus_parts = [
+        "world and market news",
+        "macro, rates, credit, commodities, technology, consumer, policy, and legal signals",
+        "housing and real estate conditions",
+    ]
+    if preferences.watchlist_tickers:
+        focus_parts.append(f"watchlist names: {', '.join(preferences.watchlist_tickers[:8])}")
+    if preferences.preferred_regions:
+        focus_parts.append(f"preferred regions: {', '.join(preferences.preferred_regions[:5])}")
+
+    return (
+        "Generate a concise personalized daily intelligence briefing for today. "
+        "Use Tavily live web research as the primary current source, then use direct APIs and local stored data "
+        "to verify or add context. Cover only the highest-signal developments for the user across "
+        f"{'; '.join(focus_parts)}. Explain what changed, why it matters, what is uncertain, and what to watch next. "
+        "Use source-backed evidence only and do not give buy, sell, or hold instructions."
+    )
 
 
 def generate_company_research(session: Session, request: CompanyResearchRequest) -> ReportResponse:

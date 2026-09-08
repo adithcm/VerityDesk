@@ -208,12 +208,16 @@ Status: Complete
 
 ### 8.8 Proactive And Automated Daily Intelligence
 
+Status: Complete
+
 - Generate briefings and suggestions based on user preferences.
 - Recommend next questions and reports without requiring the user to start from scratch.
 - Use web research plus direct/API data in proactive briefings.
 - Make the daily briefing feel like a clean, personalized digest instead of a generic report.
 - Surface only the most relevant sections by default.
 - Preserve citations and retrieval provenance behind details.
+- Use Tavily live web research as the primary current source for personalized daily briefings.
+- Store the personalization context used for each generated daily briefing.
 
 ### 8.9 Phase 8 Validation And Docs
 
@@ -237,6 +241,7 @@ Status: Complete
 - [Milestone 8.5: Automatic agent routing and multi-agent execution](milestones/8.5-automatic-agent-routing-and-multi-agent-execution.md)
 - [Milestone 8.6: Clean LLM answer synthesis](milestones/8.6-clean-llm-answer-synthesis.md)
 - [Milestone 8.7: Personalization-aware research](milestones/8.7-personalization-aware-research.md)
+- [Milestone 8.8: Proactive and automated daily intelligence](milestones/8.8-proactive-and-automated-daily-intelligence.md)
 
 ## Definition Of Done
 

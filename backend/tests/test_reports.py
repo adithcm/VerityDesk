@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
-from app.db.models import Report, Source
+from app.db.models import Report, Source, UserSettings
 from app.db.session import get_db
 from app.main import app
 from app.schemas.agent import AgentCitation, AgentQueryResponse, GuardrailCheck
@@ -250,6 +250,115 @@ def test_generate_daily_briefing_saves_agent_response_and_citations(monkeypatch)
         assert response.summary == "Markets are focused on rates and labor data today."
         assert len(response.citations) == 1
         assert response.citations[0].title == "Markets watch rates"
+
+
+def test_generate_daily_briefing_uses_saved_preferences(monkeypatch) -> None:
+    captured_request = None
+
+    def fake_run_agent_query(request, session):
+        nonlocal captured_request
+        captured_request = request
+        return AgentQueryResponse(
+            request_id="personalized-agent-request-1",
+            summary=(
+                "This is not financial advice. InvestorAgent is for research and educational purposes only.\n\n"
+                "Your briefing focuses on Arizona and your watchlist."
+            ),
+            agents_ran=["CoordinatorAgent", "EvidenceFusionAgent", "NewsDigestAgent", "SynthesisAgent"],
+            claims=[],
+            citations=[],
+            confidence="medium",
+            risks=[],
+            follow_up_questions=[],
+            guardrail=GuardrailCheck(
+                status="passed",
+                disclaimer="This is not financial advice.",
+                issues=[],
+                banned_phrases_found=[],
+                required_sections=[],
+            ),
+            requires_guardrail_review=False,
+        )
+
+    monkeypatch.setattr(reports, "run_agent_query", fake_run_agent_query)
+
+    with build_session() as session:
+        session.add(
+            UserSettings(
+                watchlist_tickers=["AAPL", "MSFT"],
+                preferred_regions=["Arizona"],
+                enabled_sources=["newsapi", "fred-api"],
+                daily_briefing_time="08:00",
+                daily_schedule_enabled=False,
+                daily_schedule_timezone="local",
+                daily_schedule_mode="all",
+                daily_report_enabled=False,
+            )
+        )
+        session.commit()
+
+        response = generate_daily_briefing(session, reports.DailyBriefingRequest())
+
+    assert captured_request is not None
+    assert captured_request.tickers == ["AAPL", "MSFT"]
+    assert captured_request.regions == ["Arizona"]
+    assert captured_request.source_ids == ["newsapi", "fred-api"]
+    assert "Tavily live web research as the primary current source" in captured_request.user_query
+    assert "AAPL, MSFT" in captured_request.user_query
+    assert response.tickers == ["AAPL", "MSFT"]
+    assert response.metadata["watchlist_tickers"] == ["AAPL", "MSFT"]
+    assert response.metadata["regions"] == ["Arizona"]
+    assert response.metadata["enabled_sources"] == ["newsapi", "fred-api"]
+    assert response.metadata["personalized"] is True
+
+
+def test_generate_daily_briefing_respects_explicit_regions(monkeypatch) -> None:
+    captured_request = None
+
+    def fake_run_agent_query(request, session):
+        nonlocal captured_request
+        captured_request = request
+        return AgentQueryResponse(
+            request_id="explicit-region-request",
+            summary="This is not financial advice.\n\nBriefing.",
+            agents_ran=[],
+            claims=[],
+            citations=[],
+            confidence="medium",
+            risks=[],
+            follow_up_questions=[],
+            guardrail=GuardrailCheck(
+                status="passed",
+                disclaimer="This is not financial advice.",
+                issues=[],
+                banned_phrases_found=[],
+                required_sections=[],
+            ),
+            requires_guardrail_review=False,
+        )
+
+    monkeypatch.setattr(reports, "run_agent_query", fake_run_agent_query)
+
+    with build_session() as session:
+        session.add(
+            UserSettings(
+                watchlist_tickers=["AAPL"],
+                preferred_regions=["Arizona"],
+                enabled_sources=[],
+                daily_briefing_time="08:00",
+                daily_schedule_enabled=False,
+                daily_schedule_timezone="local",
+                daily_schedule_mode="all",
+                daily_report_enabled=False,
+            )
+        )
+        session.commit()
+
+        response = generate_daily_briefing(session, reports.DailyBriefingRequest(regions=["Texas"]))
+
+    assert captured_request is not None
+    assert captured_request.regions == ["Texas"]
+    assert response.metadata["regions"] == ["Texas"]
 
 
 def test_daily_briefing_endpoint_returns_generated_report(monkeypatch) -> None:
