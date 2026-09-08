@@ -26,6 +26,7 @@ from app.services.agent_runtime import AgentRegistry, AgentRunLogger, AgentRunti
 from app.services.citations import format_sources_section
 from app.services.guardrails import FINANCIAL_DISCLAIMER, enforce_agent_guardrails
 from app.services.research_evidence import ResearchEvidenceRepository
+from app.services.research_workflow import build_research_workflow_plan
 
 
 class CoordinatorAgent:
@@ -33,12 +34,18 @@ class CoordinatorAgent:
 
     def run(self, context: AgentContext) -> AgentResult:
         routed_agents = route_agent_names(context)
+        plan = build_research_workflow_plan(context, routed_agents)
+        primary_channel = plan.retrieval_priority[0] if plan.retrieval_priority else "local_cache"
         return AgentResult(
             agent_name=self.name,
-            summary=f"Coordinator selected: {', '.join(routed_agents)}.",
+            summary=(
+                f"Coordinator selected: {', '.join(routed_agents)}. "
+                f"Research plan starts with {primary_channel.replace('_', ' ')} and then uses "
+                "supporting API/local evidence before synthesis."
+            ),
             confidence="medium",
             risks=[
-                "Routing is deterministic and based on request metadata plus keyword matching.",
+                "Phase 8 planning is deterministic until live web retrieval is implemented in later milestones.",
             ],
         )
 
