@@ -187,6 +187,8 @@ make app-dev
 
 This applies database migrations, starts the backend at `http://localhost:8000`, and starts the frontend at `http://localhost:3000`. Press `Ctrl+C` in that terminal to stop both services.
 
+For Phase 8 live web research, add `TAVILY_API_KEY` to `.env`. Without it, the app keeps running and live web search returns a clean missing-key status.
+
 In the app:
 
 - Use **Dashboard** to ask one question, open the latest briefing, view saved reports, and review suggested next steps.

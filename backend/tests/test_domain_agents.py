@@ -14,7 +14,8 @@ from app.agents.domain_agents import (
 from app.agents.model_client import TemplateResearchSummarizer, extract_response_text, output_item_types
 from app.db.base import Base
 from app.db.models import Article, EconomicObservation, Source, SourceHealth
-from app.schemas.agent import AgentContext
+from app.schemas.agent import AgentCitation, AgentContext
+from app.schemas.evidence_packet import EvidencePacket, EvidencePacketItem, EvidenceRetrievalStatus
 from app.services.research_evidence import ResearchEvidenceRepository
 
 
@@ -193,6 +194,87 @@ def test_news_digest_agent_produces_cited_result() -> None:
     assert result.citations
     assert "Global markets react" in summarizer.evidence
     assert result.confidence in {"low", "medium", "high"}
+
+
+def test_domain_agent_prefers_fused_live_web_packet() -> None:
+    packet = EvidencePacket(
+        request_id="request-1",
+        query="What is happening with housing in Arizona?",
+        items=[
+            EvidencePacketItem(
+                source_kind="live_web",
+                source_id="tavily",
+                source_name="Tavily Live Web",
+                title="Arizona housing market update",
+                url="https://www.reuters.com/markets/us/arizona-housing",
+                publisher="reuters.com",
+                published_at="2026-09-08",
+                scope="Arizona",
+                summary="Arizona housing demand and inventory shifted in the latest market update.",
+                source_quality="reputable",
+                relevance_score=0.94,
+                rank_score=140,
+                citation=AgentCitation(
+                    source_id="tavily",
+                    title="Arizona housing market update",
+                    url="https://www.reuters.com/markets/us/arizona-housing",
+                    publisher="reuters.com",
+                    published_at="2026-09-08",
+                    supports_claim="Live web source retrieved for Arizona housing.",
+                ),
+            ),
+            EvidencePacketItem(
+                source_kind="direct_api",
+                source_id="fhfa-hpi",
+                source_name="FHFA House Price Index",
+                title="FHFA All-Transactions HPI - Arizona",
+                publisher="FHFA House Price Index",
+                published_at="2026-08-30",
+                scope="Arizona",
+                summary="The Arizona house price index was 456.7 for 2026Q2.",
+                source_quality="primary",
+                relevance_score=4,
+                rank_score=120,
+                citation=AgentCitation(
+                    source_id="fhfa-hpi",
+                    title="FHFA All-Transactions HPI - Arizona",
+                    publisher="FHFA House Price Index",
+                    published_at="2026-08-30",
+                    supports_claim="Official state HPI evidence retrieved for Arizona.",
+                ),
+                metadata={"domains": "Housing and Real Estate"},
+            ),
+        ],
+        retrieval_statuses=[
+            EvidenceRetrievalStatus(
+                channel="live_web",
+                status="success",
+                query="Arizona housing",
+                message="Retrieved 1 citation-ready live web result.",
+            )
+        ],
+    )
+
+    with build_session() as session:
+        summarizer = RecordingSummarizer()
+        agent = HousingAgent(ResearchEvidenceRepository(session), summarizer)
+
+        result = agent.run(
+            build_context(
+                user_query="What is happening with housing in Arizona?",
+                domains=["Housing and Real Estate"],
+                regions=["Arizona"],
+                evidence_packet=packet.model_dump(),
+            )
+        )
+
+    assert result.agent_name == "HousingAgent"
+    assert "Fused evidence source path:" in summarizer.evidence
+    assert "live_web reputable: Arizona housing market update" in summarizer.evidence
+    assert "direct_api primary: FHFA All-Transactions HPI - Arizona" in summarizer.evidence
+    assert result.summary == "HousingAgent summary from evidence"
+    assert any(citation.source_id == "tavily" for citation in result.citations)
+    assert result.confidence == "medium"
 
 
 def test_company_agent_filters_by_ticker() -> None:

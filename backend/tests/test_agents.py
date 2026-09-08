@@ -7,6 +7,7 @@ from app.agents.model_client import TemplateResearchSummarizer
 from app.db.base import Base
 from app.db.models import AgentRun
 from app.schemas.agent import AgentCitation, AgentContext, AgentQueryRequest, AgentResult
+from app.schemas.evidence_packet import EvidencePacket, EvidencePacketItem, EvidenceRetrievalStatus
 from app.services import agents
 from app.services.citations import format_citation, format_sources_section
 from app.services.guardrails import (
@@ -29,6 +30,21 @@ def build_session():
 
 def test_agent_query_endpoint_runs_coordinator_and_domain_agents(monkeypatch) -> None:
     monkeypatch.setattr(agents, "build_default_summarizer", lambda: TemplateResearchSummarizer())
+    monkeypatch.setattr(
+        agents,
+        "build_evidence_packet",
+        lambda context, plan, session: EvidencePacket(
+            request_id=context.request_id,
+            query=context.user_query,
+            retrieval_statuses=[
+                EvidenceRetrievalStatus(
+                    channel="live_web",
+                    status="skipped",
+                    message="Live web mocked for endpoint test.",
+                )
+            ],
+        ),
+    )
 
     response = client.post(
         "/api/v1/agents/query",
@@ -45,17 +61,18 @@ def test_agent_query_endpoint_runs_coordinator_and_domain_agents(monkeypatch) ->
     assert payload["request_id"]
     assert payload["agents_ran"] == [
         "CoordinatorAgent",
+        "EvidenceFusionAgent",
         "CompanyAgent",
         "MarketAgent",
         "MacroAgent",
         "CitationAgent",
         "RiskGuardrailAgent",
     ]
-    assert payload["guardrail"]["status"] == "needs_revision"
-    assert payload["requires_guardrail_review"] is True
+    assert payload["guardrail"]["status"] == "passed"
+    assert payload["requires_guardrail_review"] is False
     assert "not financial advice" in payload["summary"].lower()
     assert "not a recommendation" in payload["summary"].lower()
-    assert "coordinator selected" in payload["summary"].lower()
+    assert "coordinator selected" not in payload["summary"].lower()
 
 
 def test_agent_query_endpoint_rejects_empty_query() -> None:
@@ -116,7 +133,7 @@ def test_route_agent_names_for_general_update_defaults_to_news_and_market() -> N
     assert agents.route_agent_names(context) == ["NewsDigestAgent", "MarketAgent"]
 
 
-def test_synthesis_preserves_specialist_outputs_and_risks() -> None:
+def test_synthesis_keeps_user_answer_clean_and_guarded() -> None:
     request = AgentQueryRequest(user_query="What matters for markets?")
 
     result = agents.synthesize_agent_results(
@@ -133,10 +150,10 @@ def test_synthesis_preserves_specialist_outputs_and_risks() -> None:
     )
 
     assert "not financial advice" in result.lower()
-    assert "Coordinator selected: MarketAgent." in result
-    assert "SynthesisAgent reviewed the available evidence" in result
-    assert "MarketAgent (medium confidence): Rates are central to the setup." in result
-    assert "Evidence is limited." in result
+    assert "not a recommendation" in result.lower()
+    assert "Coordinator selected" not in result
+    assert "MarketAgent (medium confidence)" not in result
+    assert "Evidence is limited." not in result
 
 
 def test_format_synthesis_evidence_includes_user_query_and_citations() -> None:
@@ -169,6 +186,103 @@ def test_format_synthesis_evidence_includes_user_query_and_citations() -> None:
     assert "Requested domains: Markets and Rates" in evidence
     assert "Requested tickers: SPY" in evidence
     assert "Federal Funds Rate" in evidence
+
+
+def test_format_synthesis_evidence_includes_fused_evidence_packet() -> None:
+    evidence = agents.format_synthesis_evidence(
+        [
+            AgentResult(
+                agent_name="HousingAgent",
+                summary="Arizona housing evidence is improving.",
+                confidence="medium",
+            )
+        ],
+        [],
+        AgentQueryRequest(user_query="What is happening with housing in Arizona?"),
+        EvidencePacket(
+            request_id="request-1",
+            query="What is happening with housing in Arizona?",
+            items=[
+                EvidencePacketItem(
+                    source_kind="live_web",
+                    source_id="tavily",
+                    source_name="Tavily Live Web",
+                    title="Arizona housing market update",
+                    url="https://example.com/arizona-housing",
+                    publisher="Example News",
+                    published_at="2026-09-08",
+                    scope="Arizona",
+                    summary="Arizona housing demand and supply conditions changed.",
+                    source_quality="reputable",
+                    relevance_score=0.9,
+                )
+            ],
+            retrieval_statuses=[
+                EvidenceRetrievalStatus(
+                    channel="live_web",
+                    status="success",
+                    query="Arizona housing",
+                    message="Retrieved 1 citation-ready live web results.",
+                )
+            ],
+        ),
+    )
+
+    assert "Fused evidence packet:" in evidence
+    assert "live_web | reputable | Arizona housing market update" in evidence
+    assert "Internal retrieval statuses" in evidence
+
+
+def test_synthesis_with_packet_avoids_raw_internal_trace() -> None:
+    packet = EvidencePacket(
+        request_id="request-1",
+        query="What is happening with housing in Arizona?",
+        items=[
+            EvidencePacketItem(
+                source_kind="live_web",
+                source_id="tavily",
+                source_name="Tavily Live Web",
+                title="Arizona housing market update",
+                url="https://example.com/arizona-housing",
+                publisher="Example News",
+                published_at="2026-09-08",
+                scope="Arizona",
+                summary="Arizona housing demand and supply conditions changed.",
+                source_quality="reputable",
+                relevance_score=0.9,
+                citation=AgentCitation(
+                    source_id="tavily",
+                    title="Arizona housing market update",
+                    url="https://example.com/arizona-housing",
+                    publisher="Example News",
+                    published_at="2026-09-08",
+                    supports_claim="Live web source retrieved for Arizona housing.",
+                ),
+            )
+        ],
+    )
+
+    result = agents.synthesize_agent_results(
+        [
+            AgentResult(agent_name="CoordinatorAgent", summary="Coordinator selected: HousingAgent."),
+            AgentResult(
+                agent_name="HousingAgent",
+                summary="Fused evidence source path: used fused ranked evidence from live_web.",
+                confidence="medium",
+                citations=packet.citations,
+                risks=["Source path: checked local stored evidence."],
+            ),
+        ],
+        citations=packet.citations,
+        request=AgentQueryRequest(user_query="What is happening with housing in Arizona?"),
+        evidence_packet=packet,
+    )
+
+    assert "Arizona housing demand and supply conditions changed." in result
+    assert "Coordinator selected" not in result
+    assert "Fused evidence source path" not in result
+    assert "Source path:" not in result
+    assert "Sources:" in result
 
 
 def test_citation_format_includes_source_dates_and_url() -> None:

@@ -308,42 +308,53 @@ Not in scope:
 
 Detailed plan: [Phase 7](../phases/phase-7/README.md).
 
-## Phase 8: Agent Automation And Flexible Retrieval
+## Phase 8: Agent Framework Restructure And Web-First Research
 
 Status: Planned
 
-Purpose: make the multi-agent system more flexible and less dependent on manual user configuration.
+Purpose: restructure the multi-agent system, LLM orchestration, retrieval flow, and answer generation so the app behaves like a web-capable research assistant. The user should ask one question, the system should search credible live sources when appropriate, use direct APIs/local data as support and verification, then return a concise cited answer.
 
 User feedback driving this phase:
 
 - Agents should be able to infer what the user wants instead of requiring dropdowns.
-- Agents should know when local data is insufficient and retrieve more information from approved live sources.
-- The LLM/agents should be able to perform controlled live web research when stored data and direct APIs are not enough.
+- The current agent framework is too constrained by stored local data.
+- Controlled live web research should be the main flexible-answer path for current, broad, local, or under-specified questions.
+- Direct APIs and local stored data should remain important, but mainly as official measurements, structured context, cache, history, and verification.
 - The user wants less typing and fewer clicks, with the app automatically selecting sources and agent workflows.
 - The system should feel proactive and personalized to the user's situation.
+- Final answers should be clean, natural-language, cited responses, not raw agent logs or dense source/debug summaries.
 
 Deliverables:
 
-- Stronger planner/coordinator for intent, entity, region, time-window, source, and agent selection.
+- New planner/coordinator architecture for intent, entity, region, time-window, source, retrieval, and agent selection.
 - Query understanding for locations, tickers, companies, sectors, topics, and time ranges.
-- More flexible live retrieval tools for approved sources.
-- A Live Web Research Agent that can search approved credible sources, require citations, label live-web evidence clearly, and respect financial guardrails.
+- A Live Web Research Agent that can search approved credible sources as the primary flexible retrieval path, require citations, label live-web evidence clearly, and respect financial guardrails.
+- Evidence fusion that combines web research, direct APIs, local observations/articles, saved reports, and source health.
 - Multi-step workflows that can:
-  - inspect local evidence
-  - decide whether more retrieval is needed
+  - create a research plan
+  - search the web
   - run targeted source/API lookup
-  - run controlled live web research when needed
+  - inspect local/cached evidence
+  - rank and reconcile evidence
+  - run specialist agents
   - synthesize a final cited answer
 - Automatic source selection based on query needs.
-- Better "I do not know yet" behavior with next retrieval steps.
+- Better uncertainty behavior when evidence is conflicting, unavailable, or too thin after web/API retrieval.
 - Personalization-aware proactive briefings and report suggestions.
 - Natural-language answers as the default output, with citations and structured details expandable.
 - Guardrail checks that continue to prevent direct buy/sell/hold instructions.
 - Tests and evaluation fixtures for flexible queries such as:
   - "What are mortgage rates in AZ?"
+  - "What is happening with housing in Arizona right now?"
   - "What matters for my watchlist today?"
   - "How does the latest rate data affect housing?"
   - "What changed with Apple this week?"
+
+Completed milestones:
+
+- [Milestone 8.1: Agent architecture reset](../phases/phase-8/milestones/8.1-agent-architecture-reset.md).
+- [Milestone 8.2: Query understanding and research planning](../phases/phase-8/milestones/8.2-query-understanding-and-research-planning.md).
+- [Milestone 8.3: Controlled live web research](../phases/phase-8/milestones/8.3-controlled-live-web-research.md).
 
 Not in scope:
 

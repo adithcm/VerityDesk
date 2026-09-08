@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from app.agents.model_client import ResearchSummarizer, TemplateResearchSummarizer
 from app.schemas.agent import AgentCitation, AgentClaim, AgentContext, AgentResult, ConfidenceLevel
+from app.schemas.evidence_packet import EvidencePacket, EvidencePacketItem
 from app.services.research_evidence import (
     ArticleEvidence,
     EconomicObservationEvidence,
@@ -43,6 +44,29 @@ class EvidenceBackedDomainAgent:
         raise NotImplementedError
 
     def run(self, context: AgentContext) -> AgentResult:
+        packet = evidence_packet_from_context(context)
+        packet_items = packet_items_for_agent(packet, self.config) if packet is not None else []
+        if packet_items:
+            citations = dedupe_citations([item.citation for item in packet_items if item.citation is not None])
+            source_path = build_packet_source_path(packet, packet_items)
+            summary = self.summarizer.summarize(
+                agent_name=self.name,
+                instructions=(
+                    f"{self.config.focus} Prefer the live web evidence when it is available and current. "
+                    "Use API/local evidence to verify, quantify, or add historical context."
+                ),
+                evidence=format_packet_evidence(packet_items, source_path),
+            )
+            return AgentResult(
+                agent_name=self.name,
+                summary=summary,
+                claims=build_packet_claims(self.name, packet_items, source_path),
+                citations=citations,
+                confidence=confidence_for_packet(packet_items, citations),
+                risks=build_packet_risks(self.config.focus, packet, packet_items),
+                follow_up_questions=build_follow_ups(self.config.focus),
+            )
+
         article_query = self.article_query(context)
         observation_query = self.observation_query(context)
         articles = self.repository.latest_articles(article_query)
@@ -209,6 +233,131 @@ def build_citations(
         )
 
     return citations
+
+
+def evidence_packet_from_context(context: AgentContext) -> EvidencePacket | None:
+    if context.evidence_packet is None:
+        return None
+    return EvidencePacket.model_validate(context.evidence_packet)
+
+
+def packet_items_for_agent(
+    packet: EvidencePacket | None,
+    config: DomainAgentConfig,
+) -> list[EvidencePacketItem]:
+    if packet is None:
+        return []
+
+    selected: list[EvidencePacketItem] = []
+    for item in packet.items:
+        if item.source_kind == "live_web":
+            selected.append(item)
+            continue
+        if item.source_id and item.source_id in config.expected_source_ids:
+            selected.append(item)
+            continue
+        if packet_item_matches_domains(item, config.domains):
+            selected.append(item)
+
+    return selected[:8]
+
+
+def packet_item_matches_domains(item: EvidencePacketItem, domains: tuple[str, ...]) -> bool:
+    if not domains:
+        return True
+    metadata_domains = item.metadata.get("domains")
+    if not isinstance(metadata_domains, str):
+        return False
+    normalized_domains = {domain.strip().lower() for domain in metadata_domains.split(",") if domain.strip()}
+    return bool(normalized_domains & {domain.lower() for domain in domains})
+
+
+def format_packet_evidence(items: list[EvidencePacketItem], source_path: str) -> str:
+    lines = [f"Fused evidence source path: {source_path}"]
+    for item in items:
+        date = item.published_at or item.retrieved_at or "unknown date"
+        publisher = item.publisher or item.source_name or item.source_id or item.source_kind
+        scope = f", scope: {item.scope}" if item.scope else ""
+        lines.append(
+            f"- {item.source_kind} {item.source_quality}: {item.title} "
+            f"({publisher}, {date}{scope}) - {item.summary}"
+        )
+    return "\n".join(lines)
+
+
+def build_packet_source_path(packet: EvidencePacket, items: list[EvidencePacketItem]) -> str:
+    channels = compact_list([item.source_kind for item in items])
+    sources = compact_list([item.source_id or item.source_name or item.source_kind for item in items])
+    live_statuses = [status for status in packet.retrieval_statuses if status.channel == "live_web"]
+    if any(status.status == "success" for status in live_statuses):
+        live_note = "live web search succeeded"
+    elif live_statuses:
+        live_note = f"live web search {live_statuses[0].status}: {live_statuses[0].message}"
+    else:
+        live_note = "live web search was not requested"
+    return f"used fused ranked evidence from {channels}; sources included {sources}; {live_note}."
+
+
+def build_packet_claims(agent_name: str, items: list[EvidencePacketItem], source_path: str) -> list[AgentClaim]:
+    source_ids = dedupe_strings([item.source_id for item in items if item.source_id])
+    live_count = sum(1 for item in items if item.source_kind == "live_web")
+    supporting_count = len(items) - live_count
+    return [
+        AgentClaim(
+            claim=f"{agent_name} reviewed {len(items)} ranked evidence items, including {live_count} live web items.",
+            claim_type="fact",
+            source_ids=source_ids,
+            confidence="medium" if items else "low",
+        ),
+        AgentClaim(
+            claim=f"{agent_name} source path: {source_path}",
+            claim_type="fact",
+            source_ids=source_ids,
+            confidence="medium" if live_count or supporting_count >= 2 else "low",
+        ),
+    ]
+
+
+def build_packet_risks(
+    focus: str,
+    packet: EvidencePacket,
+    items: list[EvidencePacketItem],
+) -> list[str]:
+    risks = ["This is research context only, not a recommendation to buy, sell, or hold any security."]
+    if not any(item.source_kind == "live_web" for item in items):
+        risks.append("Live web evidence was not available for this specialist; answer relies on supporting stored data.")
+    if len(items) < 3:
+        risks.append(f"Evidence coverage is limited for this request: {focus}")
+    failed_statuses = [
+        status
+        for status in packet.retrieval_statuses
+        if status.status == "failed" or (status.channel == "live_web" and status.status == "skipped")
+    ]
+    risks.extend(f"{status.channel} retrieval {status.status}: {status.message}" for status in failed_statuses[:2])
+    return dedupe_strings(risks)
+
+
+def confidence_for_packet(items: list[EvidencePacketItem], citations: list[AgentCitation]) -> ConfidenceLevel:
+    live_count = sum(1 for item in items if item.source_kind == "live_web")
+    direct_count = sum(1 for item in items if item.source_kind == "direct_api")
+    primary_or_reputable = sum(1 for item in items if item.source_quality in {"primary", "reputable"})
+    if live_count >= 2 and primary_or_reputable >= 3 and len(citations) >= 3:
+        return "high"
+    if live_count >= 1 or direct_count >= 1 or len(citations) >= 2:
+        return "medium"
+    return "low"
+
+
+def dedupe_citations(citations: list[AgentCitation]) -> list[AgentCitation]:
+    seen: set[tuple[str | None, str, str | None]] = set()
+    deduped: list[AgentCitation] = []
+    for citation in citations:
+        key = (citation.source_id, citation.title, citation.url)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(citation)
+    return deduped
 
 
 def build_claims(

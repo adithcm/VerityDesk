@@ -1,20 +1,24 @@
-# Phase 8: Agent Automation And Flexible Retrieval
+# Phase 8: Agent Framework Restructure And Web-First Research
 
-Status: Planned
+Status: Complete
 
 ## Goal
 
-Make the agents flexible enough to understand natural-language questions, choose the right sources, retrieve missing information, and return a useful cited answer without requiring manual user setup.
+Restructure the agent framework, LLM orchestration, data retrieval flow, and answer generation so the app behaves more like a web-capable research assistant: the user asks one natural-language question, the system searches credible live sources when needed, uses local/API data as supporting evidence, and returns a concise cited answer that is easy to digest.
+
+Phase 8 is the main intelligence rebuild. It should not be treated as a small routing pass. It is where the product shifts from "agents summarize whatever is already in the local database" to "agents actively gather, verify, cite, and synthesize the best available evidence for the user's question."
 
 ## User Feedback To Address
 
 - The user should not have to choose domains, intents, or tickers for normal questions.
 - The user wants less typing and fewer clicks.
-- The agent should be able to query beyond currently ingested local data when needed.
-- If the local database does not have the answer, the system should try approved source/API retrieval.
-- The LLM should eventually be able to perform a controlled live web lookup, similar to how Codex can search, when stored evidence and direct APIs are not enough.
-- If the system still cannot answer, it should say what is missing and what source would be needed.
-- The answer should be natural language first, with details and citations available.
+- The current agent framework is too constrained by already-ingested local data.
+- Web research should be the primary path for flexible questions, similar to how Codex can look up sources and answer with citations.
+- Direct APIs and local stored data should still be used, but primarily as support, grounding, verification, and fast cached context.
+- The system should make a best-effort attempt to answer broad questions instead of stopping at "I do not have local evidence."
+- If evidence is still weak after web/API retrieval, the answer should clearly say what is uncertain and what could not be verified.
+- The final response should be natural language first, with citations and detailed evidence available behind secondary views.
+- The user should not see raw agent mechanics, source-debug lists, or internal fallback language in the main answer.
 
 ## Target Experience
 
@@ -28,86 +32,235 @@ The system infers:
 
 - topic: housing/mortgage rates
 - region: Arizona
-- likely sources: Freddie Mac, FRED, housing sources, state/regional data if available
-- workflow: check local data, refresh source/API if stale, retrieve approved live data if needed
+- likely sources: credible live web sources, official housing/rate data, FRED, Freddie Mac, FHFA, Census, local/regional data if available
+- workflow: search credible web sources, pull relevant direct/API data, compare against local stored data, synthesize the best available answer
 - response style: concise natural-language answer with citations and uncertainty
 
 If Arizona-specific mortgage rates are unavailable, the app should explain that clearly and provide the best available national/regional proxy rather than pretending to know.
 
+Another user asks:
+
+```text
+What is happening with Arizona housing right now?
+```
+
+The system should not only check local FHFA/Freddie/Census records. It should also search credible current sources such as government releases, reputable housing-market reports, regional business news, and market commentary, then combine that with local/API data. The answer should tell the user what is happening, what evidence supports it, and what is uncertain.
+
+## Target Architecture Shift
+
+Current Phase 7 behavior:
+
+```mermaid
+flowchart LR
+    user["User question"] --> parser["Rule-based context inference"]
+    parser --> local["Local stored evidence"]
+    local --> agents["Specialist agents"]
+    agents --> answer["Cited answer or missing-data response"]
+```
+
+Target Phase 8 behavior:
+
+```mermaid
+flowchart LR
+    user["User question"] --> planner["Research planner"]
+    planner --> web["Controlled live web research"]
+    planner --> api["Direct source/API retrieval"]
+    planner --> local["Local cached evidence"]
+    web --> evidence["Evidence fusion and ranking"]
+    api --> evidence
+    local --> evidence
+    evidence --> specialists["Specialist agents"]
+    specialists --> synthesis["LLM synthesis"]
+    synthesis --> guardrails["Citations and financial guardrails"]
+    guardrails --> answer["Clean user answer"]
+```
+
+Research priority:
+
+1. Use web research as the main flexible discovery path for open-ended, current, local, or under-specified questions.
+2. Use direct APIs for official measurements, structured market data, macro data, housing data, filings, and provider-backed facts.
+3. Use local stored data as cache, history, prior context, and fast evidence.
+4. Use citations and source quality checks before making claims.
+5. Present a clean answer first; keep technical retrieval trace behind an advanced/details view.
+
 ## Milestones
 
-### 8.1 Query Understanding Layer
+### 8.1 Agent Architecture Reset
 
-- Extract intent, topic, entities, tickers, companies, region, and time window from user questions.
-- Support plain-language regions such as "Arizona," "AZ," and "Phoenix."
-- Add tests for market, company, housing, macro, and world-news questions.
+Status: Complete
 
-### 8.2 Automatic Agent Routing
+- Define the new agent framework contract.
+- Separate planner, retrieval, specialist analysis, synthesis, citation, and guardrail responsibilities.
+- Replace one-pass agent behavior with a multi-step research workflow.
+- Add architecture docs and diagrams for the new flow.
+- Keep the implementation deterministic enough to debug while allowing flexible LLM-assisted planning.
 
-- Route to specialist agents based on inferred query needs.
-- Reduce manual routing controls in the main workflow.
-- Keep Advanced controls for power users.
+### 8.2 Query Understanding And Research Planning
 
-### 8.3 Local Evidence First
+Status: Complete
 
-- Search local articles, observations, and saved reports.
-- Determine whether local evidence is fresh enough.
-- Identify missing evidence and stale sources.
+- Extract intent, topic, entities, tickers, companies, regions, sectors, time horizon, and answer style from user questions.
+- Infer when the user wants current web research, official data, market analysis, local/regional context, or a personal briefing.
+- Support plain-language regions such as "Arizona," "AZ," "Phoenix," and "Phoenix metro."
+- Produce a research plan that decides:
+  - what needs to be searched on the web
+  - what direct APIs should be checked
+  - what local cached evidence should be used
+  - which specialist agents should run
+- Add tests for market, company, housing, macro, world-news, local-real-estate, and broad open-ended questions.
 
-### 8.4 Live Retrieval Fallback
+### 8.3 Controlled Live Web Research As Primary Flexible Retrieval
 
-- Add approved live retrieval paths for sources connected in Phase 7.
-- Retrieve targeted source/API data when local evidence is missing.
-- Keep source compliance and storage policy rules.
+Status: Complete
 
-### 8.5 Live Web Research Agent
+- Build a Live Web Research Agent that can search credible sources and return structured evidence with citations.
+- Treat live web research as the primary path for flexible/current questions, not merely an emergency fallback.
+- Use allowlists, source-quality tiers, rate limits, and blocked-source rules.
+- Search across appropriate source categories:
+  - official government and regulator sites
+  - reputable world/business/market news
+  - company investor relations and press rooms
+  - housing and local/regional sources
+  - credible market data/reference pages
+- Capture title, URL, publisher, published/retrieved time, excerpt/summary, and supported claim.
+- Do not store full text unless source policy allows it.
+- Add tests for allowed source search, blocked source rejection, citation requirements, and source-quality scoring.
 
-- Add a controlled live web research tool for the LLM/agent workflow.
-- Trigger it only when local evidence and direct source/API retrieval are missing, stale, or too narrow.
-- Search only approved credible sources or source categories.
-- Require citations for every web-derived claim.
-- Clearly label whether an answer used stored app data, direct source/API retrieval, live web retrieval, or a mix.
-- Save useful discovered metadata/excerpts when storage policy allows it.
+### 8.4 Direct API And Local Evidence Fusion
+
+Status: Complete
+
+- Keep Phase 7 APIs active as supporting evidence:
+  - FRED
+  - Census
+  - FHFA
+  - Freddie Mac
+  - SEC
+  - Alpha Vantage
+  - Finnhub
+  - NewsAPI
+  - GDELT
+- Search local articles, observations, source health, and saved reports.
+- Use API/local data to verify or contextualize web findings.
+- Detect conflicts between web claims and structured official data.
+- Rank evidence by source quality, recency, relevance, and specificity.
+- Explain when a data point is national, state, metro, company-specific, or market-wide.
+- Feed the fused evidence packet into the LLM synthesis path so normal chat can use live web plus API/local data together.
+
+### 8.5 Automatic Agent Routing And Multi-Agent Execution
+
+Status: Complete
+
+- Route to specialist agents based on the research plan, not manual dropdowns.
+- Specialist agents should receive already-ranked evidence packets, not raw database rows.
+- Support specialist roles such as:
+  - News/World Agent
+  - Market Agent
+  - Macro Agent
+  - Housing Agent
+  - Company Agent
+  - Source/Citation Agent
+  - Risk/Guardrail Agent
+- Allow the coordinator to run multiple steps:
+  - plan
+  - web search
+  - API/local lookup
+  - evidence fusion
+  - specialist interpretation
+  - synthesis
+  - citation/guardrail check
+- Track the workflow for debugging while keeping it out of the main user answer.
+- Prefer Tavily/live web evidence in specialist interpretation while using API/local evidence as verification and context.
+
+### 8.6 Clean LLM Answer Synthesis
+
+Status: Complete
+
+- Make the final answer feel like a clear research response, not a debug trace.
+- Put the direct answer first.
+- Use short paragraphs and a small number of high-signal bullets when helpful.
+- Avoid dumping every agent summary, source path, risk, and fallback note into the main response.
+- Include citations for factual/current claims.
+- Keep internal coordinator routing, retrieval statuses, and source-path details out of the main answer.
+- Clearly separate:
+  - what is known
+  - what changed recently
+  - what it means
+  - what is uncertain
+  - what to watch next
 - Keep financial guardrails active, including no direct buy/sell/hold instructions and no unsupported price targets.
 - Add tests for:
-  - local evidence sufficient, no live web lookup
-  - local evidence missing, live web lookup triggered
-  - source allowlist/blocklist enforcement
-  - citations required
-  - graceful "I do not know yet" behavior when live lookup fails
+  - citation-backed response generation
+  - no raw internal agent logs in user-facing text
+  - financial-advice guardrail compliance
+  - graceful uncertainty when evidence conflicts or remains thin
 
-### 8.6 Multi-Step Agent Workflows
+### 8.7 Personalization-Aware Research
 
-- Let the coordinator plan multiple steps:
-  - parse question
-  - inspect local evidence
-  - retrieve more data if needed
-  - run specialists
-  - synthesize answer
-  - apply citations and guardrails
-- Track steps for debugging while keeping the UI simple.
+Status: Complete
 
-### 8.7 Personalized Proactive Automation
+- Use the user's saved interests, regions, watchlist, goals, and risk preferences to shape research.
+- Let the app proactively know what the user likely cares about.
+- Use personalization to choose default regions, companies, sectors, sources, and report style.
+- Avoid requiring the user to repeatedly type context they already supplied.
+- Keep personalization transparent and editable.
+- Add backend preference APIs for saved watchlists, preferred regions, and enabled sources.
+
+### 8.8 Proactive And Automated Daily Intelligence
+
+Status: Complete
 
 - Generate briefings and suggestions based on user preferences.
 - Recommend next questions and reports without requiring the user to start from scratch.
-- Reduce repeated context entry.
+- Use web research plus direct/API data in proactive briefings.
+- Make the daily briefing feel like a clean, personalized digest instead of a generic report.
+- Surface only the most relevant sections by default.
+- Preserve citations and retrieval provenance behind details.
+- Use Tavily live web research as the primary current source for personalized daily briefings.
+- Store the personalization context used for each generated daily briefing.
 
-### 8.8 Phase 8 Validation And Docs
+### 8.9 Phase 8 Validation And Docs
+
+Status: Complete
 
 - Add evaluation fixtures for flexible real-world questions.
 - Validate citation and guardrail behavior.
 - Document what live retrieval can and cannot do.
+- Document web research source policy, storage policy, and limitations.
+- Add regression checks for:
+  - "What is happening with housing in Arizona?"
+  - "What are mortgage rates in AZ?"
+  - "What matters for my watchlist today?"
+  - "What changed with Apple this week?"
+  - broad questions where local data is insufficient but web evidence exists.
+
+## Milestone Docs
+
+- [Milestone 8.1: Agent architecture reset](milestones/8.1-agent-architecture-reset.md)
+- [Milestone 8.2: Query understanding and research planning](milestones/8.2-query-understanding-and-research-planning.md)
+- [Milestone 8.3: Controlled live web research](milestones/8.3-controlled-live-web-research.md)
+- [Milestone 8.4: Direct API and local evidence fusion](milestones/8.4-direct-api-and-local-evidence-fusion.md)
+- [Milestone 8.5: Automatic agent routing and multi-agent execution](milestones/8.5-automatic-agent-routing-and-multi-agent-execution.md)
+- [Milestone 8.6: Clean LLM answer synthesis](milestones/8.6-clean-llm-answer-synthesis.md)
+- [Milestone 8.7: Personalization-aware research](milestones/8.7-personalization-aware-research.md)
+- [Milestone 8.8: Proactive and automated daily intelligence](milestones/8.8-proactive-and-automated-daily-intelligence.md)
+- [Milestone 8.9: Phase 8 validation and docs](milestones/8.9-phase-8-validation-and-docs.md)
+- [Phase 8 Web Research Policy](web-research-policy.md)
 
 ## Definition Of Done
 
 - The normal user path is one question box.
 - The agent can infer routing without dropdowns.
-- The agent can use local data first and approved live retrieval when needed.
-- The agent can perform controlled live web research when local/direct data cannot answer the question.
-- Regional questions have clear answers or clear missing-data explanations.
+- The agent framework has a clear planner -> retrieval -> evidence fusion -> specialists -> synthesis -> guardrail flow.
+- Controlled live web research is available for flexible/current questions and produces citations.
+- Direct APIs and local data are used as supporting and verification evidence.
+- Regional questions have useful answers backed by web/API/local evidence where available.
+- The system makes a best-effort attempt to answer instead of stopping at local missing-data messages.
+- The final answer is concise, readable, and free of raw internal agent/debug text.
 - Financial guardrails still prevent direct buy/sell/hold instructions.
 
 ## Handoff To Phase 9
 
-After the source layer and flexible retrieval behavior are working, Phase 9 should do a dedicated UI, prompting, and product polish pass. That phase should address remaining dissatisfaction with layout, briefing quality, empty sections, wording, and overall user friendliness before the app is packaged for desktop use.
+After the web-first research workflow and restructured agent behavior are working, Phase 9 should do a dedicated UI, prompting, and product polish pass. That phase should address remaining dissatisfaction with layout, briefing quality, empty sections, wording, and overall user friendliness before the app is packaged for desktop use.
+
+Carry forward one live-testing finding: Tavily usage should be tuned so normal questions default to one lower-cost search, while daily briefings, explicit deep dives, or broad multi-topic questions can use additional/advanced searches.

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Article, EconomicObservation, Report
 from app.schemas.suggestion import ProactiveSuggestion, ProactiveSuggestionsResponse
+from app.services.personalization import get_or_create_preferences
 
 
 GUARDRAIL_NOTE = "Research only. Not financial advice or a buy, sell, or hold recommendation."
@@ -15,18 +16,20 @@ MARKET_DOMAINS = {"Markets and Rates", "Companies and Earnings", "Commodities an
 
 
 def get_proactive_suggestions(session: Session, *, limit: int = 8) -> ProactiveSuggestionsResponse:
+    preferences = get_or_create_preferences(session)
     articles = recent_articles(session)
     observations = recent_observations(session)
     reports = recent_reports(session)
     latest_report_types = {report.report_type for report in reports[:8]}
     domains = ranked_domains(articles)
-    tickers = ranked_tickers(articles) or DEFAULT_WATCHLIST
+    tickers = preferences.watchlist_tickers or ranked_tickers(articles) or DEFAULT_WATCHLIST
+    preferred_regions = preferences.preferred_regions or []
 
     suggestions = [
-        daily_briefing_suggestion(domains),
+        daily_briefing_suggestion(domains, tickers, preferred_regions),
         market_strategy_suggestion(tickers, domains),
         watchlist_question_suggestion(tickers, domains),
-        housing_suggestion(domains, latest_report_types, observations),
+        housing_suggestion(domains, latest_report_types, observations, preferred_regions),
         macro_suggestion(domains, latest_report_types, observations),
         follow_up_suggestion(reports),
         source_gap_suggestion(articles, observations),
@@ -80,16 +83,24 @@ def ranked_tickers(articles: list[Article]) -> list[str]:
     return [ticker for ticker, _ in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:5]]
 
 
-def daily_briefing_suggestion(domains: list[str]) -> ProactiveSuggestion:
+def daily_briefing_suggestion(
+    domains: list[str],
+    tickers: list[str],
+    preferred_regions: list[str],
+) -> ProactiveSuggestion:
     focus = domains[:3] or ["markets", "macro", "company news"]
+    preference_notes = [*tickers[:3], *preferred_regions[:2]]
+    preference_text = f" with attention to {', '.join(preference_notes)}" if preference_notes else ""
     return ProactiveSuggestion(
         id="daily-briefing",
         kind="report",
         title="Generate Today's Briefing",
-        prompt=f"Create a concise daily briefing focused on {', '.join(focus)}.",
+        prompt=f"Create a concise daily briefing focused on {', '.join(focus)}{preference_text}.",
         action="generate_daily_briefing",
         priority=5,
         domains=domains[:5],
+        tickers=tickers[:5],
+        regions=preferred_regions[:5],
         reasons=["Fresh daily context is most useful before asking detailed questions."],
         guardrail_note=GUARDRAIL_NOTE,
     )
@@ -130,18 +141,21 @@ def housing_suggestion(
     domains: list[str],
     latest_report_types: set[str],
     observations: list[EconomicObservation],
+    preferred_regions: list[str],
 ) -> ProactiveSuggestion:
     has_housing_signal = any(domain in HOUSING_DOMAINS for domain in domains) or any(
         observation.series_id in {"MORTGAGE30US", "CSUSHPINSA", "HOUST", "PERMIT"} for observation in observations
     )
+    region_text = f" for {', '.join(preferred_regions[:2])}" if preferred_regions else ""
     return ProactiveSuggestion(
         id="housing-report",
         kind="report",
         title="Check Housing Conditions",
-        prompt="Generate a housing report covering rates, affordability, supply, demand, and credit conditions.",
+        prompt=f"Generate a housing report{region_text} covering rates, affordability, supply, demand, and credit conditions.",
         action="generate_housing_report",
         priority=4 if has_housing_signal and "housing" not in latest_report_types else 2,
         domains=["Housing and Real Estate", "Markets and Rates", "Banking and Credit"],
+        regions=preferred_regions[:5],
         reasons=["Housing signals can change market and consumer context."],
         guardrail_note=GUARDRAIL_NOTE,
     )

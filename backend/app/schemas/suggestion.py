@@ -24,6 +24,7 @@ class ProactiveSuggestion(BaseModel):
     priority: int = Field(ge=1, le=5)
     domains: list[str] = Field(default_factory=list)
     tickers: list[str] = Field(default_factory=list)
+    regions: list[str] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
     guardrail_note: str
 

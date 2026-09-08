@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
-from app.db.models import Article, EconomicObservation, Report, Source
+from app.db.models import Article, EconomicObservation, Report, Source, UserSettings
 from app.db.session import get_db
 from app.main import app
 from app.services.suggestions import get_proactive_suggestions
@@ -100,6 +100,35 @@ def test_proactive_suggestions_are_contextual_and_guarded() -> None:
         assert "buy" not in prompts
         assert "sell" not in prompts
         assert all("not financial advice" in suggestion.guardrail_note.lower() for suggestion in response.suggestions)
+
+
+def test_proactive_suggestions_use_saved_preferences() -> None:
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        seed_context(session)
+        session.add(
+            UserSettings(
+                watchlist_tickers=["AAPL", "MSFT"],
+                preferred_regions=["Arizona"],
+                enabled_sources=["newsapi"],
+                daily_briefing_time="08:00",
+                daily_schedule_enabled=False,
+                daily_schedule_timezone="local",
+                daily_schedule_mode="all",
+                daily_report_enabled=False,
+            )
+        )
+        session.commit()
+
+        response = get_proactive_suggestions(session)
+
+    daily = next(suggestion for suggestion in response.suggestions if suggestion.id == "daily-briefing")
+    housing = next(suggestion for suggestion in response.suggestions if suggestion.id == "housing-report")
+    assert daily.tickers == ["AAPL", "MSFT"]
+    assert daily.regions == ["Arizona"]
+    assert "AAPL" in daily.prompt
+    assert housing.regions == ["Arizona"]
+    assert "Arizona" in housing.prompt
 
 
 def test_proactive_suggestions_endpoint_returns_cards() -> None:

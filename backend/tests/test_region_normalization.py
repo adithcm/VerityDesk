@@ -15,6 +15,13 @@ def test_infer_regions_from_state_name() -> None:
     assert "Texas" in regions
 
 
+def test_infer_regions_does_not_treat_lowercase_words_as_state_codes() -> None:
+    regions = infer_regions_from_text("What is happening in world markets today?")
+
+    assert "IN" not in regions
+    assert "Indiana" not in regions
+
+
 def test_infer_regions_from_metro_phrase() -> None:
     regions = infer_regions_from_text("Is Phoenix housing cooling?")
 

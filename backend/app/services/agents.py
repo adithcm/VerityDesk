@@ -22,10 +22,18 @@ from app.schemas.agent import (
     AgentRunHistoryResponse,
     AgentRunRecord,
 )
+from app.schemas.evidence_packet import EvidencePacket
 from app.services.agent_runtime import AgentRegistry, AgentRunLogger, AgentRuntime, build_agent_context
 from app.services.citations import format_sources_section
-from app.services.guardrails import FINANCIAL_DISCLAIMER, enforce_agent_guardrails
+from app.services.evidence_fusion import build_evidence_packet
+from app.services.guardrails import (
+    FINANCIAL_DISCLAIMER,
+    enforce_agent_guardrails,
+    find_banned_direct_advice_phrases,
+)
+from app.services.personalization import personalize_agent_request
 from app.services.research_evidence import ResearchEvidenceRepository
+from app.services.research_workflow import build_research_workflow_plan
 
 
 class CoordinatorAgent:
@@ -33,12 +41,18 @@ class CoordinatorAgent:
 
     def run(self, context: AgentContext) -> AgentResult:
         routed_agents = route_agent_names(context)
+        plan = build_research_workflow_plan(context, routed_agents)
+        primary_channel = plan.retrieval_priority[0] if plan.retrieval_priority else "local_cache"
         return AgentResult(
             agent_name=self.name,
-            summary=f"Coordinator selected: {', '.join(routed_agents)}.",
+            summary=(
+                f"Coordinator selected: {', '.join(routed_agents)}. "
+                f"Research plan starts with {primary_channel.replace('_', ' ')} and then uses "
+                "supporting API/local evidence before synthesis."
+            ),
             confidence="medium",
             risks=[
-                "Routing is deterministic and based on request metadata plus keyword matching.",
+                "Live web retrieval depends on a configured search provider API key.",
             ],
         )
 
@@ -63,16 +77,38 @@ def build_agent_response(
     request_id: str,
     results: list[AgentResult],
     request: AgentQueryRequest | None = None,
+    evidence_packet: EvidencePacket | None = None,
 ) -> AgentQueryResponse:
-    citations = dedupe_citations([citation for result in results for citation in result.citations])
+    citations = dedupe_citations(
+        [citation for result in results for citation in result.citations]
+        + (evidence_packet.citations if evidence_packet is not None else [])
+    )
     confidence = combined_confidence(results)
-    summary = synthesize_agent_results(results, citations, request)
+    summary = synthesize_agent_results(results, citations, request, evidence_packet)
     guardrail = enforce_agent_guardrails(
         summary,
         request=request or AgentQueryRequest(user_query="unspecified agent request"),
         citations=citations,
         confidence=confidence,
     )
+    hidden_banned_phrases = find_banned_direct_advice_phrases(
+        " ".join(result.summary for result in results)
+    )
+    if hidden_banned_phrases and guardrail.status != "blocked":
+        guardrail = guardrail.model_copy(
+            update={
+                "status": "blocked",
+                "issues": dedupe_strings(
+                    [
+                        *guardrail.issues,
+                        "Specialist output contained direct investment advice wording.",
+                    ]
+                ),
+                "banned_phrases_found": dedupe_strings(
+                    [*guardrail.banned_phrases_found, *hidden_banned_phrases]
+                ),
+            }
+        )
     safe_summary = guardrail.rewritten_text or summary
 
     return AgentQueryResponse(
@@ -95,8 +131,8 @@ def synthesize_agent_results(
     results: list[AgentResult],
     citations: list[AgentCitation] | None = None,
     request: AgentQueryRequest | None = None,
+    evidence_packet: EvidencePacket | None = None,
 ) -> str:
-    coordinator = next((result for result in results if result.agent_name == "CoordinatorAgent"), None)
     specialist_results = [result for result in results if result.agent_name != "CoordinatorAgent"]
     sections = [
         FINANCIAL_DISCLAIMER,
@@ -105,11 +141,8 @@ def synthesize_agent_results(
         "",
     ]
 
-    if coordinator is not None:
-        sections.extend([coordinator.summary, ""])
-
     if not specialist_results:
-        sections.append("No specialist agents were run for this request.")
+        sections.append("I do not have enough specialist research to answer this yet.")
         return "\n".join(sections)
 
     sections.append(
@@ -117,13 +150,14 @@ def synthesize_agent_results(
             specialist_results,
             citations or [],
             request or AgentQueryRequest(user_query="unspecified agent request"),
+            evidence_packet,
         )
     )
 
-    risks = dedupe_strings([risk for result in specialist_results for risk in result.risks])
-    if risks:
-        sections.extend(["", "Key risks:"])
-        sections.extend(f"- {risk}" for risk in risks[:5])
+    watch_items = build_watch_items(specialist_results, evidence_packet)
+    if watch_items:
+        sections.extend(["", "What To Watch:"])
+        sections.extend(f"- {item}" for item in watch_items[:4])
 
     sections.extend(["", format_sources_section(citations or [])])
 
@@ -134,16 +168,20 @@ def build_natural_language_answer(
     specialist_results: list[AgentResult],
     citations: list[AgentCitation],
     request: AgentQueryRequest,
+    evidence_packet: EvidencePacket | None = None,
 ) -> str:
-    evidence = format_synthesis_evidence(specialist_results, citations, request)
+    evidence = format_synthesis_evidence(specialist_results, citations, request, evidence_packet)
     if not evidence.strip():
         return "I do not have enough current source-backed evidence to answer this yet. Run ingestion first, then ask again."
 
     return build_default_summarizer().summarize(
         agent_name="SynthesisAgent",
         instructions=(
-            "Write a direct, natural-language answer to the user's question in 2-4 short paragraphs. "
-            "Use only the provided specialist summaries and citations. Mention uncertainty clearly when evidence is thin. "
+            "Write a direct, natural-language answer to the user's question in 2-3 short paragraphs. "
+            "Start with the answer, not process details. Use the fused evidence packet first, then specialist "
+            "summaries as supporting interpretation. Do not mention internal agent names, coordinator routing, "
+            "source paths, retrieval statuses, or debug details in the user-facing answer. Mention uncertainty "
+            "plainly when evidence is thin or live web retrieval was skipped. "
             "Do not give direct buy, sell, or hold instructions, and do not present price targets as recommendations."
         ),
         evidence=evidence,
@@ -154,6 +192,7 @@ def format_synthesis_evidence(
     specialist_results: list[AgentResult],
     citations: list[AgentCitation],
     request: AgentQueryRequest,
+    evidence_packet: EvidencePacket | None = None,
 ) -> str:
     lines = [
         f"User question: {request.user_query}",
@@ -165,8 +204,27 @@ def format_synthesis_evidence(
     if request.tickers:
         lines.append(f"Requested tickers: {', '.join(request.tickers)}")
 
+    if evidence_packet is not None:
+        lines.append("")
+        lines.append("Fused evidence packet:")
+        for item in evidence_packet.items[:12]:
+            date = item.published_at or item.retrieved_at or "unknown date"
+            publisher = item.publisher or item.source_name or item.source_id or item.source_kind
+            scope = f", scope: {item.scope}" if item.scope else ""
+            lines.append(
+                f"- {item.source_kind} | {item.source_quality} | {item.title} "
+                f"({publisher}, {date}{scope}) - {item.summary}"
+            )
+
+        if evidence_packet.retrieval_statuses:
+            lines.append("")
+        lines.append("Internal retrieval statuses. Use only to understand coverage gaps; do not quote these as user-facing text:")
+        for status in evidence_packet.retrieval_statuses:
+            query = f" query={status.query}" if status.query else ""
+            lines.append(f"- {status.channel}: {status.status}.{query} {status.message}")
+
     lines.append("")
-    lines.append("Specialist summaries:")
+    lines.append("Specialist summaries. Use as interpretation only; do not mention agent names in the final answer:")
     for result in specialist_results:
         lines.append(f"- {result.agent_name} ({result.confidence} confidence): {result.summary}")
 
@@ -179,6 +237,31 @@ def format_synthesis_evidence(
             lines.append(f"- {citation.title} ({publisher}, {date}): {citation.supports_claim}")
 
     return "\n".join(lines)
+
+
+def build_watch_items(
+    specialist_results: list[AgentResult],
+    evidence_packet: EvidencePacket | None,
+) -> list[str]:
+    items: list[str] = []
+    if evidence_packet is not None:
+        if any(item.source_kind == "live_web" for item in evidence_packet.items):
+            items.append("Whether newer live sources confirm or reverse today's signal.")
+        if any(item.source_kind == "direct_api" for item in evidence_packet.items):
+            items.append("Whether official/API data confirms the live web narrative.")
+        skipped_live = [
+            status
+            for status in evidence_packet.retrieval_statuses
+            if status.channel == "live_web" and status.status != "success"
+        ]
+        if skipped_live:
+            items.append("Live web coverage was limited, so refresh once the source is available.")
+
+    low_confidence_count = sum(1 for result in specialist_results if result.confidence == "low")
+    if low_confidence_count:
+        items.append("Evidence remains thin in at least one area, so treat conclusions as provisional.")
+
+    return dedupe_strings(items)
 
 
 def route_agent_names(context: AgentContext) -> list[str]:
@@ -196,6 +279,14 @@ def route_agent_names(context: AgentContext) -> list[str]:
         "filing",
         "revenue",
         "sec",
+        "alphabet",
+        "amazon",
+        "apple",
+        "google",
+        "meta",
+        "microsoft",
+        "nvidia",
+        "tesla",
     ):
         selected.append("CompanyAgent")
 
@@ -210,6 +301,9 @@ def route_agent_names(context: AgentContext) -> list[str]:
         "yield",
         "bond",
         "credit",
+        "portfolio",
+        "watch",
+        "watchlist",
     ):
         selected.append("MarketAgent")
 
@@ -315,15 +409,24 @@ def build_placeholder_summary(context: AgentContext) -> str:
 
 def run_agent_query(request: AgentQueryRequest, session: Session | None = None) -> AgentQueryResponse:
     request_id = str(uuid4())
+    if session is not None:
+        request = personalize_agent_request(request, session)
     context = build_agent_context(request_id, request)
     runtime = AgentRuntime(build_default_registry(session), AgentRunLogger(session))
     results = [runtime.run("CoordinatorAgent", context)]
+    evidence_packet = None
 
     if session is not None:
-        for agent_name in route_agent_names(context):
+        routed_agent_names = route_agent_names(context)
+        plan = build_research_workflow_plan(context, routed_agent_names)
+        evidence_packet = build_evidence_packet(context=context, plan=plan, session=session)
+        context = context.model_copy(update={"evidence_packet": evidence_packet.model_dump()})
+        for agent_name in routed_agent_names:
             results.append(runtime.run(agent_name, context))
 
-    response = build_agent_response(request_id, results, request)
+    response = build_agent_response(request_id, results, request, evidence_packet)
+    if evidence_packet is not None:
+        response.agents_ran.insert(1, "EvidenceFusionAgent")
 
     if session is not None:
         session.commit()
