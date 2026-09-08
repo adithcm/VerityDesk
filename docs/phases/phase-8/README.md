@@ -1,6 +1,6 @@
 # Phase 8: Agent Framework Restructure And Web-First Research
 
-Status: Planned
+Status: Complete
 
 ## Goal
 
@@ -221,6 +221,8 @@ Status: Complete
 
 ### 8.9 Phase 8 Validation And Docs
 
+Status: Complete
+
 - Add evaluation fixtures for flexible real-world questions.
 - Validate citation and guardrail behavior.
 - Document what live retrieval can and cannot do.
@@ -242,6 +244,8 @@ Status: Complete
 - [Milestone 8.6: Clean LLM answer synthesis](milestones/8.6-clean-llm-answer-synthesis.md)
 - [Milestone 8.7: Personalization-aware research](milestones/8.7-personalization-aware-research.md)
 - [Milestone 8.8: Proactive and automated daily intelligence](milestones/8.8-proactive-and-automated-daily-intelligence.md)
+- [Milestone 8.9: Phase 8 validation and docs](milestones/8.9-phase-8-validation-and-docs.md)
+- [Phase 8 Web Research Policy](web-research-policy.md)
 
 ## Definition Of Done
 
@@ -258,3 +262,5 @@ Status: Complete
 ## Handoff To Phase 9
 
 After the web-first research workflow and restructured agent behavior are working, Phase 9 should do a dedicated UI, prompting, and product polish pass. That phase should address remaining dissatisfaction with layout, briefing quality, empty sections, wording, and overall user friendliness before the app is packaged for desktop use.
+
+Carry forward one live-testing finding: Tavily usage should be tuned so normal questions default to one lower-cost search, while daily briefings, explicit deep dives, or broad multi-topic questions can use additional/advanced searches.

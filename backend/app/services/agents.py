@@ -279,6 +279,14 @@ def route_agent_names(context: AgentContext) -> list[str]:
         "filing",
         "revenue",
         "sec",
+        "alphabet",
+        "amazon",
+        "apple",
+        "google",
+        "meta",
+        "microsoft",
+        "nvidia",
+        "tesla",
     ):
         selected.append("CompanyAgent")
 
@@ -293,6 +301,9 @@ def route_agent_names(context: AgentContext) -> list[str]:
         "yield",
         "bond",
         "credit",
+        "portfolio",
+        "watch",
+        "watchlist",
     ):
         selected.append("MarketAgent")
 

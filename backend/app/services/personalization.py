@@ -21,6 +21,16 @@ BROAD_PERSONALIZATION_TERMS = {
 }
 
 HOUSING_TERMS = {"housing", "home", "mortgage", "real estate", "rent", "rental"}
+SPECIFIC_COMPANY_TERMS = {
+    "alphabet",
+    "amazon",
+    "apple",
+    "google",
+    "meta",
+    "microsoft",
+    "nvidia",
+    "tesla",
+}
 
 
 def get_or_create_preferences(session: Session) -> UserSettings:
@@ -90,6 +100,8 @@ def personalize_agent_request(
 def should_apply_watchlist(text: str, request: AgentQueryRequest) -> bool:
     if request.companies:
         return False
+    if any(term in text for term in SPECIFIC_COMPANY_TERMS):
+        return False
     if request.intent in {"daily_briefing", "market_research", "general_research"}:
         return True
     return any(term in text for term in BROAD_PERSONALIZATION_TERMS)
@@ -126,4 +138,3 @@ def dedupe_clean_values(values: list[str]) -> list[str]:
         seen.add(normalized)
         cleaned.append(text)
     return cleaned
-

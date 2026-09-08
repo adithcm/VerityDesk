@@ -339,10 +339,11 @@ def build_packet_risks(
 
 def confidence_for_packet(items: list[EvidencePacketItem], citations: list[AgentCitation]) -> ConfidenceLevel:
     live_count = sum(1 for item in items if item.source_kind == "live_web")
+    direct_count = sum(1 for item in items if item.source_kind == "direct_api")
     primary_or_reputable = sum(1 for item in items if item.source_quality in {"primary", "reputable"})
     if live_count >= 2 and primary_or_reputable >= 3 and len(citations) >= 3:
         return "high"
-    if live_count >= 1 or len(citations) >= 2:
+    if live_count >= 1 or direct_count >= 1 or len(citations) >= 2:
         return "medium"
     return "low"
 
