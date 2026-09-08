@@ -26,7 +26,11 @@ from app.schemas.evidence_packet import EvidencePacket
 from app.services.agent_runtime import AgentRegistry, AgentRunLogger, AgentRuntime, build_agent_context
 from app.services.citations import format_sources_section
 from app.services.evidence_fusion import build_evidence_packet
-from app.services.guardrails import FINANCIAL_DISCLAIMER, enforce_agent_guardrails
+from app.services.guardrails import (
+    FINANCIAL_DISCLAIMER,
+    enforce_agent_guardrails,
+    find_banned_direct_advice_phrases,
+)
 from app.services.research_evidence import ResearchEvidenceRepository
 from app.services.research_workflow import build_research_workflow_plan
 
@@ -86,6 +90,24 @@ def build_agent_response(
         citations=citations,
         confidence=confidence,
     )
+    hidden_banned_phrases = find_banned_direct_advice_phrases(
+        " ".join(result.summary for result in results)
+    )
+    if hidden_banned_phrases and guardrail.status != "blocked":
+        guardrail = guardrail.model_copy(
+            update={
+                "status": "blocked",
+                "issues": dedupe_strings(
+                    [
+                        *guardrail.issues,
+                        "Specialist output contained direct investment advice wording.",
+                    ]
+                ),
+                "banned_phrases_found": dedupe_strings(
+                    [*guardrail.banned_phrases_found, *hidden_banned_phrases]
+                ),
+            }
+        )
     safe_summary = guardrail.rewritten_text or summary
 
     return AgentQueryResponse(
@@ -110,7 +132,6 @@ def synthesize_agent_results(
     request: AgentQueryRequest | None = None,
     evidence_packet: EvidencePacket | None = None,
 ) -> str:
-    coordinator = next((result for result in results if result.agent_name == "CoordinatorAgent"), None)
     specialist_results = [result for result in results if result.agent_name != "CoordinatorAgent"]
     sections = [
         FINANCIAL_DISCLAIMER,
@@ -119,11 +140,8 @@ def synthesize_agent_results(
         "",
     ]
 
-    if coordinator is not None:
-        sections.extend([coordinator.summary, ""])
-
     if not specialist_results:
-        sections.append("No specialist agents were run for this request.")
+        sections.append("I do not have enough specialist research to answer this yet.")
         return "\n".join(sections)
 
     sections.append(
@@ -135,10 +153,10 @@ def synthesize_agent_results(
         )
     )
 
-    risks = dedupe_strings([risk for result in specialist_results for risk in result.risks])
-    if risks:
-        sections.extend(["", "Key risks:"])
-        sections.extend(f"- {risk}" for risk in risks[:5])
+    watch_items = build_watch_items(specialist_results, evidence_packet)
+    if watch_items:
+        sections.extend(["", "What To Watch:"])
+        sections.extend(f"- {item}" for item in watch_items[:4])
 
     sections.extend(["", format_sources_section(citations or [])])
 
@@ -158,9 +176,11 @@ def build_natural_language_answer(
     return build_default_summarizer().summarize(
         agent_name="SynthesisAgent",
         instructions=(
-            "Write a direct, natural-language answer to the user's question in 2-4 short paragraphs. "
-            "Use the fused evidence packet first, then specialist summaries as supporting interpretation. "
-            "Mention uncertainty clearly when evidence is thin or retrieval was skipped. "
+            "Write a direct, natural-language answer to the user's question in 2-3 short paragraphs. "
+            "Start with the answer, not process details. Use the fused evidence packet first, then specialist "
+            "summaries as supporting interpretation. Do not mention internal agent names, coordinator routing, "
+            "source paths, retrieval statuses, or debug details in the user-facing answer. Mention uncertainty "
+            "plainly when evidence is thin or live web retrieval was skipped. "
             "Do not give direct buy, sell, or hold instructions, and do not present price targets as recommendations."
         ),
         evidence=evidence,
@@ -197,13 +217,13 @@ def format_synthesis_evidence(
 
         if evidence_packet.retrieval_statuses:
             lines.append("")
-            lines.append("Retrieval statuses:")
-            for status in evidence_packet.retrieval_statuses:
-                query = f" query={status.query}" if status.query else ""
-                lines.append(f"- {status.channel}: {status.status}.{query} {status.message}")
+        lines.append("Internal retrieval statuses. Use only to understand coverage gaps; do not quote these as user-facing text:")
+        for status in evidence_packet.retrieval_statuses:
+            query = f" query={status.query}" if status.query else ""
+            lines.append(f"- {status.channel}: {status.status}.{query} {status.message}")
 
     lines.append("")
-    lines.append("Specialist summaries:")
+    lines.append("Specialist summaries. Use as interpretation only; do not mention agent names in the final answer:")
     for result in specialist_results:
         lines.append(f"- {result.agent_name} ({result.confidence} confidence): {result.summary}")
 
@@ -216,6 +236,31 @@ def format_synthesis_evidence(
             lines.append(f"- {citation.title} ({publisher}, {date}): {citation.supports_claim}")
 
     return "\n".join(lines)
+
+
+def build_watch_items(
+    specialist_results: list[AgentResult],
+    evidence_packet: EvidencePacket | None,
+) -> list[str]:
+    items: list[str] = []
+    if evidence_packet is not None:
+        if any(item.source_kind == "live_web" for item in evidence_packet.items):
+            items.append("Whether newer live sources confirm or reverse today's signal.")
+        if any(item.source_kind == "direct_api" for item in evidence_packet.items):
+            items.append("Whether official/API data confirms the live web narrative.")
+        skipped_live = [
+            status
+            for status in evidence_packet.retrieval_statuses
+            if status.channel == "live_web" and status.status != "success"
+        ]
+        if skipped_live:
+            items.append("Live web coverage was limited, so refresh once the source is available.")
+
+    low_confidence_count = sum(1 for result in specialist_results if result.confidence == "low")
+    if low_confidence_count:
+        items.append("Evidence remains thin in at least one area, so treat conclusions as provisional.")
+
+    return dedupe_strings(items)
 
 
 def route_agent_names(context: AgentContext) -> list[str]:

@@ -26,6 +26,9 @@ class TemplateResearchSummarizer:
             return f"{agent_name} did not find enough evidence to produce a source-backed summary."
 
         lines = [line for line in evidence.splitlines() if line.strip()]
+        if agent_name == "SynthesisAgent":
+            return build_template_synthesis_summary(lines)
+
         preview = "\n".join(lines[:6])
         return f"{agent_name} reviewed the available evidence:\n{preview}"
 
@@ -104,6 +107,29 @@ def build_default_summarizer(settings: Settings | None = None) -> ResearchSummar
     if settings.openai_api_key:
         return OpenAIResearchSummarizer(settings)
     return TemplateResearchSummarizer()
+
+
+def build_template_synthesis_summary(lines: list[str]) -> str:
+    evidence_lines = [
+        clean_evidence_line(line)
+        for line in lines
+        if line.startswith("- ") and "|" in line and not line.startswith("- live_web:")
+    ]
+    evidence_lines = [line for line in evidence_lines if line]
+    if not evidence_lines:
+        return "I do not have enough current source-backed evidence to answer this with confidence yet."
+
+    opening = "Here is the clearest source-backed read from the available evidence."
+    details = " ".join(evidence_lines[:3])
+    return f"{opening}\n\n{details}"
+
+
+def clean_evidence_line(line: str) -> str:
+    text = line[2:].strip()
+    if " - " not in text:
+        return ""
+    _source, detail = text.split(" - ", 1)
+    return detail.strip()
 
 
 def build_prompt(agent_name: str, instructions: str, evidence: str) -> str:

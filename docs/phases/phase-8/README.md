@@ -174,11 +174,14 @@ Status: Complete
 
 ### 8.6 Clean LLM Answer Synthesis
 
+Status: Complete
+
 - Make the final answer feel like a clear research response, not a debug trace.
 - Put the direct answer first.
 - Use short paragraphs and a small number of high-signal bullets when helpful.
 - Avoid dumping every agent summary, source path, risk, and fallback note into the main response.
 - Include citations for factual/current claims.
+- Keep internal coordinator routing, retrieval statuses, and source-path details out of the main answer.
 - Clearly separate:
   - what is known
   - what changed recently
@@ -229,6 +232,7 @@ Status: Complete
 - [Milestone 8.3: Controlled live web research](milestones/8.3-controlled-live-web-research.md)
 - [Milestone 8.4: Direct API and local evidence fusion](milestones/8.4-direct-api-and-local-evidence-fusion.md)
 - [Milestone 8.5: Automatic agent routing and multi-agent execution](milestones/8.5-automatic-agent-routing-and-multi-agent-execution.md)
+- [Milestone 8.6: Clean LLM answer synthesis](milestones/8.6-clean-llm-answer-synthesis.md)
 
 ## Definition Of Done
 
