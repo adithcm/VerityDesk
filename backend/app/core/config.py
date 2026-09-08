@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     finnhub_api_key: str | None = None
     newsapi_key: str | None = None
     gdelt_api_key: str | None = None
+    tavily_api_key: str | None = None
+    live_web_search_provider: str = "tavily"
 
     model_config = SettingsConfigDict(
         env_file="../.env",

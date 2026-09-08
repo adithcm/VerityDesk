@@ -344,7 +344,7 @@ def infer_topics(text: str) -> list[str]:
     return [
         topic
         for topic, keywords in TOPIC_KEYWORDS.items()
-        if any(keyword in text for keyword in keywords)
+        if any(text_has_keyword(text, keyword) for keyword in keywords)
     ]
 
 
@@ -384,7 +384,7 @@ def infer_sectors(text: str) -> list[str]:
     return [
         sector
         for sector, keywords in SECTOR_KEYWORDS.items()
-        if any(keyword in text for keyword in keywords)
+        if any(text_has_keyword(text, keyword) for keyword in keywords)
     ]
 
 
@@ -455,6 +455,12 @@ def should_require_live_web(
         or "news" in text
         or context.intent in {"daily_briefing", "general_research"}
     )
+
+
+def text_has_keyword(text: str, keyword: str) -> bool:
+    if len(keyword) <= 3 and keyword.isalnum():
+        return bool(re.search(rf"\b{re.escape(keyword)}\b", text))
+    return keyword in text
 
 
 def build_understanding_reasoning(

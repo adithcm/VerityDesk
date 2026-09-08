@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.agent import AgentQueryRequest, AgentQueryResponse, AgentRunHistoryResponse
+from app.schemas.live_web import LiveWebSearchRequest, LiveWebSearchResponse
 from app.services.agents import list_agent_runs, run_agent_query
+from app.services.live_web_research import run_live_web_search
 
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -20,3 +22,8 @@ def read_agent_runs(
     db: Session = Depends(get_db),
 ) -> AgentRunHistoryResponse:
     return list_agent_runs(db, limit=limit)
+
+
+@router.post("/live-web/search", response_model=LiveWebSearchResponse)
+def search_live_web(request: LiveWebSearchRequest) -> LiveWebSearchResponse:
+    return run_live_web_search(request)

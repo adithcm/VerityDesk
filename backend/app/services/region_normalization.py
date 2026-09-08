@@ -101,7 +101,7 @@ def infer_regions_from_text(text: str) -> list[str]:
             regions.extend(states_from_metro_name(metro))
 
     for code, name in US_STATE_NAMES.items():
-        if re.search(rf"\b{re.escape(code.lower())}\b", normalized) or name.lower() in normalized:
+        if re.search(rf"\b{re.escape(code)}\b", text) or name.lower() in normalized:
             regions.extend([code, name])
 
     if any(term in normalized for term in ("united states", " u s ", " usa ", "national", "us market")):

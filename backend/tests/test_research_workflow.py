@@ -130,3 +130,22 @@ def test_research_workflow_plan_builds_multiple_search_queries() -> None:
     assert plan.query_understanding.tickers == ["NVDA"]
     assert len(live_web_need.search_queries) >= 3
     assert any("earnings filings investor relations latest news" in query for query in live_web_need.search_queries)
+
+
+def test_research_workflow_live_web_need_is_citation_oriented() -> None:
+    context = build_context(
+        user_query="What is happening in world markets today?",
+        intent="daily_briefing",
+        domains=[],
+        regions=[],
+    )
+
+    plan = build_research_workflow_plan(context, ["NewsDigestAgent", "MarketAgent"])
+
+    live_web_need = next(need for need in plan.evidence_needs if need.channel == "live_web")
+    assert live_web_need.required is True
+    assert live_web_need.search_queries == [
+        "What is happening in world markets today?",
+        "markets world_news latest credible sources",
+    ]
+    assert "citations" in live_web_need.purpose

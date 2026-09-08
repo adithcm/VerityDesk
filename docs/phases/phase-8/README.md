@@ -111,6 +111,8 @@ Status: Complete
 
 ### 8.3 Controlled Live Web Research As Primary Flexible Retrieval
 
+Status: Complete
+
 - Build a Live Web Research Agent that can search credible sources and return structured evidence with citations.
 - Treat live web research as the primary path for flexible/current questions, not merely an emergency fallback.
 - Use allowlists, source-quality tiers, rate limits, and blocked-source rules.
@@ -218,6 +220,7 @@ Status: Complete
 
 - [Milestone 8.1: Agent architecture reset](milestones/8.1-agent-architecture-reset.md)
 - [Milestone 8.2: Query understanding and research planning](milestones/8.2-query-understanding-and-research-planning.md)
+- [Milestone 8.3: Controlled live web research](milestones/8.3-controlled-live-web-research.md)
 
 ## Definition Of Done
 
