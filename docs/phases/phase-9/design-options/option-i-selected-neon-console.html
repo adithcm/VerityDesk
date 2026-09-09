@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Selected Neon Console Direction</title>
+    <style>
+      :root {
+        --bg: #020617;
+        --panel: #07111f;
+        --panel-strong: #0a1628;
+        --line: #1d3558;
+        --line-hot: #22d3ee;
+        --text: #f8fafc;
+        --muted: #8aa2b8;
+        --cyan: #22d3ee;
+        --lime: #a3e635;
+        --pink: #f472b6;
+        --orange: #fb923c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(rgba(34, 211, 238, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(34, 211, 238, 0.035) 1px, transparent 1px),
+          radial-gradient(circle at 76% 10%, rgba(244, 114, 182, 0.16), transparent 28rem),
+          radial-gradient(circle at 8% 68%, rgba(163, 230, 53, 0.11), transparent 30rem),
+          var(--bg);
+        background-size: 38px 38px, 38px 38px, auto, auto, auto;
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0;
+      }
+
+      button,
+      textarea {
+        font: inherit;
+      }
+
+      .topbar {
+        align-items: center;
+        border-bottom: 1px solid rgba(34, 211, 238, 0.18);
+        display: flex;
+        justify-content: space-between;
+        min-height: 70px;
+        padding: 0 28px;
+      }
+
+      .brand {
+        align-items: center;
+        display: flex;
+        gap: 12px;
+      }
+
+      .mark {
+        align-items: center;
+        background: #020617;
+        border: 1px solid rgba(163, 230, 53, 0.58);
+        border-radius: 10px;
+        color: var(--lime);
+        display: flex;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-weight: 900;
+        height: 38px;
+        justify-content: center;
+        width: 38px;
+      }
+
+      .brand-title {
+        color: var(--lime);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 14px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .brand-subtitle {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .top-actions {
+        align-items: center;
+        display: flex;
+        gap: 10px;
+      }
+
+      .ghost-button,
+      .primary-button {
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 900;
+        min-height: 40px;
+        padding: 0 14px;
+      }
+
+      .ghost-button {
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--muted);
+      }
+
+      .primary-button {
+        background: var(--lime);
+        border: 0;
+        color: #102000;
+      }
+
+      .workspace {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: 82px minmax(0, 1fr) 390px;
+        margin: 0 auto;
+        max-width: 1440px;
+        padding: 24px;
+      }
+
+      .rail,
+      .terminal,
+      .topic-panel {
+        background: rgba(7, 17, 31, 0.88);
+        border: 1px solid rgba(34, 211, 238, 0.18);
+        box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.05), 0 24px 80px rgba(0, 0, 0, 0.32);
+      }
+
+      .rail {
+        align-items: center;
+        border-radius: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: calc(100vh - 118px);
+        padding: 14px 10px;
+      }
+
+      .rail button {
+        background: #020617;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        color: var(--muted);
+        cursor: pointer;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        font-weight: 900;
+        height: 54px;
+        width: 54px;
+      }
+
+      .rail button.active {
+        border-color: var(--cyan);
+        box-shadow: 0 0 28px rgba(34, 211, 238, 0.16);
+        color: var(--cyan);
+      }
+
+      .rail-spacer {
+        flex: 1;
+      }
+
+      .terminal {
+        border-radius: 14px;
+        min-height: calc(100vh - 118px);
+        overflow: hidden;
+      }
+
+      .terminal-bar {
+        align-items: center;
+        background: rgba(2, 6, 23, 0.92);
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 14px;
+      }
+
+      .dot {
+        border-radius: 999px;
+        height: 10px;
+        width: 10px;
+      }
+
+      .dot.pink {
+        background: var(--pink);
+      }
+
+      .dot.orange {
+        background: var(--orange);
+      }
+
+      .dot.lime {
+        background: var(--lime);
+      }
+
+      .terminal-label {
+        color: var(--muted);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        font-weight: 800;
+        margin-left: 8px;
+      }
+
+      .terminal-body {
+        display: grid;
+        gap: 22px;
+        padding: 28px;
+      }
+
+      .screen {
+        display: none;
+      }
+
+      .screen.active {
+        display: grid;
+        gap: 22px;
+      }
+
+      .command-line {
+        color: var(--lime);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      h1 {
+        font-size: clamp(42px, 6vw, 78px);
+        letter-spacing: 0;
+        line-height: 0.94;
+        margin: 0;
+        max-width: 840px;
+      }
+
+      .intro {
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.55;
+        margin: 0;
+        max-width: 760px;
+      }
+
+      .chat-card {
+        background: #020617;
+        border: 1px solid rgba(34, 211, 238, 0.32);
+        border-radius: 12px;
+        box-shadow: inset 0 0 0 1px rgba(163, 230, 53, 0.04);
+        padding: 18px;
+      }
+
+      textarea {
+        background: transparent;
+        border: 0;
+        color: var(--text);
+        font-size: 22px;
+        line-height: 1.38;
+        min-height: 138px;
+        outline: 0;
+        resize: vertical;
+        width: 100%;
+      }
+
+      .chat-footer,
+      .answer-meta {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: space-between;
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        display: inline-flex;
+        font-size: 12px;
+        font-weight: 850;
+        padding: 7px 10px;
+      }
+
+      .chip.live {
+        border-color: rgba(163, 230, 53, 0.45);
+        color: var(--lime);
+      }
+
+      .chip.search {
+        border-color: rgba(34, 211, 238, 0.44);
+        color: var(--cyan);
+      }
+
+      .answer-card {
+        background: rgba(10, 22, 40, 0.72);
+        border: 1px solid rgba(29, 53, 88, 0.92);
+        border-radius: 12px;
+        padding: 20px;
+      }
+
+      .answer-card h2 {
+        font-size: 24px;
+        margin: 0 0 10px;
+      }
+
+      .answer-card p {
+        color: var(--muted);
+        line-height: 1.58;
+        margin: 0 0 14px;
+      }
+
+      .metric-grid,
+      .settings-grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .metric,
+      .setting-card {
+        background: rgba(2, 6, 23, 0.76);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px;
+      }
+
+      .metric span,
+      .setting-card span {
+        color: var(--muted);
+        display: block;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 11px;
+        font-weight: 900;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+      }
+
+      .metric strong,
+      .setting-card strong {
+        color: var(--text);
+        display: block;
+        font-size: 22px;
+      }
+
+      .setting-card p {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+        margin: 8px 0 0;
+      }
+
+      .profile-note {
+        background: #020617;
+        border: 1px solid rgba(163, 230, 53, 0.3);
+        border-radius: 12px;
+        padding: 16px;
+      }
+
+      .profile-note textarea {
+        font-size: 16px;
+        min-height: 116px;
+      }
+
+      .source-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .source-item {
+        align-items: center;
+        background: rgba(2, 6, 23, 0.62);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        display: grid;
+        gap: 12px;
+        grid-template-columns: 1fr auto;
+        padding: 14px;
+      }
+
+      .source-item h3 {
+        font-size: 15px;
+        margin: 0 0 4px;
+      }
+
+      .source-item p {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.4;
+        margin: 0;
+      }
+
+      .topic-panel {
+        border-radius: 14px;
+        display: grid;
+        gap: 14px;
+        padding: 16px;
+      }
+
+      .panel-heading {
+        align-items: end;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .panel-heading h2 {
+        font-size: 18px;
+        margin: 0;
+      }
+
+      .panel-heading span {
+        color: var(--muted);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 11px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .topic-card {
+        background:
+          linear-gradient(135deg, rgba(34, 211, 238, 0.1), transparent 42%),
+          #020617;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        cursor: pointer;
+        min-height: 126px;
+        padding: 16px;
+        position: relative;
+      }
+
+      .topic-card::after {
+        background: var(--accent, var(--cyan));
+        border-radius: 999px;
+        box-shadow: 0 0 24px var(--accent, var(--cyan));
+        content: "";
+        height: 7px;
+        position: absolute;
+        right: 16px;
+        top: 16px;
+        width: 7px;
+      }
+
+      .topic-card h3 {
+        font-size: 18px;
+        margin: 0 0 8px;
+        max-width: 260px;
+      }
+
+      .topic-card p {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+        margin: 0;
+      }
+
+      .topic-card.market {
+        --accent: var(--lime);
+      }
+
+      .topic-card.housing {
+        --accent: var(--cyan);
+      }
+
+      .topic-card.company {
+        --accent: var(--pink);
+      }
+
+      .topic-card.risk {
+        --accent: var(--orange);
+      }
+
+      .topic-card.active {
+        border-color: var(--accent, var(--cyan));
+        box-shadow: 0 0 30px rgba(34, 211, 238, 0.12);
+      }
+
+      .source-strip {
+        background: rgba(2, 6, 23, 0.78);
+        border: 1px solid rgba(29, 53, 88, 0.86);
+        border-radius: 12px;
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+      }
+
+      .source-row {
+        align-items: center;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .source-row span:first-child {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .source-row span:last-child {
+        color: var(--lime);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      @media (max-width: 1120px) {
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .rail {
+          flex-direction: row;
+          min-height: auto;
+        }
+
+        .rail-spacer {
+          display: none;
+        }
+
+        .metric-grid,
+        .settings-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark">V</div>
+        <div>
+          <div class="brand-title">VerityDesk</div>
+          <div class="brand-subtitle">Neon console selected direction</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button class="ghost-button" data-screen-trigger="settings">Settings</button>
+        <button class="primary-button" data-screen-trigger="settings">Refresh Sources</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="rail" aria-label="Primary navigation">
+        <button class="active" data-screen-trigger="ask">Ask</button>
+        <button data-screen-trigger="daily">Day</button>
+        <button data-screen-trigger="housing">Loc</button>
+        <button data-screen-trigger="risk">Risk</button>
+        <button data-screen-trigger="company">Co</button>
+        <div class="rail-spacer"></div>
+        <button data-screen-trigger="settings">Set</button>
+      </aside>
+
+      <section class="terminal">
+        <div class="terminal-bar">
+          <span class="dot pink"></span>
+          <span class="dot orange"></span>
+          <span class="dot lime"></span>
+          <span class="terminal-label">live-web: primary / APIs: corroboration / profile: loaded</span>
+        </div>
+
+        <div class="terminal-body">
+          <div class="screen active" data-screen="ask">
+          <div>
+            <div class="command-line">veritydesk run --mode=answer --citations=on</div>
+            <h1>Ask once. Get the brief.</h1>
+            <p class="intro">
+              The home screen stays simple: one question box, a readable answer, and useful topic launches on the right.
+              The app decides which agents and sources to use behind the scenes.
+            </p>
+          </div>
+
+          <div class="chat-card">
+            <textarea>What is happening with housing, mortgage rates, and affordability near me right now?</textarea>
+            <div class="chat-footer">
+              <div class="chip-row">
+                <span class="chip live">Tavily web search</span>
+                <span class="chip search">FRED + FHFA + Census</span>
+                <span class="chip">Personal context included</span>
+              </div>
+              <button class="primary-button">Run Answer</button>
+            </div>
+          </div>
+
+          <article class="answer-card">
+            <h2>Your local housing market looks rate-sensitive, with affordability still the key pressure point.</h2>
+            <p>
+              The final UI should lead with a natural-language answer first, then show supporting signals below.
+              Citations and raw source details stay available, but they do not dominate the screen.
+            </p>
+            <div class="answer-meta">
+              <div class="chip-row">
+                <span class="chip">Updated today</span>
+                <span class="chip">5 sources checked</span>
+                <span class="chip">Confidence: medium</span>
+              </div>
+              <button class="ghost-button">View Sources</button>
+            </div>
+          </article>
+          </div>
+
+          <div class="screen" data-screen="daily">
+            <div>
+              <div class="command-line">veritydesk brief --today --personalized</div>
+              <h1>Daily briefing.</h1>
+              <p class="intro">
+                The morning view should be concise: what changed, why it matters to your interests, and what deserves attention today.
+              </p>
+            </div>
+            <div class="metric-grid">
+              <div class="metric"><span>Market tone</span><strong>Mixed</strong></div>
+              <div class="metric"><span>Rates</span><strong>Watch</strong></div>
+              <div class="metric"><span>Housing</span><strong>Soft</strong></div>
+            </div>
+            <article class="answer-card">
+              <h2>Today’s brief focuses on rates, AI earnings, energy risk, and local affordability.</h2>
+              <p>
+                This screen is for the user who opens the app once in the morning and wants the system to already know what matters.
+              </p>
+              <div class="chip-row">
+                <span class="chip live">Generated at 8:00 AM</span>
+                <span class="chip search">Live web checked</span>
+                <span class="chip">APIs verified</span>
+              </div>
+            </article>
+          </div>
+
+          <div class="screen" data-screen="housing">
+            <div>
+              <div class="command-line">veritydesk brief --topic=local-housing --region=settings</div>
+              <h1>Local housing pulse.</h1>
+              <p class="intro">
+                A topic card opens a prebuilt briefing instead of asking the user to pick sources, agents, tickers, or regions.
+              </p>
+            </div>
+            <div class="metric-grid">
+              <div class="metric"><span>Mortgage rates</span><strong>Primary driver</strong></div>
+              <div class="metric"><span>Affordability</span><strong>Pressure</strong></div>
+              <div class="metric"><span>Local demand</span><strong>Verify live</strong></div>
+            </div>
+            <article class="answer-card">
+              <h2>The final answer should combine live local web results with FHFA, FRED, Census, and Freddie Mac context.</h2>
+              <p>
+                The goal is to answer questions for the user's saved area without forcing them to know which dataset, region code, or source to query.
+              </p>
+              <button class="ghost-button">Open Citations</button>
+            </article>
+          </div>
+
+          <div class="screen" data-screen="risk">
+            <div>
+              <div class="command-line">veritydesk brief --topic=world-risk</div>
+              <h1>World risk radar.</h1>
+              <p class="intro">
+                This screen keeps global news digestible by translating events into likely market, commodity, policy, and portfolio watchpoints.
+              </p>
+            </div>
+            <div class="metric-grid">
+              <div class="metric"><span>Geopolitics</span><strong>Elevated</strong></div>
+              <div class="metric"><span>Energy</span><strong>Volatile</strong></div>
+              <div class="metric"><span>Policy</span><strong>Active</strong></div>
+            </div>
+            <article class="answer-card">
+              <h2>Risk briefings should separate facts, likely impacts, and uncertainty.</h2>
+              <p>
+                This is where the UI can show a clean summary first and reserve the deeper source trail for a details drawer.
+              </p>
+            </article>
+          </div>
+
+          <div class="screen" data-screen="company">
+            <div>
+              <div class="command-line">veritydesk brief --topic=watchlist</div>
+              <h1>Watchlist moves.</h1>
+              <p class="intro">
+                The app should know the user's tracked companies and pull together earnings, filings, analyst notes, product news, and sector context.
+              </p>
+            </div>
+            <div class="metric-grid">
+              <div class="metric"><span>Earnings</span><strong>Upcoming</strong></div>
+              <div class="metric"><span>Filings</span><strong>Checked</strong></div>
+              <div class="metric"><span>News</span><strong>Live</strong></div>
+            </div>
+            <article class="answer-card">
+              <h2>Company answers should be catalyst-first, not a wall of headlines.</h2>
+              <p>
+                This view should explain what changed, whether it matters, and what to monitor next without giving direct buy or sell instructions.
+              </p>
+            </article>
+          </div>
+
+          <div class="screen" data-screen="settings">
+            <div>
+              <div class="command-line">veritydesk settings --profile --sources --automation</div>
+              <h1>Control center.</h1>
+              <p class="intro">
+                Settings holds the complexity so the home page can stay clean. This is where personalization, source health, and automation live.
+              </p>
+            </div>
+            <div class="profile-note">
+              <div class="command-line">personal context</div>
+              <textarea>I live in Arizona, care about housing affordability, mortgage rates, broad market risk, and a few long-term technology companies. Keep answers concise and practical.</textarea>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-card">
+                <span>Daily run</span>
+                <strong>On</strong>
+                <p>Briefing refreshes at 8:00 AM local time.</p>
+              </div>
+              <div class="setting-card">
+                <span>Regions</span>
+                <strong>AZ, US</strong>
+                <p>Used automatically for housing and local economic answers.</p>
+              </div>
+              <div class="setting-card">
+                <span>Watchlist</span>
+                <strong>8 names</strong>
+                <p>Company cards and questions use this by default.</p>
+              </div>
+            </div>
+            <article class="answer-card">
+              <h2>Sources</h2>
+              <div class="source-list">
+                <div class="source-item">
+                  <div>
+                    <h3>Tavily Web Search</h3>
+                    <p>Primary live web layer for fresh answers and citations.</p>
+                  </div>
+                  <span class="chip live">Connected</span>
+                </div>
+                <div class="source-item">
+                  <div>
+                    <h3>FRED, FHFA, Census, Freddie Mac</h3>
+                    <p>Economic and housing data used to verify live web findings.</p>
+                  </div>
+                  <span class="chip search">Connected</span>
+                </div>
+                <div class="source-item">
+                  <div>
+                    <h3>Alpha Vantage, Finnhub, NewsAPI, SEC</h3>
+                    <p>Market, company, filing, and news context for watchlist answers.</p>
+                  </div>
+                  <span class="chip search">Connected</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <aside class="topic-panel" aria-label="Topic briefing cards">
+        <div class="panel-heading">
+          <h2>Quick Briefings</h2>
+          <span>Auto routed</span>
+        </div>
+
+        <button class="topic-card market" data-screen-trigger="daily">
+          <h3>Market Setup</h3>
+          <p>Indexes, rates, sector tone, volatility, and what to watch before the open.</p>
+        </button>
+
+        <button class="topic-card housing" data-screen-trigger="housing">
+          <h3>Local Housing Pulse</h3>
+          <p>Prices, mortgage rates, affordability, inventory, and local signals for your saved area.</p>
+        </button>
+
+        <button class="topic-card company" data-screen-trigger="company">
+          <h3>Watchlist Moves</h3>
+          <p>Company news, filings, earnings signals, analyst changes, and major catalysts.</p>
+        </button>
+
+        <button class="topic-card risk" data-screen-trigger="risk">
+          <h3>World Risk Radar</h3>
+          <p>Geopolitics, commodities, policy, regulation, and spillovers into markets.</p>
+        </button>
+
+        <div class="source-strip">
+          <div class="source-row">
+            <span>Live web</span>
+            <span>ON</span>
+          </div>
+          <div class="source-row">
+            <span>Market APIs</span>
+            <span>ON</span>
+          </div>
+          <div class="source-row">
+            <span>Housing APIs</span>
+            <span>ON</span>
+          </div>
+          <div class="source-row">
+            <span>Daily refresh</span>
+            <span>8:00 AM</span>
+          </div>
+        </div>
+      </aside>
+    </main>
+    <script>
+      const triggers = document.querySelectorAll("[data-screen-trigger]");
+      const screens = document.querySelectorAll("[data-screen]");
+      const railButtons = document.querySelectorAll(".rail button");
+      const topicCards = document.querySelectorAll(".topic-card");
+
+      function showScreen(name) {
+        screens.forEach((screen) => {
+          screen.classList.toggle("active", screen.dataset.screen === name);
+        });
+
+        railButtons.forEach((button) => {
+          button.classList.toggle("active", button.dataset.screenTrigger === name);
+        });
+
+        topicCards.forEach((card) => {
+          card.classList.toggle("active", card.dataset.screenTrigger === name);
+        });
+      }
+
+      triggers.forEach((trigger) => {
+        trigger.addEventListener("click", () => showScreen(trigger.dataset.screenTrigger));
+      });
+    </script>
+  </body>
+</html>

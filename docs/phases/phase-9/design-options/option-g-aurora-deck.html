@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Aurora Deck Concept</title>
+    <style>
+      :root {
+        --bg: #eaf4ff;
+        --ink: #07111f;
+        --muted: #607086;
+        --panel: rgba(255, 255, 255, 0.66);
+        --line: rgba(52, 77, 115, 0.18);
+        --blue: #2563eb;
+        --cyan: #06b6d4;
+        --violet: #7c3aed;
+        --green: #059669;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 12% 8%, rgba(124, 58, 237, 0.24), transparent 28rem),
+          radial-gradient(circle at 88% 16%, rgba(6, 182, 212, 0.24), transparent 30rem),
+          linear-gradient(135deg, #f7fbff 0%, #ddecff 54%, #f4f7fb 100%);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0;
+      }
+
+      button, textarea, input { font: inherit; }
+      button { cursor: pointer; }
+
+      .shell {
+        display: grid;
+        gap: 22px;
+        grid-template-columns: 320px minmax(0, 1fr);
+        margin: 0 auto;
+        max-width: 1360px;
+        min-height: 100vh;
+        padding: 28px;
+      }
+
+      .glass {
+        backdrop-filter: blur(24px);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        box-shadow: 0 24px 80px rgba(31, 54, 88, 0.14);
+      }
+
+      .sidebar {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        padding: 22px;
+      }
+
+      .brand {
+        align-items: center;
+        display: flex;
+        gap: 12px;
+      }
+
+      .mark {
+        align-items: center;
+        background: linear-gradient(135deg, var(--blue), var(--violet));
+        border-radius: 16px;
+        color: white;
+        display: flex;
+        font-weight: 900;
+        height: 44px;
+        justify-content: center;
+        width: 44px;
+      }
+
+      .nav {
+        display: grid;
+        gap: 10px;
+        margin-top: 34px;
+      }
+
+      .nav button {
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 16px;
+        color: var(--muted);
+        min-height: 48px;
+        padding: 0 14px;
+        text-align: left;
+      }
+
+      .nav button.active {
+        background: rgba(37, 99, 235, 0.1);
+        border-color: rgba(37, 99, 235, 0.18);
+        color: var(--blue);
+        font-weight: 850;
+      }
+
+      .main {
+        display: grid;
+        gap: 22px;
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+
+      .hero {
+        padding: 30px;
+      }
+
+      .eyebrow {
+        color: var(--blue);
+        font-size: 12px;
+        font-weight: 900;
+        margin: 0 0 12px;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        font-size: clamp(42px, 6vw, 74px);
+        line-height: 0.94;
+        margin: 0;
+      }
+
+      .hero p {
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.55;
+        max-width: 760px;
+      }
+
+      .workspace {
+        display: grid;
+        gap: 22px;
+        grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.75fr);
+      }
+
+      .chat {
+        display: grid;
+        grid-template-rows: 1fr auto;
+        min-height: 560px;
+        padding: 22px;
+      }
+
+      .message {
+        border-radius: 20px;
+        line-height: 1.55;
+        margin-bottom: 12px;
+        max-width: 78%;
+        padding: 14px 16px;
+      }
+
+      .agent {
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(52, 77, 115, 0.12);
+      }
+
+      .user {
+        background: linear-gradient(135deg, rgba(37, 99, 235, 0.14), rgba(6, 182, 212, 0.14));
+        border: 1px solid rgba(37, 99, 235, 0.16);
+        margin-left: auto;
+      }
+
+      .composer {
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 14px;
+      }
+
+      textarea {
+        background: transparent;
+        border: 0;
+        color: var(--ink);
+        min-height: 92px;
+        outline: 0;
+        resize: vertical;
+        width: 100%;
+      }
+
+      .composer-footer {
+        align-items: center;
+        border-top: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        padding-top: 12px;
+      }
+
+      .pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+      .pill {
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        padding: 7px 10px;
+      }
+
+      .pill.good { color: var(--green); }
+
+      .primary {
+        background: linear-gradient(135deg, var(--blue), var(--cyan));
+        border: 0;
+        border-radius: 14px;
+        color: white;
+        font-weight: 850;
+        min-height: 44px;
+        padding: 0 18px;
+      }
+
+      .topic-grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .topic {
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        overflow: hidden;
+        padding: 18px;
+      }
+
+      .topic::before {
+        background: linear-gradient(90deg, var(--blue), var(--cyan), var(--violet));
+        border-radius: 999px;
+        content: "";
+        display: block;
+        height: 4px;
+        margin-bottom: 14px;
+        width: 76px;
+      }
+
+      .topic h2 {
+        font-size: 20px;
+        margin: 0;
+      }
+
+      .topic p {
+        color: var(--muted);
+        line-height: 1.45;
+        margin: 8px 0 0;
+      }
+
+      @media (max-width: 1050px) {
+        .shell,
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="glass sidebar">
+        <div>
+          <div class="brand">
+            <div class="mark">V</div>
+            <div>
+              <strong>VerityDesk</strong>
+              <div style="color: var(--muted); font-size: 12px">Aurora research deck</div>
+            </div>
+          </div>
+          <nav class="nav">
+            <button class="active">Home</button>
+            <button>Daily Briefing</button>
+            <button>Watchlist</button>
+            <button>Housing</button>
+            <button>Settings</button>
+          </nav>
+        </div>
+        <div></div>
+        <div class="pill-row">
+          <span class="pill good">Live web on</span>
+          <span class="pill">1 search default</span>
+        </div>
+      </aside>
+
+      <section class="main">
+        <div class="glass hero">
+          <p class="eyebrow">Personal intelligence</p>
+          <h1>Search the web. Verify the signal.</h1>
+          <p>
+            A brighter futuristic layout: soft glass, large whitespace, and a simple two-part workflow for questions and briefings.
+          </p>
+        </div>
+
+        <div class="workspace">
+          <section class="glass chat">
+            <div>
+              <div class="message agent">I have your profile loaded: Arizona, housing, mortgage rates, AAPL, MSFT, and market risk.</div>
+              <div class="message user">What changed today that I should care about?</div>
+              <div class="message agent">I will search live sources first, then verify with connected APIs and saved reports.</div>
+            </div>
+            <div class="composer">
+              <textarea>Ask VerityDesk anything...</textarea>
+              <div class="composer-footer">
+                <div class="pill-row">
+                  <span class="pill">Personal context included</span>
+                  <span class="pill">Sources after answer</span>
+                </div>
+                <button class="primary">Ask</button>
+              </div>
+            </div>
+          </section>
+
+          <aside class="topic-grid">
+            <article class="topic">
+              <h2>Today&apos;s Briefing</h2>
+              <p>A concise morning answer tailored to your watchlist, region, and interests.</p>
+            </article>
+            <article class="topic">
+              <h2>Arizona Housing</h2>
+              <p>Median prices, inventory, rates, affordability, and local uncertainty.</p>
+            </article>
+            <article class="topic">
+              <h2>Market Setup</h2>
+              <p>S&amp;P 500, yields, credit, sectors, commodities, and macro catalysts.</p>
+            </article>
+            <article class="topic">
+              <h2>Company Moves</h2>
+              <p>AAPL, MSFT, filings, earnings signals, analyst context, and current news.</p>
+            </article>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+

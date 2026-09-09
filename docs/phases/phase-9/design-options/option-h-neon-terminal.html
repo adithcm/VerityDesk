@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Neon Terminal Concept</title>
+    <style>
+      :root {
+        --bg: #020617;
+        --ink: #d9f99d;
+        --white: #f8fafc;
+        --muted: #8aa2b8;
+        --panel: #07111f;
+        --line: #1e3a5f;
+        --cyan: #22d3ee;
+        --lime: #a3e635;
+        --pink: #f472b6;
+        --orange: #fb923c;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(rgba(34, 211, 238, 0.04) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(34, 211, 238, 0.04) 1px, transparent 1px),
+          radial-gradient(circle at 80% 10%, rgba(244, 114, 182, 0.16), transparent 28rem),
+          radial-gradient(circle at 8% 70%, rgba(163, 230, 53, 0.12), transparent 28rem),
+          var(--bg);
+        background-size: 36px 36px, 36px 36px, auto, auto, auto;
+        color: var(--white);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0;
+      }
+
+      button, textarea { font: inherit; }
+
+      .top {
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        min-height: 68px;
+        padding: 0 26px;
+      }
+
+      .brand {
+        color: var(--lime);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-weight: 900;
+      }
+
+      .nav {
+        display: flex;
+        gap: 8px;
+      }
+
+      .nav button {
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--muted);
+        min-height: 38px;
+        padding: 0 12px;
+      }
+
+      .nav button.active {
+        border-color: var(--cyan);
+        color: var(--cyan);
+      }
+
+      .layout {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        margin: 0 auto;
+        max-width: 1320px;
+        padding: 26px;
+      }
+
+      .terminal {
+        background: rgba(7, 17, 31, 0.88);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.08), 0 24px 80px rgba(0, 0, 0, 0.34);
+        min-height: calc(100vh - 120px);
+        overflow: hidden;
+      }
+
+      .terminal-bar {
+        align-items: center;
+        background: rgba(2, 6, 23, 0.9);
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 14px;
+      }
+
+      .dot {
+        border-radius: 999px;
+        height: 10px;
+        width: 10px;
+      }
+
+      .dot.red { background: var(--pink); }
+      .dot.yellow { background: var(--orange); }
+      .dot.green { background: var(--lime); }
+
+      .terminal-body {
+        padding: 26px;
+      }
+
+      .command {
+        color: var(--lime);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 14px;
+        margin-bottom: 16px;
+      }
+
+      h1 {
+        color: var(--white);
+        font-size: clamp(38px, 6vw, 76px);
+        line-height: 0.94;
+        margin: 0 0 18px;
+      }
+
+      .muted {
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .chat-line {
+        border-left: 2px solid var(--cyan);
+        margin-top: 20px;
+        padding-left: 16px;
+      }
+
+      .prompt {
+        background: #020617;
+        border: 1px solid rgba(34, 211, 238, 0.34);
+        border-radius: 10px;
+        margin-top: 28px;
+        padding: 16px;
+      }
+
+      textarea {
+        background: transparent;
+        border: 0;
+        color: var(--white);
+        font-size: 20px;
+        min-height: 120px;
+        outline: 0;
+        resize: vertical;
+        width: 100%;
+      }
+
+      .prompt-footer {
+        align-items: center;
+        border-top: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        padding-top: 12px;
+      }
+
+      .pill {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        display: inline-flex;
+        font-size: 12px;
+        font-weight: 800;
+        margin-right: 8px;
+        padding: 7px 10px;
+      }
+
+      .pill.live {
+        border-color: rgba(163, 230, 53, 0.45);
+        color: var(--lime);
+      }
+
+      .run {
+        background: var(--lime);
+        border: 0;
+        border-radius: 8px;
+        color: #102000;
+        font-weight: 900;
+        min-height: 42px;
+        padding: 0 18px;
+      }
+
+      .board {
+        display: grid;
+        gap: 14px;
+      }
+
+      .tile {
+        background: rgba(7, 17, 31, 0.86);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 18px;
+      }
+
+      .tile:nth-child(2) { border-color: rgba(34, 211, 238, 0.3); }
+      .tile:nth-child(3) { border-color: rgba(163, 230, 53, 0.3); }
+      .tile:nth-child(4) { border-color: rgba(244, 114, 182, 0.3); }
+
+      .label {
+        color: var(--cyan);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .tile h2 {
+        margin: 8px 0;
+      }
+
+      @media (max-width: 980px) {
+        .layout { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">VERITYDESK://research</div>
+      <nav class="nav">
+        <button class="active">Ask</button>
+        <button>Briefings</button>
+        <button>Settings</button>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <section class="terminal">
+        <div class="terminal-bar">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+        </div>
+        <div class="terminal-body">
+          <div class="command">$ live_search --primary --verify_with=apis --profile=loaded</div>
+          <h1>Ask the intelligence layer.</h1>
+          <p class="muted">
+            This version feels more futuristic and terminal-inspired while keeping the actual workflow simple.
+          </p>
+          <div class="chat-line">
+            <p><strong>Agent:</strong> I am tracking Arizona housing, rates, macro pressure, AAPL, MSFT, and today&apos;s market setup.</p>
+            <p><strong>You:</strong> What should I watch today?</p>
+          </div>
+          <div class="prompt">
+            <textarea>Ask about markets, housing, companies, macro, or world events...</textarea>
+            <div class="prompt-footer">
+              <div>
+                <span class="pill live">Tavily primary</span>
+                <span class="pill">1 search default</span>
+                <span class="pill">citations on</span>
+              </div>
+              <button class="run">Run</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="board">
+        <article class="tile">
+          <div class="label">Daily</div>
+          <h2>Morning signal</h2>
+          <p class="muted">One clean briefing for what matters today.</p>
+        </article>
+        <article class="tile">
+          <div class="label">Housing</div>
+          <h2>Arizona pulse</h2>
+          <p class="muted">Median price, affordability, inventory, and mortgage-rate context.</p>
+        </article>
+        <article class="tile">
+          <div class="label">Markets</div>
+          <h2>Risk scan</h2>
+          <p class="muted">S&amp;P, yields, credit, sectors, commodities, and volatility.</p>
+        </article>
+        <article class="tile">
+          <div class="label">Companies</div>
+          <h2>Watchlist changes</h2>
+          <p class="muted">AAPL, MSFT, filings, earnings, and current news.</p>
+        </article>
+      </aside>
+    </main>
+  </body>
+</html>
+

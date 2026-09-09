@@ -1,81 +1,220 @@
-# Phase 9: Final UI, Prompting, And Product Polish
+# Phase 9: UI, Prompting, And Product Experience Rebuild
 
-Status: Planned
+Status: In Progress
 
 ## Goal
 
-Make InvestorAgent feel polished after the core data and agent functionality is in place.
+Make VerityDesk feel like a clean personal research assistant instead of a technical dashboard.
 
-The user is not yet fully happy with the UI or with some generated outputs, but part of that dissatisfaction comes from missing data, scaffolded sources, incomplete parsers, and limited agent retrieval. This phase intentionally waits until after Phase 7 and Phase 8 so the final design can be based on real working functionality instead of designing around temporary gaps.
+The previous phases created the data layer, connected APIs, daily automation, multi-agent workflow, and web-first research path. Phase 9 turns that foundation into a user-friendly product experience: one main chatbot, personalized topic cards, simpler settings, hidden citations, better prompts, and a calmer answer format.
 
 ## User Feedback To Address
 
-- The UI still does not feel simple or polished enough.
-- Some generated briefings include empty or low-value sections because the data layer is incomplete.
+- The current UI shows too much context, status detail, source detail, and system structure.
 - The app should feel more personal and less like a dashboard.
-- The user should not need to scan many lists or understand internal system details.
-- The app should provide clearer, more useful natural-language output.
-- Prompting should produce better briefings and answers once the source coverage is stronger.
+- The user should mostly type only a question.
+- The user should not need to choose agents, sources, tickers, dropdowns, or regions for normal use.
+- Topic cards should automatically use saved settings such as location, watchlist, and interests.
+- Citations and raw source lists should be hidden by default, but available when requested.
+- The main answer should be concise, natural-language, useful, and easy to digest.
+- The agents should feel invisible: the user sees an assistant, not a workflow trace.
+- Tavily/live web should remain primary for freshness, while APIs and stored data corroborate and enrich.
 
 ## Timing
 
-Phase 9 happens after:
+Phase 9 happens after Phase 8 because the app now has the live-web and multi-agent foundation needed to support the simpler experience.
 
-- Phase 7 completes source expansion, parser completion, and regional data improvements.
-- Phase 8 completes flexible agent retrieval and better automatic workflows.
+This phase happens before desktop packaging and portable deployment. The goal is to make the web app experience good enough that packaging it as a Mac app in the next phase is worthwhile.
 
-This phase happens before:
+## Selected Product Direction
 
-- desktop packaging
-- portable deployment
-- broader quality/evaluation work
+The selected design direction is documented in [design-options/README.md](design-options/README.md).
+
+The chosen prototype is [Option I: Selected Neon Console](design-options/option-i-selected-neon-console.html), which combines:
+
+- Option F's layout structure
+- Option H's darker futuristic neon-terminal visual style
+
+The implementation should follow this shape:
+
+- left compact navigation rail
+- center assistant/chat workspace
+- right personalized briefing cards
+- dedicated Settings page
+- sources and citations hidden behind details
+- dark, tech-forward, terminal-inspired visual system
+- no large debug tables on the home page
+
+## Main Chatbot Target
+
+The chatbot is the primary product surface.
+
+Expected behavior:
+
+- User types a plain-language question.
+- The app infers intent, location, companies, market context, time horizon, and source needs.
+- The app uses Tavily/live web first for current and flexible questions.
+- The app uses direct APIs and stored data as verification, context, and history.
+- The app routes to only the agents needed for the question.
+- The answer is a single readable response, not a list of agent outputs.
+- Citations, source traces, confidence, and retrieval timestamps are available behind expandable details.
+- Financial guardrails remain active, but should not overwhelm the answer.
+
+## Personalized Card Target
+
+Cards are one-click prebuilt questions.
+
+They should not be hardcoded to one user or one region. They should use saved Settings context.
+
+Examples:
+
+- Daily Briefing: use saved interests, location, watchlist, and tracked topics.
+- Local Housing Pulse: use the user's preferred location or region from Settings.
+- Market Setup: use the user's market interests and risk focus.
+- Watchlist Moves: use saved companies and tickers.
+- World Risk Radar: use saved topics and preferred news focus.
+
+Card click flow:
+
+```mermaid
+flowchart LR
+    card["User clicks topic card"] --> template["Card prompt template"]
+    template --> settings["Saved user context"]
+    settings --> plan["Research plan"]
+    plan --> web["Tavily/live web"]
+    plan --> api["APIs and stored data"]
+    web --> answer["Clean answer"]
+    api --> answer
+    answer --> details["Hidden citations/details"]
+```
+
+The card prompt templates will be reviewed again before Milestone 9.4 implementation.
+
+## Citation Target
+
+The UI should not show a large citation/source list by default.
+
+Default answer:
+
+- direct answer
+- short supporting explanation
+- what matters
+- what to watch
+- compact disclaimer when relevant
+
+Expandable details:
+
+- source links
+- source types
+- retrieved at timestamps
+- confidence
+- evidence snippets
+- Tavily/API/local evidence mix
 
 ## Milestones
 
-### 9.1 Product UX Review
+### 9.1 Selected UI Direction Docs
 
-- Review the full app with real Phase 7 data and Phase 8 agent behavior.
-- Identify remaining confusing screens, excessive detail, and repeated manual actions.
-- Document the final product shape before packaging.
+Status: Complete
 
-### 9.2 Dashboard Layout Polish
+- Capture the selected neon console direction.
+- Document home page structure, settings structure, card behavior, citation behavior, and agent/chatbot behavior.
+- Preserve the static design prototypes for reference.
 
-- Refine the first screen around the user’s personalized priorities.
-- Reduce secondary panels further if they still feel noisy.
-- Improve hierarchy, spacing, labels, empty states, and calls to action.
+Milestone doc: [milestone-9.1-selected-direction.md](milestone-9.1-selected-direction.md)
 
-### 9.3 Briefing And Report Output Polish
+### 9.2 App Shell Redesign
 
-- Improve how daily briefings, reports, citations, and uncertainty are presented.
-- Make empty/no-data sections less prominent and more useful.
-- Improve wording for missing data, stale data, and source limitations.
+Status: Planned
 
-### 9.4 Prompting And Response Quality Pass
+- Implement the real app layout:
+  - left navigation rail
+  - center chatbot/answer workspace
+  - right briefing cards
+  - dark futuristic visual system
+  - responsive layout for smaller screens
+- Replace the noisy dashboard-first feel with the selected console-first design.
 
-- Refine agent prompts after the data layer is more complete.
-- Improve natural-language synthesis.
-- Reduce repetitive caveats while keeping financial guardrails.
-- Improve answer structure for housing, market, company, macro, and world-news questions.
+### 9.3 Settings Experience
 
-### 9.5 Navigation And Workflow Cleanup
+Status: Planned
 
-- Remove or hide workflows that are no longer needed after automation improves.
-- Make the main path feel like:
-  - open app
-  - see what matters
-  - ask one question
-  - inspect sources only when needed
+- Build the cleaned-up Settings page:
+  - personal note/context
+  - location/preferred regions
+  - watchlist
+  - tracked topics
+  - source status descriptions
+  - one overall refresh button
+  - daily briefing/scheduler settings
+- Keep source details here instead of making them prominent on the home page.
 
-### 9.6 Phase 9 Validation And Docs
+### 9.4 Personalized Briefing Cards
 
-- Validate the final local web app experience.
-- Update screenshots or usage notes if needed.
-- Confirm readiness for desktop packaging.
+Status: Planned
+
+- Replace hardcoded cards with dynamic cards:
+  - Daily Briefing
+  - Local Housing Pulse
+  - Market Setup
+  - Watchlist Moves
+  - World Risk Radar
+  - optional AI/Tech or Rates/Credit based on settings
+- Define card prompt templates after one more user review.
+- Cards should generate prompts automatically from saved user context.
+
+### 9.5 Agent Orchestration Cleanup
+
+Status: Planned
+
+- Make the agents invisible to the user.
+- Remove manual agent/source dropdowns from normal use.
+- Route deterministically based on question/card intent.
+- Avoid calling every agent or spending multiple Tavily searches unnecessarily.
+- Use live web as the primary retrieval path and APIs/stored data as support.
+
+### 9.6 Prompt And Answer Format Revamp
+
+Status: Planned
+
+- Update prompts so answers are:
+  - natural-language first
+  - concise and readable
+  - personalized to saved context
+  - source-backed
+  - clear about uncertainty
+  - guarded against direct buy/sell/hold advice
+- Reduce repetitive disclaimers while preserving compliance.
+- Do not expose internal agent routing in the main answer.
+
+### 9.7 Hidden Citations And Evidence Drawer
+
+Status: Planned
+
+- Move citations/source lists out of the main answer.
+- Add a View Sources or expandable details pattern.
+- Show citations, retrieved timestamps, confidence, and source type only when expanded.
+
+### 9.8 End-To-End Phase 9 Local Testing
+
+Status: Planned
+
+- Run the app locally and test:
+  - chatbot questions
+  - card-generated briefings
+  - settings personalization
+  - source refresh
+  - Tavily/API usage
+  - citation drawer
+  - mobile/responsive layout
+- Tune UI and prompts based on real use.
 
 ## Definition Of Done
 
-- The app feels cleaner and more polished with real connected data.
-- Daily briefings and answers are more useful and less sparse.
-- The main workflow requires minimal manual setup.
-- Raw details are available but do not dominate the experience.
+- The first screen is simple: ask a question or click a personalized card.
+- Settings holds source details, personalization, schedule, and refresh controls.
+- Cards are personalized and not hardcoded to one user's location.
+- Agent/source selection is automatic for normal use.
+- Answers are concise, natural-language, personalized, cited, and guarded.
+- Citations and source traces are hidden by default but easy to inspect.
 - The product is ready to be packaged as a local desktop app in the next phase.

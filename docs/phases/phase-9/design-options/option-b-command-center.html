@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Phase 9 UI Option B</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">V</div>
+          <div>
+            <div class="brand-name">VerityDesk</div>
+            <div class="brand-subtitle">Command center</div>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="text-btn">Refresh</button>
+          <button class="primary-btn">Ask</button>
+        </div>
+      </header>
+
+      <main class="container layout-three">
+        <aside class="panel">
+          <div class="panel-inner">
+            <p class="section-title">Workspace</p>
+            <nav class="mini-nav">
+              <button class="active">Today</button>
+              <button>Ask</button>
+              <button>Watchlist</button>
+              <button>Reports</button>
+              <button>Sources</button>
+            </nav>
+            <div style="margin-top: 22px">
+              <p class="section-title">My Context</p>
+              <div class="pill-row">
+                <span class="pill">Arizona</span>
+                <span class="pill">AAPL</span>
+                <span class="pill">MSFT</span>
+                <span class="pill">Housing</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <section class="stack">
+          <div>
+            <p class="section-title">Today</p>
+            <h1 class="hero-title">Your market desk is ready.</h1>
+          </div>
+
+          <div class="ask-box" style="margin-top: 0">
+            <textarea>Where is the S&P 500 right now and what changed today?</textarea>
+            <div class="ask-footer">
+              <span class="quiet-note">Uses 1 live web search unless the question is broad.</span>
+              <button class="primary-btn">Run</button>
+            </div>
+          </div>
+
+          <div class="metric-grid">
+            <div class="metric">
+              <div class="metric-label">Live Web</div>
+              <div class="metric-value">On</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Daily Run</div>
+              <div class="metric-value">8:00</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Watchlist</div>
+              <div class="metric-value">2</div>
+            </div>
+          </div>
+
+          <div class="feed-item">
+            <div class="feed-top">
+              <span class="small-caps">Briefing</span>
+              <span class="pill good">Updated today</span>
+            </div>
+            <h2 style="margin: 0 0 10px">Rates, housing, and large-cap tech are the main checks.</h2>
+            <p class="brief-copy">
+              The page opens with only the top signal. Details, sources, and raw evidence stay available but out of the way.
+            </p>
+          </div>
+        </section>
+
+        <aside class="stack">
+          <div class="panel">
+            <div class="panel-inner">
+              <p class="section-title">What To Watch</p>
+              <div class="briefing">
+                <div class="brief-item">
+                  <p class="brief-headline">S&P 500 level</p>
+                  <p class="brief-copy">Verify current level with live web, then explain the move.</p>
+                </div>
+                <div class="brief-item">
+                  <p class="brief-headline">Arizona housing</p>
+                  <p class="brief-copy">Check regional reporting plus FHFA and mortgage-rate context.</p>
+                </div>
+                <div class="brief-item">
+                  <p class="brief-headline">AAPL, MSFT</p>
+                  <p class="brief-copy">Look for company-specific news before broad market interpretation.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-inner">
+              <p class="section-title">Sources</p>
+              <div class="source-list">
+                <div class="source-row">
+                  <div>
+                    <div class="source-name">Tavily</div>
+                    <div class="source-meta">Primary search</div>
+                  </div>
+                  <span class="pill good">On</span>
+                </div>
+                <div class="source-row">
+                  <div>
+                    <div class="source-name">OpenAI</div>
+                    <div class="source-meta">Answer synthesis</div>
+                  </div>
+                  <span class="pill good">On</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
+  </body>
+</html>
+
