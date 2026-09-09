@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -31,6 +31,11 @@ const navigation = [
 ] as const;
 
 type View = (typeof navigation)[number];
+type ShellNavItem = {
+  label: string;
+  title: string;
+  view: View;
+};
 type RunMode = "all" | "rss" | "official_api";
 type FreshnessStatus = "fresh" | "stale" | "failed" | "skipped" | "not_configured";
 type AgentIntent =
@@ -318,6 +323,15 @@ const watchlistRows = [
   { symbol: "SPY", focus: "Broad market risk", state: "Monitor" },
   { symbol: "QQQ", focus: "Growth and AI exposure", state: "Monitor" },
   { symbol: "TLT", focus: "Rates sensitivity", state: "Monitor" },
+];
+
+const shellNavigation: ShellNavItem[] = [
+  { label: "Ask", title: "Ask VerityDesk", view: "Dashboard" },
+  { label: "Day", title: "Daily Briefing", view: "Daily Briefing" },
+  { label: "Rpt", title: "Reports", view: "Reports" },
+  { label: "Src", title: "Sources", view: "Sources" },
+  { label: "Co", title: "Watchlist", view: "Watchlist" },
+  { label: "Set", title: "Settings", view: "Settings" },
 ];
 
 export default function Home() {
@@ -817,52 +831,79 @@ export default function Home() {
     }
   }
 
+  function askFromShell(question?: string) {
+    if (question) {
+      setAgentQuery(question);
+    }
+    setManualAgentContext(false);
+    setActiveView("Dashboard");
+  }
+
   return (
-    <main className="min-h-screen bg-[#f5f7f8] text-[#111827]">
-      <div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
-        <aside className="border-b border-[#d7dee3] bg-white px-4 py-4 lg:border-b-0 lg:border-r">
-          <div className="flex items-center justify-between gap-3 lg:block">
-            <div>
-              <p className="text-xs font-semibold uppercase text-[#25636b]">InvestorAgent</p>
-              <h1 className="mt-1 text-xl font-semibold">Market Workspace</h1>
-            </div>
-            <div className="rounded-md border border-[#d7dee3] px-2 py-1 text-xs font-medium text-[#4b5563]">
-              Phase 5.6
-            </div>
-          </div>
+    <main className="min-h-screen bg-[#020617] text-[#f8fafc]">
+      <div className="fixed inset-0 -z-10 bg-[linear-gradient(rgba(34,211,238,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.035)_1px,transparent_1px),radial-gradient(circle_at_76%_10%,rgba(244,114,182,0.16),transparent_28rem),radial-gradient(circle_at_8%_68%,rgba(163,230,53,0.11),transparent_30rem),#020617] bg-[length:38px_38px,38px_38px,auto,auto,auto]" />
 
-          <nav className="mt-5 flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
-            {navigation.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setActiveView(item)}
-                className={`min-h-10 rounded-md px-3 py-2 text-left text-sm font-medium transition ${
-                  activeView === item ? "bg-[#143642] text-white" : "text-[#374151] hover:bg-[#eef3f5]"
-                }`}
-              >
-                {item}
-              </button>
-            ))}
-          </nav>
-
-          <div className="mt-6 hidden border-t border-[#e5eaf0] pt-4 text-xs leading-5 text-[#5b6573] lg:block">
-            {FINANCIAL_DISCLAIMER}
+      <header className="flex min-h-[70px] items-center justify-between gap-4 border-b border-cyan-300/20 px-5 md:px-7">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-lime-300/60 bg-[#020617] font-mono text-sm font-black text-lime-300">
+            V
           </div>
+          <div>
+            <p className="font-mono text-sm font-black uppercase text-lime-300">VerityDesk</p>
+            <p className="text-xs font-semibold text-slate-400">Live web primary / APIs corroborate</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveView("Settings")}
+            className="min-h-10 rounded-lg border border-[#1d3558] px-3 text-sm font-black text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-200"
+          >
+            Settings
+          </button>
+          <button
+            type="button"
+            onClick={triggerIngestionRun}
+            disabled={runLoading}
+            className="min-h-10 rounded-lg bg-lime-300 px-4 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-500"
+          >
+            {runLoading ? "Refreshing" : "Refresh Sources"}
+          </button>
+        </div>
+      </header>
+
+      <div className="mx-auto grid max-w-[1440px] gap-4 p-4 lg:grid-cols-[82px_minmax(0,1fr)_390px] lg:gap-5 lg:p-6">
+        <aside className="flex gap-2 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.32)] lg:min-h-[calc(100vh-118px)] lg:flex-col">
+          {shellNavigation.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              title={item.title}
+              onClick={() => setActiveView(item.view)}
+              className={`h-[54px] w-[54px] rounded-[10px] border bg-[#020617] font-mono text-xs font-black transition ${
+                activeView === item.view
+                  ? "border-cyan-300 text-cyan-200 shadow-[0_0_28px_rgba(34,211,238,0.16)]"
+                  : "border-[#1d3558] text-slate-400 hover:border-cyan-300/50 hover:text-cyan-200"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
         </aside>
 
-        <section className="min-w-0 px-5 py-5 md:px-8">
-          <AppHeader
-            activeView={activeView}
-            sourceData={sourceData}
-            sourcesLoading={sourcesLoading}
-            healthData={healthData}
-            ingestionLoading={ingestionLoading}
-          />
+        <section className="min-w-0 overflow-hidden rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
+          <div className="flex min-h-11 items-center gap-2 border-b border-[#1d3558] bg-[#020617]/90 px-4">
+            <span className="h-2.5 w-2.5 rounded-full bg-pink-400" />
+            <span className="h-2.5 w-2.5 rounded-full bg-orange-400" />
+            <span className="h-2.5 w-2.5 rounded-full bg-lime-300" />
+            <span className="ml-2 font-mono text-xs font-bold text-slate-400">
+              {activeView === "Dashboard" ? "veritydesk run --mode=answer --citations=hidden" : `veritydesk open --view=${activeView.toLowerCase().replaceAll(" ", "-")}`}
+            </span>
+          </div>
 
-          <div className="mt-5">
+          <div className="p-5 md:p-7">
             {activeView === "Dashboard" && (
-              <DashboardView
+              <ConsoleAskView
                 healthData={healthData}
                 scheduleData={scheduleData}
                 ingestionError={ingestionError}
@@ -870,18 +911,14 @@ export default function Home() {
                 reportListData={reportListData}
                 reportsLoading={reportsLoading}
                 reportsError={reportsError}
-                suggestionsData={suggestionsData}
-                suggestionsLoading={suggestionsLoading}
-                suggestionsError={suggestionsError}
-                loadSuggestions={loadSuggestions}
-                applySuggestion={applySuggestion}
-                setActiveView={setActiveView}
                 agentQuery={agentQuery}
                 agentLoading={agentLoading}
+                agentResponse={agentResponse}
+                agentError={agentError}
+                personalizationProfile={personalizationProfile}
                 setAgentQuery={setAgentQuery}
                 setManualAgentContext={setManualAgentContext}
                 submitAgentQuery={submitAgentQuery}
-                personalizationProfile={personalizationProfile}
               />
             )}
             {activeView === "Daily Briefing" && (
@@ -971,6 +1008,21 @@ export default function Home() {
             )}
           </div>
         </section>
+
+        <BriefingCardsPanel
+          personalizationProfile={personalizationProfile}
+          sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
+          scheduleData={scheduleData}
+          suggestionsData={suggestionsData}
+          suggestionsLoading={suggestionsLoading}
+          suggestionsError={suggestionsError}
+          askFromShell={askFromShell}
+          generateDailyBriefing={() => {
+            setActiveView("Daily Briefing");
+            generateDailyBriefing();
+          }}
+          openSettings={() => setActiveView("Settings")}
+        />
       </div>
     </main>
   );
@@ -1004,6 +1056,316 @@ function AppHeader({
       </div>
     </header>
   );
+}
+
+function ConsoleAskView({
+  healthData,
+  scheduleData,
+  ingestionError,
+  ingestionLoading,
+  reportListData,
+  reportsLoading,
+  reportsError,
+  agentQuery,
+  agentLoading,
+  agentResponse,
+  agentError,
+  personalizationProfile,
+  setAgentQuery,
+  setManualAgentContext,
+  submitAgentQuery,
+}: {
+  healthData: SourceHealthResponse | null;
+  scheduleData: DailyScheduleConfig | null;
+  ingestionError: string | null;
+  ingestionLoading: boolean;
+  reportListData: ReportListResponse | null;
+  reportsLoading: boolean;
+  reportsError: string | null;
+  agentQuery: string;
+  agentLoading: boolean;
+  agentResponse: AgentResponse | null;
+  agentError: string | null;
+  personalizationProfile: PersonalizationProfile;
+  setAgentQuery: (value: string) => void;
+  setManualAgentContext: (value: boolean) => void;
+  submitAgentQuery: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const latestReport = reportListData?.reports[0] ?? null;
+  const sourceStatusText = summarizeSourceStatus(healthData, ingestionLoading, ingestionError);
+  const inferredContext = inferAgentContext(agentQuery, personalizationProfile);
+
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-4">
+        <div className="font-mono text-sm font-bold text-lime-300">veritydesk / ask / profile loaded</div>
+        <div>
+          <h1 className="max-w-4xl text-[clamp(2.6rem,6vw,4.8rem)] font-black leading-[0.94] tracking-normal text-white">
+            Ask once. Get the brief.
+          </h1>
+          <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400">
+            Type one question. VerityDesk handles live web search, API checks, source ranking, and agent routing behind the scenes.
+          </p>
+        </div>
+      </section>
+
+      <form
+        onSubmit={submitAgentQuery}
+        className="rounded-xl border border-cyan-300/30 bg-[#020617] p-4 shadow-[inset_0_0_0_1px_rgba(163,230,53,0.04)]"
+      >
+        <label className="sr-only" htmlFor="console-question">
+          Question
+        </label>
+        <textarea
+          id="console-question"
+          value={agentQuery}
+          onChange={(event) => {
+            setAgentQuery(event.target.value);
+            setManualAgentContext(false);
+          }}
+          placeholder="Ask about markets, housing, companies, rates, world news, or what matters today."
+          className="min-h-36 w-full resize-y border-0 bg-transparent text-xl leading-8 text-white outline-none placeholder:text-slate-600 md:text-2xl"
+        />
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#1d3558] pt-4">
+          <div className="flex flex-wrap gap-2">
+            <NeonChip variant="live">Tavily web search</NeonChip>
+            <NeonChip variant="search">APIs verify</NeonChip>
+            <NeonChip>{personalizationProfile.location ? `${personalizationProfile.location} context` : "Profile context"}</NeonChip>
+          </div>
+          <button
+            type="submit"
+            disabled={agentLoading || !agentQuery.trim()}
+            className="min-h-11 rounded-lg bg-lime-300 px-5 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+          >
+            {agentLoading ? "Thinking" : "Run Answer"}
+          </button>
+        </div>
+      </form>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <ConsoleMetric label="Sources" value={sourceStatusText} />
+        <ConsoleMetric label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
+        <ConsoleMetric label="Auto route" value={formatAgentIntent(inferredContext.intent)} />
+      </div>
+
+      <section className="rounded-xl border border-[#1d3558] bg-[#0a1628]/75 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Answer</p>
+            <h2 className="mt-1 text-2xl font-bold text-white">
+              {agentResponse ? "Here is what VerityDesk found." : latestReport ? latestReport.title : "Ready when you are."}
+            </h2>
+          </div>
+          {agentResponse && <NeonChip variant="live">Confidence: {agentResponse.confidence}</NeonChip>}
+        </div>
+
+        {agentError && <p className="mt-4 rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-200">{agentError}</p>}
+        {reportsError && !agentResponse && (
+          <p className="mt-4 rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-200">{reportsError}</p>
+        )}
+        {reportsLoading && !agentResponse && <p className="mt-4 text-sm text-slate-400">Loading the latest saved briefing.</p>}
+
+        {!agentResponse && !agentError && !reportsLoading && (
+          <div className="mt-4">
+            <p className="whitespace-pre-line text-sm leading-7 text-slate-300">
+              {latestReport?.summary ?? latestReport?.body ?? "Ask a question or click one of the briefing cards to start."}
+            </p>
+            {latestReport && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <NeonChip>Retrieved {formatDateTime(latestReport.as_of ?? latestReport.created_at)}</NeonChip>
+                <NeonChip>{latestReport.citations.length} sources</NeonChip>
+              </div>
+            )}
+          </div>
+        )}
+
+        {agentResponse && (
+          <div className="mt-4 space-y-4">
+            <p className="whitespace-pre-line text-sm leading-7 text-slate-300">{agentResponse.summary}</p>
+            <p className="rounded-lg border border-[#1d3558] bg-[#020617]/70 p-3 text-xs leading-5 text-slate-400">
+              {FINANCIAL_DISCLAIMER}
+            </p>
+            <details className="rounded-lg border border-[#1d3558] bg-[#020617]/60 p-3">
+              <summary className="cursor-pointer font-mono text-sm font-black text-cyan-300">View sources and details</summary>
+              <div className="mt-4 grid gap-4 text-slate-900">
+                <InlineList title="Agents Run" values={agentResponse.agents_ran} />
+                <ClaimsList claims={agentResponse.claims} />
+                <CitationList citations={agentResponse.citations} />
+                <InlineList title="Risks" values={agentResponse.risks} />
+                <InlineList title="Follow-up Questions" values={agentResponse.follow_up_questions} />
+                <GuardrailDetails response={agentResponse} />
+              </div>
+            </details>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function BriefingCardsPanel({
+  personalizationProfile,
+  sourceStatusText,
+  scheduleData,
+  suggestionsData,
+  suggestionsLoading,
+  suggestionsError,
+  askFromShell,
+  generateDailyBriefing,
+  openSettings,
+}: {
+  personalizationProfile: PersonalizationProfile;
+  sourceStatusText: string;
+  scheduleData: DailyScheduleConfig | null;
+  suggestionsData: ProactiveSuggestionsResponse | null;
+  suggestionsLoading: boolean;
+  suggestionsError: string | null;
+  askFromShell: (question?: string) => void;
+  generateDailyBriefing: () => void;
+  openSettings: () => void;
+}) {
+  const cards = buildBriefingCards(personalizationProfile);
+
+  return (
+    <aside className="grid content-start gap-4 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-white">Quick Briefings</h2>
+          <p className="mt-1 font-mono text-xs font-black uppercase text-slate-500">Auto routed</p>
+        </div>
+        <button type="button" onClick={openSettings} className="text-sm font-bold text-cyan-300">
+          Tune
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={generateDailyBriefing}
+        className="min-h-28 rounded-xl border border-lime-300/35 bg-[linear-gradient(135deg,rgba(163,230,53,0.12),transparent_44%),#020617] p-4 text-left transition hover:border-lime-300/70"
+      >
+        <p className="text-lg font-bold text-white">Daily Briefing</p>
+        <p className="mt-2 text-sm leading-5 text-slate-400">Generate today&apos;s personalized market, housing, company, and world-risk brief.</p>
+      </button>
+
+      {cards.map((card) => (
+        <button
+          key={card.title}
+          type="button"
+          onClick={() => askFromShell(card.prompt)}
+          className={`min-h-28 rounded-xl border bg-[#020617] p-4 text-left transition hover:border-cyan-300/70 ${card.borderClass}`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-lg font-bold text-white">{card.title}</p>
+            <span className={`mt-1 h-2 w-2 rounded-full ${card.dotClass}`} />
+          </div>
+          <p className="mt-2 text-sm leading-5 text-slate-400">{card.description}</p>
+        </button>
+      ))}
+
+      <div className="rounded-xl border border-[#1d3558] bg-[#020617]/80 p-4">
+        <p className="font-mono text-xs font-black uppercase text-cyan-300">System</p>
+        <div className="mt-3 grid gap-2">
+          <SourceStripRow label="Sources" value={sourceStatusText} />
+          <SourceStripRow label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
+          <SourceStripRow label="Next run" value={formatDateTime(scheduleData?.next_run_at)} />
+          <SourceStripRow label="Location" value={personalizationProfile.location || "Set in Settings"} />
+        </div>
+      </div>
+
+      <details className="rounded-xl border border-[#1d3558] bg-[#020617]/60 p-4">
+        <summary className="cursor-pointer font-mono text-xs font-black uppercase text-slate-400">Suggested next questions</summary>
+        {suggestionsLoading && <p className="mt-3 text-sm text-slate-400">Loading suggestions.</p>}
+        {suggestionsError && <p className="mt-3 text-sm text-red-200">{suggestionsError}</p>}
+        {!suggestionsLoading && !suggestionsError && (
+          <div className="mt-3 grid gap-2">
+            {(suggestionsData?.suggestions ?? []).slice(0, 3).map((suggestion) => (
+              <button
+                key={suggestion.id}
+                type="button"
+                onClick={() => askFromShell(suggestion.prompt)}
+                className="rounded-lg border border-[#1d3558] px-3 py-2 text-left text-sm leading-5 text-slate-300 hover:border-cyan-300/50"
+              >
+                {suggestion.title}
+              </button>
+            ))}
+            {(!suggestionsData || suggestionsData.suggestions.length === 0) && (
+              <p className="text-sm text-slate-400">No suggestions available yet.</p>
+            )}
+          </div>
+        )}
+      </details>
+    </aside>
+  );
+}
+
+function ConsoleMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
+      <p className="font-mono text-xs font-black uppercase text-slate-500">{label}</p>
+      <p className="mt-2 text-lg font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+function NeonChip({ children, variant }: { children: ReactNode; variant?: "live" | "search" }) {
+  const className =
+    variant === "live"
+      ? "border-lime-300/45 text-lime-300"
+      : variant === "search"
+        ? "border-cyan-300/45 text-cyan-300"
+        : "border-[#1d3558] text-slate-400";
+
+  return (
+    <span className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-black ${className}`}>
+      {children}
+    </span>
+  );
+}
+
+function SourceStripRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm font-semibold text-slate-400">{label}</span>
+      <span className="text-right font-mono text-xs font-black text-lime-300">{value}</span>
+    </div>
+  );
+}
+
+function buildBriefingCards(profile: PersonalizationProfile) {
+  const location = profile.location || "my saved area";
+  const watchlist = compactListLabel(splitList(profile.watchlist));
+  const marketFocus = compactListLabel(profile.priorityTopics);
+
+  return [
+    {
+      title: "Local Housing Pulse",
+      description: `Rates, affordability, inventory, and local housing signals for ${location}.`,
+      prompt: `What is happening with housing, mortgage rates, affordability, inventory, and local real estate conditions in ${location}?`,
+      borderClass: "border-cyan-300/30",
+      dotClass: "bg-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.8)]",
+    },
+    {
+      title: "Market Setup",
+      description: `Indexes, rates, sector tone, volatility, and risks based on ${marketFocus}.`,
+      prompt: "What should I know about markets today based on my saved interests, including indexes, rates, sectors, volatility, and major risks?",
+      borderClass: "border-lime-300/30",
+      dotClass: "bg-lime-300 shadow-[0_0_24px_rgba(163,230,53,0.8)]",
+    },
+    {
+      title: "Watchlist Moves",
+      description: `News, filings, earnings, analyst signals, and catalysts for ${watchlist === "Not set" ? "my watchlist" : watchlist}.`,
+      prompt: `What changed for ${watchlist === "Not set" ? "the companies and tickers I follow" : watchlist} recently, including news, filings, earnings, analyst updates, and catalysts?`,
+      borderClass: "border-pink-300/30",
+      dotClass: "bg-pink-300 shadow-[0_0_24px_rgba(244,114,182,0.8)]",
+    },
+    {
+      title: "World Risk Radar",
+      description: "Geopolitics, commodities, policy, regulation, and market spillovers.",
+      prompt: "What global events could affect markets, commodities, inflation, policy, or investor sentiment right now?",
+      borderClass: "border-orange-300/30",
+      dotClass: "bg-orange-300 shadow-[0_0_24px_rgba(251,146,60,0.8)]",
+    },
+  ];
 }
 
 function DashboardView({

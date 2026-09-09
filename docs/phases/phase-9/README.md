@@ -125,7 +125,7 @@ Milestone doc: [milestone-9.1-selected-direction.md](milestone-9.1-selected-dire
 
 ### 9.2 App Shell Redesign
 
-Status: Planned
+Status: Complete
 
 - Implement the real app layout:
   - left navigation rail
@@ -134,6 +134,8 @@ Status: Planned
   - dark futuristic visual system
   - responsive layout for smaller screens
 - Replace the noisy dashboard-first feel with the selected console-first design.
+
+Milestone doc: [milestone-9.2-app-shell-redesign.md](milestone-9.2-app-shell-redesign.md)
 
 ### 9.3 Settings Experience
 
