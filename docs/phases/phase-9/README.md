@@ -139,7 +139,7 @@ Milestone doc: [milestone-9.2-app-shell-redesign.md](milestone-9.2-app-shell-red
 
 ### 9.3 Settings Experience
 
-Status: Planned
+Status: Complete
 
 - Build the cleaned-up Settings page:
   - personal note/context
@@ -150,6 +150,8 @@ Status: Planned
   - one overall refresh button
   - daily briefing/scheduler settings
 - Keep source details here instead of making them prominent on the home page.
+
+Milestone doc: [milestone-9.3-settings-experience.md](milestone-9.3-settings-experience.md)
 
 ### 9.4 Personalized Briefing Cards
 

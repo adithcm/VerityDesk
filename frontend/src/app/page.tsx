@@ -266,6 +266,7 @@ type ProactiveSuggestionsResponse = {
 };
 
 type PersonalizationProfile = {
+  personalNote: string;
   location: string;
   watchlist: string;
   companies: string;
@@ -996,12 +997,21 @@ export default function Home() {
             )}
             {activeView === "Settings" && (
               <SettingsView
+                sourceData={sourceData}
+                sourceError={sourceError}
+                sourcesLoading={sourcesLoading}
                 healthData={healthData}
                 scheduleData={scheduleData}
                 scheduleSaving={scheduleSaving}
                 scheduleError={scheduleError}
+                ingestionError={ingestionError}
+                ingestionLoading={ingestionLoading}
+                runMode={runMode}
+                runLoading={runLoading}
                 personalizationProfile={personalizationProfile}
                 profileSavedAt={profileSavedAt}
+                setRunMode={setRunMode}
+                triggerIngestionRun={triggerIngestionRun}
                 saveSchedule={saveSchedule}
                 savePersonalizationProfile={savePersonalizationProfile}
               />
@@ -2753,26 +2763,48 @@ function GuardrailDetails({ response }: { response: AgentResponse }) {
 }
 
 function SettingsView({
+  sourceData,
+  sourceError,
+  sourcesLoading,
   healthData,
   scheduleData,
   scheduleSaving,
   scheduleError,
+  ingestionError,
+  ingestionLoading,
+  runMode,
+  runLoading,
   personalizationProfile,
   profileSavedAt,
+  setRunMode,
+  triggerIngestionRun,
   saveSchedule,
   savePersonalizationProfile,
 }: {
+  sourceData: SourceCatalogResponse | null;
+  sourceError: string | null;
+  sourcesLoading: boolean;
   healthData: SourceHealthResponse | null;
   scheduleData: DailyScheduleConfig | null;
   scheduleSaving: boolean;
   scheduleError: string | null;
+  ingestionError: string | null;
+  ingestionLoading: boolean;
+  runMode: RunMode;
+  runLoading: boolean;
   personalizationProfile: PersonalizationProfile;
   profileSavedAt: string | null;
+  setRunMode: (mode: RunMode) => void;
+  triggerIngestionRun: () => void;
   saveSchedule: (nextSchedule: DailyScheduleConfig) => Promise<void>;
   savePersonalizationProfile: (nextProfile: PersonalizationProfile) => void;
 }) {
   const schedule = scheduleData ?? defaultScheduleConfig();
   const [profileDraft, setProfileDraft] = useState<PersonalizationProfile>(personalizationProfile);
+  const healthBySourceKey = useMemo(
+    () => new Map(healthData?.sources.map((source) => [source.source_key, source]) ?? []),
+    [healthData],
+  );
 
   useEffect(() => {
     setProfileDraft(personalizationProfile);
@@ -2802,80 +2834,118 @@ function SettingsView({
   }
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-        <h3 className="text-lg font-semibold">App Settings</h3>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <SettingRow label="Backend URL" value={API_BASE_URL} />
-          <SettingRow label="Source Mode" value="Catalog and ingestion status" />
-          <SettingRow label="Storage" value="Local SQLite" />
-          <SettingRow label="Tracked Sources" value={String(healthData?.total ?? 0)} />
+    <div className="grid gap-5 text-slate-100">
+      <section className="rounded-xl border border-cyan-300/20 bg-[#020617]/70 p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p className="font-mono text-sm font-black text-lime-300">veritydesk settings --profile --sources --automation</p>
+            <h1 className="mt-3 text-4xl font-black leading-none text-white md:text-5xl">Control center.</h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+              Settings holds the complexity so the home screen can stay simple. Save who you are, what you care about, when the app should refresh, and which sources are healthy.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <select
+              value={runMode}
+              onChange={(event) => setRunMode(event.target.value as RunMode)}
+              className="h-10 rounded-lg border border-[#1d3558] bg-[#020617] px-3 text-sm font-semibold text-slate-200 outline-none focus:border-cyan-300"
+            >
+              <option value="all">All sources</option>
+              <option value="rss">News feeds only</option>
+              <option value="official_api">Official APIs only</option>
+            </select>
+            <button
+              type="button"
+              onClick={triggerIngestionRun}
+              disabled={runLoading}
+              className="min-h-10 rounded-lg bg-lime-300 px-4 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+            >
+              {runLoading ? "Refreshing" : "Refresh All Sources"}
+            </button>
+          </div>
         </div>
       </section>
 
-      <form onSubmit={submitProfile} className="rounded-md border border-[#d7dee3] bg-white p-4">
+      <form onSubmit={submitProfile} className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Personalization</h3>
-            <p className="mt-1 text-sm text-[#5b6573]">
-              Tell InvestorAgent what matters to you once. Later milestones will use this to auto-select context.
-            </p>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Personal context</p>
+            <h2 className="mt-1 text-2xl font-bold text-white">Tell VerityDesk what matters once.</h2>
           </div>
           <button
             type="submit"
-            className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white"
+            className="min-h-10 rounded-lg bg-lime-300 px-4 text-sm font-black text-[#102000]"
           >
-            Save Personalization
+            Save Profile
           </button>
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <label className="block text-sm font-medium" htmlFor="profile-location">
-            Where are you based?
-            <input
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+          <label className="block text-sm font-bold text-slate-200" htmlFor="profile-note">
+            About you and your interests
+            <textarea
+              id="profile-note"
+              value={profileDraft.personalNote}
+              onChange={(event) => updateProfile({ personalNote: event.target.value })}
+              placeholder="Example: I live in Arizona, care about housing affordability, mortgage rates, broad market risk, and long-term technology companies. Keep answers concise and practical."
+              className="mt-2 min-h-36 w-full resize-y rounded-xl border border-[#1d3558] bg-[#020617] px-4 py-3 text-sm leading-6 text-slate-300 outline-none focus:border-cyan-300"
+            />
+          </label>
+
+          <div className="grid gap-3">
+            <SettingsTextInput
               id="profile-location"
+              label="Preferred location"
               value={profileDraft.location}
-              onChange={(event) => updateProfile({ location: event.target.value })}
               placeholder="Phoenix, AZ"
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+              onChange={(value) => updateProfile({ location: value })}
             />
-          </label>
-
-          <label className="block text-sm font-medium" htmlFor="profile-briefing-time">
-            Preferred briefing time
-            <input
-              id="profile-briefing-time"
-              type="time"
-              value={profileDraft.briefingTime}
-              onChange={(event) => updateProfile({ briefingTime: event.target.value })}
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+            <SettingsSelect
+              id="profile-briefing-style"
+              label="Answer style"
+              value={profileDraft.briefingStyle}
+              onChange={(value) => updateProfile({ briefingStyle: value as PersonalizationProfile["briefingStyle"] })}
+              options={[
+                ["quick", "Quick"],
+                ["balanced", "Balanced"],
+                ["detailed", "Detailed"],
+              ]}
             />
-          </label>
-
-          <label className="block text-sm font-medium" htmlFor="profile-watchlist">
-            What do you watch?
-            <input
-              id="profile-watchlist"
-              value={profileDraft.watchlist}
-              onChange={(event) => updateProfile({ watchlist: event.target.value.toUpperCase() })}
-              placeholder="AAPL, MSFT, SPY, QQQ"
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
-            />
-          </label>
-
-          <label className="block text-sm font-medium" htmlFor="profile-companies">
-            What companies matter to you?
-            <input
-              id="profile-companies"
-              value={profileDraft.companies}
-              onChange={(event) => updateProfile({ companies: event.target.value })}
-              placeholder="Apple, Nvidia, Tesla"
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
-            />
-          </label>
+          </div>
         </div>
 
-        <div className="mt-5 grid gap-4 xl:grid-cols-3">
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <SettingsTextInput
+            id="profile-watchlist"
+            label="Watchlist"
+            value={profileDraft.watchlist}
+            placeholder="AAPL, MSFT, SPY, QQQ"
+            onChange={(value) => updateProfile({ watchlist: value.toUpperCase() })}
+          />
+          <SettingsTextInput
+            id="profile-companies"
+            label="Companies"
+            value={profileDraft.companies}
+            placeholder="Apple, Nvidia, Tesla"
+            onChange={(value) => updateProfile({ companies: value })}
+          />
+          <SettingsTextInput
+            id="profile-ignore"
+            label="Ignore these topics"
+            value={profileDraft.ignoredTopics}
+            placeholder="crypto, small caps, meme stocks"
+            onChange={(value) => updateProfile({ ignoredTopics: value })}
+          />
+          <SettingsTextInput
+            id="profile-briefing-time"
+            label="Preferred briefing time"
+            value={profileDraft.briefingTime}
+            type="time"
+            onChange={(value) => updateProfile({ briefingTime: value })}
+          />
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-3 text-slate-200">
           <CheckboxGroup
             title="Topics to prioritize"
             options={topicOptions}
@@ -2896,52 +2966,27 @@ function SettingsView({
           />
         </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_280px]">
-          <label className="block text-sm font-medium" htmlFor="profile-ignore">
-            What should InvestorAgent ignore?
-            <input
-              id="profile-ignore"
-              value={profileDraft.ignoredTopics}
-              onChange={(event) => updateProfile({ ignoredTopics: event.target.value })}
-              placeholder="crypto, small caps, meme stocks"
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
-            />
-          </label>
-          <label className="block text-sm font-medium" htmlFor="profile-briefing-style">
-            Briefing style
-            <select
-              id="profile-briefing-style"
-              value={profileDraft.briefingStyle}
-              onChange={(event) => updateProfile({ briefingStyle: event.target.value as PersonalizationProfile["briefingStyle"] })}
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
-            >
-              <option value="quick">Quick</option>
-              <option value="balanced">Balanced</option>
-              <option value="detailed">Detailed</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="mt-4 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
-          <p className="text-sm font-semibold">Saved profile summary</p>
-          <p className="mt-2 text-sm leading-6 text-[#5b6573]">{profileSummary(personalizationProfile)}</p>
-          <p className="mt-1 text-xs text-[#5b6573]">Saved At {formatDateTime(profileSavedAt)}</p>
+        <div className="mt-5 rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
+          <p className="font-mono text-xs font-black uppercase text-cyan-300">Saved profile</p>
+          <p className="mt-2 text-sm leading-6 text-slate-400">{profileSummary(personalizationProfile)}</p>
+          <p className="mt-2 text-xs text-slate-500">Saved At {formatDateTime(profileSavedAt)}</p>
         </div>
       </form>
 
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+      <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Daily Automation</h3>
-            <p className="mt-1 text-sm text-[#5b6573]">
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Automation</p>
+            <h2 className="mt-1 text-2xl font-bold text-white">Daily run</h2>
+            <p className="mt-1 text-sm text-slate-400">
               Runs while the local backend is open. Schedule settings are saved locally.
             </p>
           </div>
           <StatusBadge status={schedule.enabled ? "enabled" : "off"} />
         </div>
-        {scheduleError && <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{scheduleError}</p>}
+        {scheduleError && <p className="mt-4 rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-200">{scheduleError}</p>}
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="flex items-center gap-3 rounded-md border border-[#e5eaf0] p-3 text-sm font-medium">
+          <label className="flex items-center gap-3 rounded-xl border border-[#1d3558] bg-[#020617]/70 p-3 text-sm font-bold text-slate-200">
             <input
               type="checkbox"
               checked={schedule.enabled}
@@ -2950,7 +2995,7 @@ function SettingsView({
             />
             Daily run
           </label>
-          <label className="flex items-center gap-3 rounded-md border border-[#e5eaf0] p-3 text-sm font-medium">
+          <label className="flex items-center gap-3 rounded-xl border border-[#1d3558] bg-[#020617]/70 p-3 text-sm font-bold text-slate-200">
             <input
               type="checkbox"
               checked={schedule.generate_daily_briefing}
@@ -2959,40 +3004,176 @@ function SettingsView({
             />
             Generate daily briefing
           </label>
-          <label className="block text-sm font-medium" htmlFor="schedule-time">
-            Scheduled Time
-            <input
-              id="schedule-time"
-              type="time"
-              value={schedule.local_time}
-              disabled={scheduleSaving}
-              onChange={(event) => updateSchedule({ local_time: event.target.value })}
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
-            />
-          </label>
-          <label className="block text-sm font-medium" htmlFor="schedule-mode">
-            Run Mode
-            <select
-              id="schedule-mode"
-              value={schedule.mode}
-              disabled={scheduleSaving}
-              onChange={(event) => updateSchedule({ mode: event.target.value as RunMode })}
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
-            >
-              <option value="all">All sources</option>
-              <option value="rss">RSS only</option>
-              <option value="official_api">Official APIs only</option>
-            </select>
-          </label>
+          <SettingsTextInput
+            id="schedule-time"
+            label="Scheduled time"
+            value={schedule.local_time}
+            type="time"
+            disabled={scheduleSaving}
+            onChange={(value) => updateSchedule({ local_time: value })}
+          />
+          <SettingsSelect
+            id="schedule-mode"
+            label="Run mode"
+            value={schedule.mode}
+            disabled={scheduleSaving}
+            onChange={(value) => updateSchedule({ mode: value as RunMode })}
+            options={[
+              ["all", "All sources"],
+              ["rss", "News feeds only"],
+              ["official_api", "Official APIs only"],
+            ]}
+          />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <SettingRow label="Next Run" value={formatDateTime(schedule.next_run_at)} />
-          <SettingRow label="Last Run" value={formatDateTime(schedule.last_run_at)} />
-          <SettingRow label="Last Status" value={schedule.last_status ?? "--"} />
+          <ConsoleMetric label="Next run" value={formatDateTime(schedule.next_run_at)} />
+          <ConsoleMetric label="Last run" value={formatDateTime(schedule.last_run_at)} />
+          <ConsoleMetric label="Last status" value={schedule.last_status ?? "--"} />
         </div>
-        {scheduleSaving && <p className="mt-4 text-sm text-[#5b6573]">Saving schedule.</p>}
+        {scheduleSaving && <p className="mt-4 text-sm text-slate-400">Saving schedule.</p>}
+      </section>
+
+      <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Sources</p>
+            <h2 className="mt-1 text-2xl font-bold text-white">Connected data</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-400">
+              These sources support the assistant behind the scenes. Use one refresh for all sources, then inspect details only when something needs attention.
+            </p>
+          </div>
+          <div className="grid min-w-44 gap-2">
+            <SourceStripRow label="Working" value={String(healthData?.fresh_count ?? 0)} />
+            <SourceStripRow label="Needs check" value={String(needsCheckCount(healthData))} />
+          </div>
+        </div>
+        <StatusBlock loading={sourcesLoading || ingestionLoading} error={sourceError || ingestionError} />
+        <div className="mt-5 grid gap-3 xl:grid-cols-2">
+          {(sourceData?.sources ?? []).map((source) => {
+            const health = healthBySourceKey.get(source.id);
+            const sourceStatus = sourceStatusSummary(source, health);
+            return (
+              <SourceSettingsCard
+                key={source.id}
+                source={source}
+                health={health}
+                statusLabel={sourceStatus.label}
+                description={sourceStatus.description}
+                nextStep={sourceStatus.nextStep}
+              />
+            );
+          })}
+        </div>
       </section>
     </div>
+  );
+}
+
+function SettingsTextInput({
+  id,
+  label,
+  value,
+  placeholder,
+  type = "text",
+  disabled = false,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  placeholder?: string;
+  type?: "text" | "time";
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block text-sm font-bold text-slate-200" htmlFor={id}>
+      {label}
+      <input
+        id={id}
+        type={type}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="mt-2 h-11 w-full rounded-xl border border-[#1d3558] bg-[#020617] px-4 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-cyan-300 disabled:cursor-not-allowed disabled:text-slate-500"
+      />
+    </label>
+  );
+}
+
+function SettingsSelect({
+  id,
+  label,
+  value,
+  options,
+  disabled = false,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  options: Array<[string, string]>;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block text-sm font-bold text-slate-200" htmlFor={id}>
+      {label}
+      <select
+        id={id}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 h-11 w-full rounded-xl border border-[#1d3558] bg-[#020617] px-4 text-sm text-slate-200 outline-none focus:border-cyan-300 disabled:cursor-not-allowed disabled:text-slate-500"
+      >
+        {options.map(([optionValue, labelText]) => (
+          <option key={optionValue} value={optionValue}>
+            {labelText}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SourceSettingsCard({
+  source,
+  health,
+  statusLabel,
+  description,
+  nextStep,
+}: {
+  source: SourceEntry;
+  health: SourceHealthItem | undefined;
+  statusLabel: string;
+  description: string;
+  nextStep: string;
+}) {
+  return (
+    <article className="rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-bold text-white">{source.name}</h3>
+          <p className="mt-1 text-xs font-semibold text-slate-500">{formatAccessMethod(source.access_method)}</p>
+        </div>
+        <StatusBadge status={statusLabel} />
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-400">{description}</p>
+      <div className="mt-4 grid gap-2 md:grid-cols-2">
+        <SourceStripRow label="Last updated" value={formatDateTime(health?.last_success_at ?? health?.last_attempt_at)} />
+        <SourceStripRow label="Next step" value={nextStep} />
+      </div>
+      {source.domains.length > 0 && (
+        <p className="mt-3 text-xs leading-5 text-slate-500">Provides: {source.domains.slice(0, 4).join(", ")}</p>
+      )}
+      {health?.last_error && (
+        <details className="mt-3 rounded-lg border border-orange-300/20 bg-orange-950/10 p-3">
+          <summary className="cursor-pointer text-xs font-black uppercase text-orange-300">Technical message</summary>
+          <p className="mt-2 text-xs leading-5 text-orange-200">{health.last_error}</p>
+        </details>
+      )}
+    </article>
   );
 }
 
@@ -3008,11 +3189,11 @@ function CheckboxGroup({
   onToggle: (value: string) => void;
 }) {
   return (
-    <fieldset className="rounded-md border border-[#e5eaf0] p-3">
-      <legend className="px-1 text-sm font-semibold">{title}</legend>
+    <fieldset className="rounded-xl border border-[#1d3558] bg-[#020617]/70 p-3">
+      <legend className="px-1 text-sm font-bold text-slate-200">{title}</legend>
       <div className="mt-2 grid gap-2">
         {options.map((option) => (
-          <label key={option} className="flex min-h-9 items-center gap-2 text-sm text-[#374151]">
+          <label key={option} className="flex min-h-9 items-center gap-2 text-sm text-slate-300">
             <input
               type="checkbox"
               checked={values.includes(option)}
@@ -3433,6 +3614,7 @@ function defaultScheduleConfig(): DailyScheduleConfig {
 
 function defaultPersonalizationProfile(): PersonalizationProfile {
   return {
+    personalNote: "",
     location: "",
     watchlist: "SPY, QQQ, TLT",
     companies: "",
@@ -3468,6 +3650,7 @@ function loadPersonalizationProfile() {
 function normalizePersonalizationProfile(profile: PersonalizationProfile): PersonalizationProfile {
   return {
     ...profile,
+    personalNote: profile.personalNote.trim(),
     location: profile.location.trim(),
     watchlist: normalizeListText(profile.watchlist).toUpperCase(),
     companies: normalizeListText(profile.companies),
@@ -3725,7 +3908,8 @@ function profileSummary(profile: PersonalizationProfile) {
   const topics = compactListLabel(profile.priorityTopics);
   const ignoredTopics = compactListLabel(splitList(profile.ignoredTopics));
 
-  return `Location: ${location}. Watchlist: ${watchlist}. Priority topics: ${topics}. Ignored topics: ${ignoredTopics}. Briefing style: ${profile.briefingStyle}.`;
+  const note = profile.personalNote ? `Note: ${profile.personalNote}. ` : "";
+  return `${note}Location: ${location}. Watchlist: ${watchlist}. Priority topics: ${topics}. Ignored topics: ${ignoredTopics}. Briefing style: ${profile.briefingStyle}.`;
 }
 
 function formatAgentIntent(intent: AgentIntent) {
