@@ -279,11 +279,12 @@ def build_workflow_steps(retrieval_priority: list[str]) -> list[ResearchWorkflow
 
 
 def build_search_queries(context: AgentContext, understanding: QueryUnderstanding) -> list[str]:
+    focused_user_query = live_search_query_text(context.user_query)
     primary_parts = [
-        context.user_query,
+        focused_user_query,
         " ".join(understanding.regions[:2]),
-        " ".join(understanding.companies[:3]),
-        " ".join(understanding.tickers[:5]),
+        " ".join(understanding.companies[:3]) if "company" in understanding.topics else "",
+        " ".join(understanding.tickers[:5]) if "company" in understanding.topics else "",
     ]
     queries = [" ".join(part for part in primary_parts if part).strip()]
 
@@ -303,6 +304,12 @@ def build_search_queries(context: AgentContext, understanding: QueryUnderstandin
         queries.append(" ".join(part for part in company_parts if part).strip())
 
     return dedupe(queries)
+
+
+def live_search_query_text(user_query: str) -> str:
+    first_section = user_query.split("Use this saved user context:", 1)[0]
+    first_line = next((line.strip() for line in first_section.splitlines() if line.strip()), first_section.strip())
+    return first_line or user_query.strip()
 
 
 def source_ids_for_context(context: AgentContext) -> list[str]:

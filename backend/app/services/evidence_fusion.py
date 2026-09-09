@@ -116,7 +116,7 @@ def build_evidence_packet(
 
 
 def collect_live_web_evidence(need: EvidenceNeed) -> list[LiveWebSearchResponse]:
-    queries = need.search_queries[:2] or []
+    queries = need.search_queries[:1] or []
     if not queries:
         return [
             LiveWebSearchResponse(
@@ -131,7 +131,7 @@ def collect_live_web_evidence(need: EvidenceNeed) -> list[LiveWebSearchResponse]
         run_live_web_search(
             LiveWebSearchRequest(
                 query=query,
-                max_results=4,
+                max_results=5,
             )
         )
         for query in queries

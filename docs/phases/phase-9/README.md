@@ -171,13 +171,15 @@ Milestone doc: [milestone-9.4-personalized-briefing-cards.md](milestone-9.4-pers
 
 ### 9.5 Agent Orchestration Cleanup
 
-Status: Planned
+Status: Complete
 
 - Make the agents invisible to the user.
 - Remove manual agent/source dropdowns from normal use.
 - Route deterministically based on question/card intent.
 - Avoid calling every agent or spending multiple Tavily searches unnecessarily.
 - Use live web as the primary retrieval path and APIs/stored data as support.
+
+Milestone doc: [milestone-9.5-agent-orchestration-cleanup.md](milestone-9.5-agent-orchestration-cleanup.md)
 
 ### 9.6 Prompt And Answer Format Revamp
 

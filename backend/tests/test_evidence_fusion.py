@@ -167,3 +167,27 @@ def test_evidence_packet_records_live_web_skipped_status(monkeypatch) -> None:
     )
     assert any(item.source_kind == "direct_api" for item in packet.items)
 
+
+def test_evidence_packet_uses_one_shared_live_web_search(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake_run_live_web_search(request):
+        calls.append(request.query)
+        return fake_live_web_response(request.query)
+
+    monkeypatch.setattr(evidence_fusion, "run_live_web_search", fake_run_live_web_search)
+
+    with build_session() as session:
+        seed_packet_evidence(session)
+        context = AgentContext(
+            request_id="request-3",
+            user_query="What is happening with housing in Arizona and mortgage rates this week?",
+            intent="general_research",
+        )
+        plan = build_research_workflow_plan(context, ["HousingAgent", "MacroAgent"])
+
+        packet = build_evidence_packet(context=context, plan=plan, session=session)
+
+    assert len(calls) == 1
+    assert packet.retrieval_statuses[0].channel == "live_web"
+    assert any(item.source_kind == "live_web" for item in packet.items)

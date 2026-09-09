@@ -62,7 +62,6 @@ def test_agent_query_endpoint_runs_coordinator_and_domain_agents(monkeypatch) ->
     assert payload["agents_ran"] == [
         "CoordinatorAgent",
         "EvidenceFusionAgent",
-        "CompanyAgent",
         "MarketAgent",
         "MacroAgent",
         "CitationAgent",
@@ -120,13 +119,45 @@ def test_route_agent_names_for_housing_macro_query() -> None:
         regions=["US"],
     )
 
-    assert agents.route_agent_names(context) == ["MarketAgent", "MacroAgent", "HousingAgent"]
+    assert agents.route_agent_names(context) == ["HousingAgent", "MacroAgent", "MarketAgent"]
 
 
 def test_route_agent_names_for_general_update_defaults_to_news_and_market() -> None:
     context = AgentContext(
         request_id="request-2",
         user_query="Give me a quick update",
+        intent="general_research",
+    )
+
+    assert agents.route_agent_names(context) == ["NewsDigestAgent", "MarketAgent"]
+
+
+def test_route_agent_names_for_market_etf_does_not_run_company_agent() -> None:
+    context = AgentContext(
+        request_id="request-market",
+        user_query="What matters for SPY and QQQ today?",
+        intent="market_research",
+        tickers=["SPY", "QQQ"],
+    )
+
+    assert agents.route_agent_names(context) == ["MarketAgent", "MacroAgent"]
+
+
+def test_route_agent_names_for_company_ticker_runs_company_agent() -> None:
+    context = AgentContext(
+        request_id="request-company",
+        user_query="What changed for AAPL this week?",
+        intent="general_research",
+        tickers=["AAPL"],
+    )
+
+    assert agents.route_agent_names(context) == ["CompanyAgent"]
+
+
+def test_route_agent_names_for_world_risk_uses_news_first() -> None:
+    context = AgentContext(
+        request_id="request-risk",
+        user_query="Give me a world risk radar update for commodities and markets.",
         intent="general_research",
     )
 

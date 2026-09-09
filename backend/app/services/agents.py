@@ -57,6 +57,18 @@ class CoordinatorAgent:
         )
 
 
+BROAD_MARKET_TICKERS = {
+    "DIA",
+    "IWM",
+    "QQQ",
+    "RSP",
+    "SPY",
+    "TLT",
+    "VIX",
+    "VOO",
+}
+
+
 def build_default_registry(session: Session | None = None) -> AgentRegistry:
     registry = AgentRegistry()
     registry.register(CoordinatorAgent())
@@ -265,34 +277,104 @@ def build_watch_items(
 
 
 def route_agent_names(context: AgentContext) -> list[str]:
-    selected: list[str] = []
     text = searchable_context_text(context)
 
-    if context.intent == "daily_briefing" or has_any(text, "news", "briefing", "world", "geopolitics"):
-        selected.append("NewsDigestAgent")
+    if context.intent == "daily_briefing":
+        return ["NewsDigestAgent", "MarketAgent", "MacroAgent", "HousingAgent", "CompanyAgent"]
 
-    if context.intent == "company_research" or context.tickers or context.companies or has_any(
+    if should_route_housing(context, text):
+        selected = ["HousingAgent", "MacroAgent"]
+        if has_any(text, "mortgage", "rates", "rate", "yield", "credit"):
+            selected.append("MarketAgent")
+        return selected
+
+    if should_route_company(context, text):
+        selected = ["CompanyAgent"]
+        if has_any(text, "market", "sector", "rates", "macro", "risk", "watchlist"):
+            selected.append("MarketAgent")
+        return selected
+
+    if should_route_world_risk(context, text):
+        selected = ["NewsDigestAgent"]
+        if has_any(text, "market", "markets", "commodity", "commodities", "oil", "inflation", "rates"):
+            selected.append("MarketAgent")
+        return selected
+
+    if should_route_macro(context, text):
+        return ["MacroAgent", "MarketAgent"]
+
+    if should_route_market(context, text):
+        return ["MarketAgent", "MacroAgent"]
+
+    if has_any(text, "news", "briefing", "update"):
+        return ["NewsDigestAgent", "MarketAgent"]
+
+    return ["NewsDigestAgent", "MarketAgent"]
+
+
+def should_route_housing(context: AgentContext, text: str) -> bool:
+    return context.intent == "housing_macro_research" or has_any(
         text,
-        "company",
-        "ticker",
-        "earnings",
-        "filing",
-        "revenue",
-        "sec",
-        "alphabet",
-        "amazon",
-        "apple",
-        "google",
-        "meta",
-        "microsoft",
-        "nvidia",
-        "tesla",
-    ):
-        selected.append("CompanyAgent")
+        "housing",
+        "mortgage",
+        "real estate",
+        "home price",
+        "home prices",
+        "rental",
+        "rent",
+        "affordability",
+        "inventory",
+    )
 
-    if context.intent == "market_research" or has_any(
+
+def should_route_company(context: AgentContext, text: str) -> bool:
+    has_company_ticker = any(ticker.upper() not in BROAD_MARKET_TICKERS for ticker in context.tickers)
+    return bool(
+        context.intent == "company_research"
+        or context.companies
+        or has_company_ticker
+        or has_any(
+            text,
+            "company",
+            "earnings",
+            "filing",
+            "revenue",
+            "guidance",
+            "sec",
+            "alphabet",
+            "amazon",
+            "apple",
+            "google",
+            "meta",
+            "microsoft",
+            "nvidia",
+            "tesla",
+        )
+    )
+
+
+def should_route_world_risk(context: AgentContext, text: str) -> bool:
+    return context.intent == "general_research" and has_any(
+        text,
+        "world",
+        "geopolitics",
+        "global",
+        "war",
+        "policy",
+        "tariff",
+        "risk radar",
+    )
+
+
+def should_route_macro(context: AgentContext, text: str) -> bool:
+    return has_any(text, "macro", "economy", "inflation", "jobs", "labor", "unemployment", "fed", "gdp")
+
+
+def should_route_market(context: AgentContext, text: str) -> bool:
+    return context.intent == "market_research" or has_any(
         text,
         "market",
+        "markets",
         "rates",
         "s&p",
         "sp500",
@@ -304,37 +386,7 @@ def route_agent_names(context: AgentContext) -> list[str]:
         "portfolio",
         "watch",
         "watchlist",
-    ):
-        selected.append("MarketAgent")
-
-    if context.intent in {"market_research", "housing_macro_research"} or has_any(
-        text,
-        "macro",
-        "economy",
-        "inflation",
-        "jobs",
-        "labor",
-        "unemployment",
-        "fed",
-        "gdp",
-    ):
-        selected.append("MacroAgent")
-
-    if context.intent == "housing_macro_research" or has_any(
-        text,
-        "housing",
-        "mortgage",
-        "real estate",
-        "home price",
-        "rental",
-        "affordability",
-    ):
-        selected.append("HousingAgent")
-
-    if not selected:
-        selected.extend(["NewsDigestAgent", "MarketAgent"])
-
-    return dedupe_strings(selected)
+    )
 
 
 def searchable_context_text(context: AgentContext) -> str:

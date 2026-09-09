@@ -10,14 +10,15 @@ from app.schemas.preferences import UserPreferencesResponse, UserPreferencesUpda
 
 BROAD_PERSONALIZATION_TERMS = {
     "briefing",
-    "market",
-    "markets",
     "my",
     "portfolio",
-    "today",
-    "update",
-    "watch",
+    "what should i watch",
+    "what to watch",
     "watchlist",
+    "companies i follow",
+    "companies i track",
+    "tickers i follow",
+    "tickers i track",
 }
 
 HOUSING_TERMS = {"housing", "home", "mortgage", "real estate", "rent", "rental"}
@@ -102,7 +103,7 @@ def should_apply_watchlist(text: str, request: AgentQueryRequest) -> bool:
         return False
     if any(term in text for term in SPECIFIC_COMPANY_TERMS):
         return False
-    if request.intent in {"daily_briefing", "market_research", "general_research"}:
+    if request.intent == "daily_briefing":
         return True
     return any(term in text for term in BROAD_PERSONALIZATION_TERMS)
 

@@ -186,7 +186,7 @@ def build_live_response(
     ("question", "expected_text", "expected_agents"),
     [
         ("What is happening with housing in Arizona?", "Arizona housing conditions", {"HousingAgent"}),
-        ("What are mortgage rates in AZ?", "mortgage-rate pressure", {"HousingAgent", "MarketAgent"}),
+        ("What are mortgage rates in AZ?", "national mortgage-rate context", {"HousingAgent", "MarketAgent"}),
         ("What matters for my watchlist today?", "AAPL and MSFT", {"CompanyAgent", "MarketAgent"}),
         ("What changed with Apple this week?", "Apple-related news this week", {"CompanyAgent"}),
         (
