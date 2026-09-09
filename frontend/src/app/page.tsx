@@ -268,11 +268,16 @@ type ProactiveSuggestionsResponse = {
 type PersonalizationProfile = {
   personalNote: string;
   location: string;
+  housingMarkets: string;
   watchlist: string;
   companies: string;
   priorityTopics: string[];
+  sectors: string;
   housingInterests: string[];
   macroInterests: string[];
+  riskPreference: "conservative" | "balanced" | "aggressive";
+  investingStyle: "long_term" | "medium_term" | "short_term" | "mixed";
+  answerFormat: "brief" | "decision_memo" | "watchlist";
   ignoredTopics: string;
   briefingStyle: "quick" | "balanced" | "detailed";
   briefingTime: string;
@@ -653,10 +658,19 @@ export default function Home() {
 
   async function submitAgentQuery(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    await runAgentQuery(agentQuery, manualAgentContext);
+  }
+
+  async function runAgentQuery(query: string, useManualContext: boolean) {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      return;
+    }
+
     setAgentLoading(true);
     setAgentError(null);
-    const inferredContext = inferAgentContext(agentQuery, personalizationProfile);
-    const requestContext = manualAgentContext
+    const inferredContext = inferAgentContext(trimmedQuery, personalizationProfile);
+    const requestContext = useManualContext
       ? {
           ...inferredContext,
           intent: agentIntent,
@@ -668,13 +682,15 @@ export default function Home() {
     setAgentIntent(requestContext.intent);
     setAgentDomain(requestContext.domain);
     setAgentTicker(requestContext.tickers.join(", "));
+    setAgentQuery(trimmedQuery);
+    setActiveView("Dashboard");
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/agents/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_query: agentQuery,
+          user_query: trimmedQuery,
           intent: requestContext.intent,
           domains: [requestContext.domain],
           tickers: requestContext.tickers,
@@ -834,7 +850,10 @@ export default function Home() {
 
   function askFromShell(question?: string) {
     if (question) {
+      setManualAgentContext(false);
       setAgentQuery(question);
+      runAgentQuery(question, false);
+      return;
     }
     setManualAgentContext(false);
     setActiveView("Dashboard");
@@ -1027,10 +1046,6 @@ export default function Home() {
           suggestionsLoading={suggestionsLoading}
           suggestionsError={suggestionsError}
           askFromShell={askFromShell}
-          generateDailyBriefing={() => {
-            setActiveView("Daily Briefing");
-            generateDailyBriefing();
-          }}
           openSettings={() => setActiveView("Settings")}
         />
       </div>
@@ -1221,7 +1236,6 @@ function BriefingCardsPanel({
   suggestionsLoading,
   suggestionsError,
   askFromShell,
-  generateDailyBriefing,
   openSettings,
 }: {
   personalizationProfile: PersonalizationProfile;
@@ -1231,7 +1245,6 @@ function BriefingCardsPanel({
   suggestionsLoading: boolean;
   suggestionsError: string | null;
   askFromShell: (question?: string) => void;
-  generateDailyBriefing: () => void;
   openSettings: () => void;
 }) {
   const cards = buildBriefingCards(personalizationProfile);
@@ -1250,7 +1263,7 @@ function BriefingCardsPanel({
 
       <button
         type="button"
-        onClick={generateDailyBriefing}
+        onClick={() => askFromShell(buildDailyBriefingPrompt(personalizationProfile))}
         className="min-h-28 rounded-xl border border-lime-300/35 bg-[linear-gradient(135deg,rgba(163,230,53,0.12),transparent_44%),#020617] p-4 text-left transition hover:border-lime-300/70"
       >
         <p className="text-lg font-bold text-white">Daily Briefing</p>
@@ -1343,39 +1356,100 @@ function SourceStripRow({ label, value }: { label: string; value: string }) {
 
 function buildBriefingCards(profile: PersonalizationProfile) {
   const location = profile.location || "my saved area";
+  const housingMarkets = compactListLabel(splitList(profile.housingMarkets));
   const watchlist = compactListLabel(splitList(profile.watchlist));
   const marketFocus = compactListLabel(profile.priorityTopics);
+  const sectors = compactListLabel(splitList(profile.sectors));
+  const promptContext = cardPromptContext(profile);
 
   return [
     {
       title: "Local Housing Pulse",
-      description: `Rates, affordability, inventory, and local housing signals for ${location}.`,
-      prompt: `What is happening with housing, mortgage rates, affordability, inventory, and local real estate conditions in ${location}?`,
+      description: `Rates, affordability, inventory, and local housing signals for ${housingMarkets === "Not set" ? location : housingMarkets}.`,
+      prompt: [
+        `Give me a local housing pulse for ${housingMarkets === "Not set" ? location : housingMarkets}.`,
+        "Cover mortgage rates, affordability, inventory, prices, buyer/seller conditions, and local news.",
+        "Use live web research first, then verify with housing and macro APIs where useful.",
+        promptContext,
+      ].join("\n"),
       borderClass: "border-cyan-300/30",
       dotClass: "bg-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.8)]",
     },
     {
       title: "Market Setup",
       description: `Indexes, rates, sector tone, volatility, and risks based on ${marketFocus}.`,
-      prompt: "What should I know about markets today based on my saved interests, including indexes, rates, sectors, volatility, and major risks?",
+      prompt: [
+        "Give me today's market setup.",
+        `Focus on my priority topics (${marketFocus}) and sectors (${sectors}).`,
+        "Cover indexes, rates, sector tone, volatility, commodities, macro drivers, and risks.",
+        "Do not give direct buy, sell, or hold recommendations.",
+        promptContext,
+      ].join("\n"),
       borderClass: "border-lime-300/30",
       dotClass: "bg-lime-300 shadow-[0_0_24px_rgba(163,230,53,0.8)]",
     },
     {
       title: "Watchlist Moves",
       description: `News, filings, earnings, analyst signals, and catalysts for ${watchlist === "Not set" ? "my watchlist" : watchlist}.`,
-      prompt: `What changed for ${watchlist === "Not set" ? "the companies and tickers I follow" : watchlist} recently, including news, filings, earnings, analyst updates, and catalysts?`,
+      prompt: [
+        `What changed for ${watchlist === "Not set" ? "the companies and tickers I follow" : watchlist} recently?`,
+        "Cover company news, filings, earnings, analyst signals, product updates, and major catalysts.",
+        "Explain why each item matters and what to monitor next without direct trading instructions.",
+        promptContext,
+      ].join("\n"),
       borderClass: "border-pink-300/30",
       dotClass: "bg-pink-300 shadow-[0_0_24px_rgba(244,114,182,0.8)]",
     },
     {
       title: "World Risk Radar",
       description: "Geopolitics, commodities, policy, regulation, and market spillovers.",
-      prompt: "What global events could affect markets, commodities, inflation, policy, or investor sentiment right now?",
+      prompt: [
+        "Give me a world risk radar update.",
+        "Cover geopolitics, commodities, policy, regulation, inflation spillovers, and investor sentiment.",
+        `Prioritize what matters to my interests (${marketFocus}) and risk preference (${formatProfileChoice(profile.riskPreference)}).`,
+        promptContext,
+      ].join("\n"),
       borderClass: "border-orange-300/30",
       dotClass: "bg-orange-300 shadow-[0_0_24px_rgba(251,146,60,0.8)]",
     },
   ];
+}
+
+function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
+  const promptContext = cardPromptContext(profile);
+
+  return [
+    "Give me today's personalized briefing.",
+    "Cover world news, market setup, rates and macro, local housing, watchlist companies, and major risks.",
+    "Prioritize what matters to my saved profile and keep the answer easy to scan.",
+    "Use live web research first, then use direct APIs and stored data to verify or add context.",
+    "Do not give direct buy, sell, or hold recommendations.",
+    promptContext,
+  ].join("\n");
+}
+
+function cardPromptContext(profile: PersonalizationProfile) {
+  const sections = [
+    profile.personalNote ? `Personal note: ${profile.personalNote}` : null,
+    profile.location ? `Primary location: ${profile.location}` : null,
+    profile.housingMarkets ? `Housing markets to track: ${profile.housingMarkets}` : null,
+    profile.watchlist ? `Watchlist tickers: ${profile.watchlist}` : null,
+    profile.companies ? `Companies to track: ${profile.companies}` : null,
+    profile.priorityTopics.length > 0 ? `Priority topics: ${profile.priorityTopics.join(", ")}` : null,
+    profile.sectors ? `Sectors to watch: ${profile.sectors}` : null,
+    profile.housingInterests.length > 0 ? `Housing interests: ${profile.housingInterests.join(", ")}` : null,
+    profile.macroInterests.length > 0 ? `Macro interests: ${profile.macroInterests.join(", ")}` : null,
+    `Risk preference: ${formatProfileChoice(profile.riskPreference)}`,
+    `Investing style: ${formatProfileChoice(profile.investingStyle)}`,
+    `Preferred answer format: ${formatProfileChoice(profile.answerFormat)}`,
+    profile.ignoredTopics ? `Ignore or de-emphasize: ${profile.ignoredTopics}` : null,
+  ].filter(Boolean);
+
+  return `Use this saved user context:\n${sections.map((section) => `- ${section}`).join("\n")}`;
+}
+
+function formatProfileChoice(value: string) {
+  return value.replaceAll("_", " ");
 }
 
 function DashboardView({
@@ -2930,6 +3004,20 @@ function SettingsView({
             onChange={(value) => updateProfile({ companies: value })}
           />
           <SettingsTextInput
+            id="profile-housing-markets"
+            label="Housing markets"
+            value={profileDraft.housingMarkets}
+            placeholder="Phoenix, Scottsdale, Tucson"
+            onChange={(value) => updateProfile({ housingMarkets: value })}
+          />
+          <SettingsTextInput
+            id="profile-sectors"
+            label="Sectors to watch"
+            value={profileDraft.sectors}
+            placeholder="AI, semiconductors, homebuilders, banks"
+            onChange={(value) => updateProfile({ sectors: value })}
+          />
+          <SettingsTextInput
             id="profile-ignore"
             label="Ignore these topics"
             value={profileDraft.ignoredTopics}
@@ -2942,6 +3030,40 @@ function SettingsView({
             value={profileDraft.briefingTime}
             type="time"
             onChange={(value) => updateProfile({ briefingTime: value })}
+          />
+          <SettingsSelect
+            id="profile-risk"
+            label="Risk preference"
+            value={profileDraft.riskPreference}
+            onChange={(value) => updateProfile({ riskPreference: value as PersonalizationProfile["riskPreference"] })}
+            options={[
+              ["conservative", "Conservative"],
+              ["balanced", "Balanced"],
+              ["aggressive", "Aggressive"],
+            ]}
+          />
+          <SettingsSelect
+            id="profile-investing-style"
+            label="Investing style"
+            value={profileDraft.investingStyle}
+            onChange={(value) => updateProfile({ investingStyle: value as PersonalizationProfile["investingStyle"] })}
+            options={[
+              ["long_term", "Long-term"],
+              ["medium_term", "Medium-term"],
+              ["short_term", "Short-term"],
+              ["mixed", "Mixed"],
+            ]}
+          />
+          <SettingsSelect
+            id="profile-answer-format"
+            label="Preferred answer format"
+            value={profileDraft.answerFormat}
+            onChange={(value) => updateProfile({ answerFormat: value as PersonalizationProfile["answerFormat"] })}
+            options={[
+              ["brief", "Brief"],
+              ["decision_memo", "Decision memo"],
+              ["watchlist", "Watchlist"],
+            ]}
           />
         </div>
 
@@ -3616,11 +3738,16 @@ function defaultPersonalizationProfile(): PersonalizationProfile {
   return {
     personalNote: "",
     location: "",
+    housingMarkets: "",
     watchlist: "SPY, QQQ, TLT",
     companies: "",
     priorityTopics: ["Markets", "Housing", "U.S. economy"],
+    sectors: "",
     housingInterests: ["Mortgage rates", "Affordability"],
     macroInterests: ["Inflation", "Interest rates", "Fed policy"],
+    riskPreference: "balanced",
+    investingStyle: "long_term",
+    answerFormat: "brief",
     ignoredTopics: "",
     briefingStyle: "balanced",
     briefingTime: "08:00",
@@ -3652,12 +3779,17 @@ function normalizePersonalizationProfile(profile: PersonalizationProfile): Perso
     ...profile,
     personalNote: profile.personalNote.trim(),
     location: profile.location.trim(),
+    housingMarkets: normalizeListText(profile.housingMarkets),
     watchlist: normalizeListText(profile.watchlist).toUpperCase(),
     companies: normalizeListText(profile.companies),
+    sectors: normalizeListText(profile.sectors),
     ignoredTopics: normalizeListText(profile.ignoredTopics),
     priorityTopics: uniqueList(profile.priorityTopics),
     housingInterests: uniqueList(profile.housingInterests),
     macroInterests: uniqueList(profile.macroInterests),
+    riskPreference: profile.riskPreference || "balanced",
+    investingStyle: profile.investingStyle || "long_term",
+    answerFormat: profile.answerFormat || "brief",
     briefingTime: profile.briefingTime || "08:00",
   };
 }
@@ -3694,13 +3826,16 @@ function compactListLabel(values: string[]) {
 }
 
 function buildPersonalizedQuestions(profile: PersonalizationProfile) {
-  const location = profile.location || "my area";
+  const location = compactListLabel(splitList(profile.housingMarkets)) === "Not set"
+    ? profile.location || "my area"
+    : compactListLabel(splitList(profile.housingMarkets));
   const watchlist = compactListLabel(splitList(profile.watchlist));
   const companies = compactListLabel(splitList(profile.companies));
+  const sectors = compactListLabel(splitList(profile.sectors));
 
   return [
     `What matters for ${watchlist === "Not set" ? "my watchlist" : watchlist} today?`,
-    `What should I watch in markets this morning based on my interests?`,
+    `What should I watch in markets this morning based on ${sectors === "Not set" ? "my interests" : sectors}?`,
     `How are rates affecting housing in ${location}?`,
     companies === "Not set" ? "What company news should I pay attention to?" : `What changed with ${companies} this week?`,
   ];
@@ -3904,12 +4039,14 @@ function containsAny(value: string, terms: string[]) {
 
 function profileSummary(profile: PersonalizationProfile) {
   const location = profile.location || "no location yet";
+  const housingMarkets = compactListLabel(splitList(profile.housingMarkets));
   const watchlist = compactListLabel(splitList(profile.watchlist));
+  const sectors = compactListLabel(splitList(profile.sectors));
   const topics = compactListLabel(profile.priorityTopics);
   const ignoredTopics = compactListLabel(splitList(profile.ignoredTopics));
 
   const note = profile.personalNote ? `Note: ${profile.personalNote}. ` : "";
-  return `${note}Location: ${location}. Watchlist: ${watchlist}. Priority topics: ${topics}. Ignored topics: ${ignoredTopics}. Briefing style: ${profile.briefingStyle}.`;
+  return `${note}Location: ${location}. Housing markets: ${housingMarkets}. Watchlist: ${watchlist}. Sectors: ${sectors}. Priority topics: ${topics}. Risk: ${formatProfileChoice(profile.riskPreference)}. Investing style: ${formatProfileChoice(profile.investingStyle)}. Answer format: ${formatProfileChoice(profile.answerFormat)}. Ignored topics: ${ignoredTopics}. Briefing style: ${profile.briefingStyle}.`;
 }
 
 function formatAgentIntent(intent: AgentIntent) {

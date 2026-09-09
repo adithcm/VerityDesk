@@ -155,7 +155,7 @@ Milestone doc: [milestone-9.3-settings-experience.md](milestone-9.3-settings-exp
 
 ### 9.4 Personalized Briefing Cards
 
-Status: Planned
+Status: Complete
 
 - Replace hardcoded cards with dynamic cards:
   - Daily Briefing
@@ -166,6 +166,8 @@ Status: Planned
   - optional AI/Tech or Rates/Credit based on settings
 - Define card prompt templates after one more user review.
 - Cards should generate prompts automatically from saved user context.
+
+Milestone doc: [milestone-9.4-personalized-briefing-cards.md](milestone-9.4-personalized-briefing-cards.md)
 
 ### 9.5 Agent Orchestration Cleanup
 
