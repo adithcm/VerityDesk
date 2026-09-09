@@ -199,11 +199,13 @@ Milestone doc: [milestone-9.6-prompt-answer-format.md](milestone-9.6-prompt-answ
 
 ### 9.7 Hidden Citations And Evidence Drawer
 
-Status: Planned
+Status: Complete
 
 - Move citations/source lists out of the main answer.
 - Add a View Sources or expandable details pattern.
 - Show citations, retrieved timestamps, confidence, and source type only when expanded.
+
+Milestone doc: [milestone-9.7-hidden-citations-evidence-drawer.md](milestone-9.7-hidden-citations-evidence-drawer.md)
 
 ### 9.8 End-To-End Phase 9 Local Testing
 

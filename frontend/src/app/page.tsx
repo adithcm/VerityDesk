@@ -1210,17 +1210,7 @@ function ConsoleAskView({
             <p className="rounded-lg border border-[#1d3558] bg-[#020617]/70 p-3 text-xs leading-5 text-slate-400">
               {FINANCIAL_DISCLAIMER}
             </p>
-            <details className="rounded-lg border border-[#1d3558] bg-[#020617]/60 p-3">
-              <summary className="cursor-pointer font-mono text-sm font-black text-cyan-300">View sources and details</summary>
-              <div className="mt-4 grid gap-4 text-slate-900">
-                <InlineList title="Agents Run" values={agentResponse.agents_ran} />
-                <ClaimsList claims={agentResponse.claims} />
-                <CitationList citations={agentResponse.citations} />
-                <InlineList title="Risks" values={agentResponse.risks} />
-                <InlineList title="Follow-up Questions" values={agentResponse.follow_up_questions} />
-                <GuardrailDetails response={agentResponse} />
-              </div>
-            </details>
+            <EvidenceDrawer response={agentResponse} />
           </div>
         )}
       </section>
@@ -1839,7 +1829,7 @@ function CompactReportPreview({ report }: { report: ReportResponse }) {
           {report.body}
         </p>
       </div>
-      <CitationList citations={report.citations} />
+      <ReportEvidenceDrawer report={report} />
     </div>
   );
 }
@@ -1890,7 +1880,7 @@ function MarketStrategyCard({
               {marketReport.body}
             </p>
           </div>
-          <CitationList citations={marketReport.citations} />
+          <ReportEvidenceDrawer report={marketReport} />
         </div>
       )}
     </section>
@@ -2220,10 +2210,7 @@ function ReportReadingPanel({ report, variant }: { report: ReportResponse; varia
         {FINANCIAL_DISCLAIMER}
       </p>
 
-      <details className="rounded-md border border-[#e5eaf0] p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-[#143642]">Sources and citations</summary>
-        <CitationList citations={report.citations} />
-      </details>
+      <ReportEvidenceDrawer report={report} />
     </div>
   );
 }
@@ -2481,7 +2468,7 @@ function WatchlistView({
                 {companyReport.body}
               </p>
             </div>
-            <CitationList citations={companyReport.citations} />
+            <ReportEvidenceDrawer report={companyReport} />
           </div>
         )}
       </section>
@@ -2665,12 +2652,7 @@ function AgentChatView({
                 {agentResponse.summary}
               </p>
             </div>
-            <InlineList title="Agents Run" values={agentResponse.agents_ran} />
-            <ClaimsList claims={agentResponse.claims} />
-            <CitationList citations={agentResponse.citations} />
-            <InlineList title="Risks" values={agentResponse.risks} />
-            <InlineList title="Follow-up Questions" values={agentResponse.follow_up_questions} />
-            <GuardrailDetails response={agentResponse} />
+            <EvidenceDrawer response={agentResponse} />
           </div>
         )}
       </section>
@@ -2760,25 +2742,118 @@ function InlineList({ title, values }: { title: string; values: string[] }) {
   );
 }
 
+function EvidenceDrawer({ response }: { response: AgentResponse }) {
+  const latestRetrievedAt = latestCitationTimestamp(response.citations);
+
+  return (
+    <details className="rounded-xl border border-cyan-300/20 bg-[#020617]/80 p-4">
+      <summary className="cursor-pointer list-none">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">View Sources</p>
+            <p className="mt-1 text-sm text-slate-400">
+              {response.citations.length} citations hidden by default
+              {latestRetrievedAt ? ` · latest retrieved ${formatDateTime(latestRetrievedAt)}` : ""}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <NeonChip>Confidence: {response.confidence}</NeonChip>
+            <NeonChip>{response.requires_guardrail_review ? "Review needed" : "Guardrail passed"}</NeonChip>
+          </div>
+        </div>
+      </summary>
+      <div className="mt-4 grid gap-4">
+        <EvidenceMetaGrid
+          items={[
+            ["Citations", String(response.citations.length)],
+            ["Confidence", response.confidence],
+            ["Retrieved At", formatDateTime(latestRetrievedAt)],
+            ["Review Needed", response.requires_guardrail_review ? "Yes" : "No"],
+          ]}
+        />
+        <CitationList citations={response.citations} />
+        <details className="rounded-lg border border-[#1d3558] bg-[#07111f]/75 p-3">
+          <summary className="cursor-pointer font-mono text-xs font-black uppercase text-slate-400">Analysis Details</summary>
+          <div className="mt-4 grid gap-4">
+            <InlineList title="Agents Run" values={response.agents_ran} />
+            <ClaimsList claims={response.claims} />
+            <InlineList title="Risks" values={response.risks} />
+            <InlineList title="Follow-up Questions" values={response.follow_up_questions} />
+            <GuardrailDetails response={response} />
+          </div>
+        </details>
+      </div>
+    </details>
+  );
+}
+
+function ReportEvidenceDrawer({ report }: { report: ReportResponse }) {
+  const latestRetrievedAt = latestCitationTimestamp(report.citations);
+
+  return (
+    <details className="rounded-xl border border-cyan-300/20 bg-[#020617]/80 p-4">
+      <summary className="cursor-pointer list-none">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">View Sources</p>
+            <p className="mt-1 text-sm text-slate-400">
+              {report.citations.length} citations hidden by default
+              {latestRetrievedAt ? ` · latest retrieved ${formatDateTime(latestRetrievedAt)}` : ""}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <NeonChip>Confidence: {report.confidence}</NeonChip>
+            <NeonChip>Retrieved {formatDateTime(report.as_of ?? report.created_at)}</NeonChip>
+          </div>
+        </div>
+      </summary>
+      <div className="mt-4 grid gap-4">
+        <EvidenceMetaGrid
+          items={[
+            ["Citations", String(report.citations.length)],
+            ["Confidence", report.confidence],
+            ["Retrieved At", formatDateTime(latestRetrievedAt ?? report.as_of ?? report.created_at)],
+            ["Guardrail", report.guardrail_status],
+          ]}
+        />
+        <CitationList citations={report.citations} />
+      </div>
+    </details>
+  );
+}
+
+function EvidenceMetaGrid({ items }: { items: Array<[string, string]> }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {items.map(([label, value]) => (
+        <div key={label} className="rounded-lg border border-[#1d3558] bg-[#07111f]/75 p-3">
+          <p className="font-mono text-[0.65rem] font-black uppercase text-slate-500">{label}</p>
+          <p className="mt-1 text-sm font-bold text-slate-200">{value || "--"}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ClaimsList({ claims }: { claims: AgentResponse["claims"] }) {
   return (
     <div>
-      <p className="text-sm font-semibold">Claims</p>
+      <p className="text-sm font-semibold text-slate-200">Claims</p>
       {claims.length === 0 ? (
-        <p className="mt-2 text-sm text-[#5b6573]">No structured claims returned.</p>
+        <p className="mt-2 text-sm text-slate-500">No structured claims returned.</p>
       ) : (
         <div className="mt-2 space-y-2">
           {claims.map((claim, index) => (
-            <div key={`${claim.claim}-${index}`} className="rounded-md border border-[#e5eaf0] p-3">
+            <div key={`${claim.claim}-${index}`} className="rounded-lg border border-[#1d3558] bg-[#07111f]/75 p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={claim.confidence} />
-                <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-medium text-[#4b5563]">
+                <span className="rounded-md border border-[#1d3558] px-2 py-1 text-xs font-medium text-slate-400">
                   {claim.claim_type}
                 </span>
               </div>
-              <p className="mt-2 text-sm text-[#374151]">{claim.claim}</p>
+              <p className="mt-2 text-sm text-slate-300">{claim.claim}</p>
               {claim.source_ids.length > 0 && (
-                <p className="mt-2 text-xs text-[#5b6573]">Sources: {claim.source_ids.join(", ")}</p>
+                <p className="mt-2 text-xs text-slate-500">Sources: {claim.source_ids.join(", ")}</p>
               )}
             </div>
           ))}
@@ -2791,26 +2866,32 @@ function ClaimsList({ claims }: { claims: AgentResponse["claims"] }) {
 function CitationList({ citations }: { citations: AgentResponse["citations"] }) {
   return (
     <div>
-      <p className="text-sm font-semibold">Citations</p>
+      <p className="text-sm font-semibold text-slate-200">Citations</p>
       {citations.length === 0 ? (
-        <p className="mt-2 rounded-md border border-dashed border-[#cbd5dc] p-3 text-sm text-[#5b6573]">
+        <p className="mt-2 rounded-lg border border-dashed border-[#1d3558] p-3 text-sm text-slate-500">
           No citations returned for this response.
         </p>
       ) : (
         <div className="mt-2 space-y-2">
           {citations.map((citation, index) => (
-            <div key={`${citation.source_id}-${citation.title}-${index}`} className="rounded-md border border-[#e5eaf0] p-3">
-              <p className="text-sm font-medium">
-                {citation.url ? <a href={citation.url}>{citation.title}</a> : citation.title}
+            <div key={`${citation.source_id}-${citation.title}-${index}`} className="rounded-lg border border-[#1d3558] bg-[#07111f]/75 p-3">
+              <p className="text-sm font-medium text-slate-100">
+                {citation.url ? (
+                  <a className="text-cyan-300 underline-offset-4 hover:underline" href={citation.url}>
+                    {citation.title}
+                  </a>
+                ) : (
+                  citation.title
+                )}
               </p>
-              <p className="mt-1 text-xs text-[#5b6573]">
+              <p className="mt-1 text-xs text-slate-500">
                 {[citation.publisher, citation.source_id].filter(Boolean).join(" | ")}
               </p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 <SettingRow label="Published" value={formatDateTime(citation.published_at)} />
-                <SettingRow label="Retrieved" value={formatDateTime(citation.retrieved_at)} />
+                <SettingRow label="Retrieved At" value={formatDateTime(citation.retrieved_at)} />
               </div>
-              <p className="mt-2 text-sm text-[#5b6573]">{citation.supports_claim}</p>
+              <p className="mt-2 text-sm text-slate-400">{citation.supports_claim}</p>
             </div>
           ))}
         </div>
@@ -2825,8 +2906,8 @@ function GuardrailDetails({ response }: { response: AgentResponse }) {
 
   return (
     <div>
-      <p className="text-sm font-semibold">Guardrail Review</p>
-      <div className="mt-2 rounded-md border border-[#e5eaf0] p-3">
+      <p className="text-sm font-semibold text-slate-200">Guardrail Review</p>
+      <div className="mt-2 rounded-lg border border-[#1d3558] bg-[#07111f]/75 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={response.guardrail.status} />
           {response.requires_guardrail_review && (
@@ -2838,7 +2919,7 @@ function GuardrailDetails({ response }: { response: AgentResponse }) {
         {issues.length > 0 && <InlineList title="Issues" values={issues} />}
         {bannedPhrases.length > 0 && <InlineList title="Blocked Phrases" values={bannedPhrases} />}
         {response.guardrail.rewritten_text && (
-          <p className="mt-3 rounded-md bg-[#f8fafb] p-3 text-sm text-[#5b6573]">
+          <p className="mt-3 rounded-lg border border-[#1d3558] bg-[#020617]/70 p-3 text-sm text-slate-400">
             Safer wording was applied to the final response.
           </p>
         )}
@@ -3659,6 +3740,15 @@ function formatDateTime(value: string | null | undefined) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function latestCitationTimestamp(citations: AgentResponse["citations"]) {
+  const timestamps = citations
+    .map((citation) => citation.retrieved_at ?? citation.published_at)
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => new Date(right).getTime() - new Date(left).getTime());
+
+  return timestamps[0] ?? null;
 }
 
 function formatScheduleTime(scheduleData: DailyScheduleConfig | null) {
