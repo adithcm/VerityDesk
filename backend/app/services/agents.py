@@ -24,7 +24,6 @@ from app.schemas.agent import (
 )
 from app.schemas.evidence_packet import EvidencePacket
 from app.services.agent_runtime import AgentRegistry, AgentRunLogger, AgentRuntime, build_agent_context
-from app.services.citations import format_sources_section
 from app.services.evidence_fusion import build_evidence_packet
 from app.services.guardrails import (
     FINANCIAL_DISCLAIMER,
@@ -55,6 +54,18 @@ class CoordinatorAgent:
                 "Live web retrieval depends on a configured search provider API key.",
             ],
         )
+
+
+BROAD_MARKET_TICKERS = {
+    "DIA",
+    "IWM",
+    "QQQ",
+    "RSP",
+    "SPY",
+    "TLT",
+    "VIX",
+    "VOO",
+}
 
 
 def build_default_registry(session: Session | None = None) -> AgentRegistry:
@@ -159,8 +170,6 @@ def synthesize_agent_results(
         sections.extend(["", "What To Watch:"])
         sections.extend(f"- {item}" for item in watch_items[:4])
 
-    sections.extend(["", format_sources_section(citations or [])])
-
     return "\n".join(sections)
 
 
@@ -177,11 +186,15 @@ def build_natural_language_answer(
     return build_default_summarizer().summarize(
         agent_name="SynthesisAgent",
         instructions=(
-            "Write a direct, natural-language answer to the user's question in 2-3 short paragraphs. "
-            "Start with the answer, not process details. Use the fused evidence packet first, then specialist "
-            "summaries as supporting interpretation. Do not mention internal agent names, coordinator routing, "
-            "source paths, retrieval statuses, or debug details in the user-facing answer. Mention uncertainty "
-            "plainly when evidence is thin or live web retrieval was skipped. "
+            "Write a direct, natural-language answer to the user's question. Start with the answer, not process "
+            "details. Use this structure when useful: Bottom Line, Major Trends, What Changed Recently, "
+            "Why It Matters, What To Watch Next, and Uncertainty/Data Gaps. Keep each section short and avoid "
+            "long lists. Explain the direction of major trends and whether they appear to be strengthening, "
+            "weakening, mixed, or unclear. Use the fused evidence packet first, then specialist summaries as "
+            "supporting interpretation. Do not mention internal agent names, coordinator routing, source paths, "
+            "retrieval statuses, or debug details in the user-facing answer. Do not include a long Sources section; "
+            "citations are returned separately for the UI details drawer. Mention uncertainty plainly when evidence "
+            "is thin or live web retrieval was skipped. "
             "Do not give direct buy, sell, or hold instructions, and do not present price targets as recommendations."
         ),
         evidence=evidence,
@@ -265,34 +278,104 @@ def build_watch_items(
 
 
 def route_agent_names(context: AgentContext) -> list[str]:
-    selected: list[str] = []
     text = searchable_context_text(context)
 
-    if context.intent == "daily_briefing" or has_any(text, "news", "briefing", "world", "geopolitics"):
-        selected.append("NewsDigestAgent")
+    if context.intent == "daily_briefing":
+        return ["NewsDigestAgent", "MarketAgent", "MacroAgent", "HousingAgent", "CompanyAgent"]
 
-    if context.intent == "company_research" or context.tickers or context.companies or has_any(
+    if should_route_housing(context, text):
+        selected = ["HousingAgent", "MacroAgent"]
+        if has_any(text, "mortgage", "rates", "rate", "yield", "credit"):
+            selected.append("MarketAgent")
+        return selected
+
+    if should_route_company(context, text):
+        selected = ["CompanyAgent"]
+        if has_any(text, "market", "sector", "rates", "macro", "risk", "watchlist"):
+            selected.append("MarketAgent")
+        return selected
+
+    if should_route_world_risk(context, text):
+        selected = ["NewsDigestAgent"]
+        if has_any(text, "market", "markets", "commodity", "commodities", "oil", "inflation", "rates"):
+            selected.append("MarketAgent")
+        return selected
+
+    if should_route_macro(context, text):
+        return ["MacroAgent", "MarketAgent"]
+
+    if should_route_market(context, text):
+        return ["MarketAgent", "MacroAgent"]
+
+    if has_any(text, "news", "briefing", "update"):
+        return ["NewsDigestAgent", "MarketAgent"]
+
+    return ["NewsDigestAgent", "MarketAgent"]
+
+
+def should_route_housing(context: AgentContext, text: str) -> bool:
+    return context.intent == "housing_macro_research" or has_any(
         text,
-        "company",
-        "ticker",
-        "earnings",
-        "filing",
-        "revenue",
-        "sec",
-        "alphabet",
-        "amazon",
-        "apple",
-        "google",
-        "meta",
-        "microsoft",
-        "nvidia",
-        "tesla",
-    ):
-        selected.append("CompanyAgent")
+        "housing",
+        "mortgage",
+        "real estate",
+        "home price",
+        "home prices",
+        "rental",
+        "rent",
+        "affordability",
+        "inventory",
+    )
 
-    if context.intent == "market_research" or has_any(
+
+def should_route_company(context: AgentContext, text: str) -> bool:
+    has_company_ticker = any(ticker.upper() not in BROAD_MARKET_TICKERS for ticker in context.tickers)
+    return bool(
+        context.intent == "company_research"
+        or context.companies
+        or has_company_ticker
+        or has_any(
+            text,
+            "company",
+            "earnings",
+            "filing",
+            "revenue",
+            "guidance",
+            "sec",
+            "alphabet",
+            "amazon",
+            "apple",
+            "google",
+            "meta",
+            "microsoft",
+            "nvidia",
+            "tesla",
+        )
+    )
+
+
+def should_route_world_risk(context: AgentContext, text: str) -> bool:
+    return context.intent == "general_research" and has_any(
+        text,
+        "world",
+        "geopolitics",
+        "global",
+        "war",
+        "policy",
+        "tariff",
+        "risk radar",
+    )
+
+
+def should_route_macro(context: AgentContext, text: str) -> bool:
+    return has_any(text, "macro", "economy", "inflation", "jobs", "labor", "unemployment", "fed", "gdp")
+
+
+def should_route_market(context: AgentContext, text: str) -> bool:
+    return context.intent == "market_research" or has_any(
         text,
         "market",
+        "markets",
         "rates",
         "s&p",
         "sp500",
@@ -304,37 +387,7 @@ def route_agent_names(context: AgentContext) -> list[str]:
         "portfolio",
         "watch",
         "watchlist",
-    ):
-        selected.append("MarketAgent")
-
-    if context.intent in {"market_research", "housing_macro_research"} or has_any(
-        text,
-        "macro",
-        "economy",
-        "inflation",
-        "jobs",
-        "labor",
-        "unemployment",
-        "fed",
-        "gdp",
-    ):
-        selected.append("MacroAgent")
-
-    if context.intent == "housing_macro_research" or has_any(
-        text,
-        "housing",
-        "mortgage",
-        "real estate",
-        "home price",
-        "rental",
-        "affordability",
-    ):
-        selected.append("HousingAgent")
-
-    if not selected:
-        selected.extend(["NewsDigestAgent", "MarketAgent"])
-
-    return dedupe_strings(selected)
+    )
 
 
 def searchable_context_text(context: AgentContext) -> str:

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Refined Tech Concept</title>
+    <link rel="stylesheet" href="./tech.css" />
+    <style>
+      body {
+        background:
+          linear-gradient(135deg, rgba(47, 129, 247, 0.16), transparent 36%),
+          linear-gradient(220deg, rgba(49, 196, 141, 0.1), transparent 32%),
+          #050b14;
+      }
+
+      .glass {
+        background: linear-gradient(180deg, rgba(16, 36, 61, 0.92), rgba(9, 20, 35, 0.92));
+        border: 1px solid rgba(119, 158, 203, 0.28);
+      }
+
+      .signal-strip {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-top: 18px;
+      }
+
+      .signal {
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(119, 158, 203, 0.22);
+        border-radius: 10px;
+        min-height: 86px;
+        padding: 14px;
+      }
+
+      .signal strong {
+        display: block;
+        font-size: 22px;
+        margin-top: 8px;
+      }
+
+      .rail {
+        border-left: 1px solid rgba(119, 158, 203, 0.26);
+        display: grid;
+        gap: 14px;
+        padding-left: 18px;
+      }
+
+      .orbital-card {
+        overflow: hidden;
+        position: relative;
+      }
+
+      .orbital-card::after {
+        background:
+          linear-gradient(90deg, transparent, rgba(20, 184, 196, 0.16), transparent);
+        content: "";
+        height: 1px;
+        left: 0;
+        position: absolute;
+        right: 0;
+        top: 0;
+      }
+
+      @media (max-width: 960px) {
+        .signal-strip {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">V</div>
+        <div>
+          <div class="brand-name">VerityDesk</div>
+          <div class="brand-subtitle">Research cockpit</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a class="active" href="./option-e-refined-tech.html">Home</a>
+        <a href="./option-d-tech-settings.html">Settings</a>
+      </nav>
+    </header>
+
+    <main class="container">
+      <section class="panel glass">
+        <div class="panel-inner">
+          <p class="eyebrow">Today&apos;s Intelligence</p>
+          <h1 class="hero-title">Ask, brief, verify.</h1>
+          <p class="muted">
+            A cleaner tech workspace where live web search leads, your data verifies, and personal context shapes the answer.
+          </p>
+
+          <div class="signal-strip">
+            <div class="signal">
+              <span class="metric-label">Live web</span>
+              <strong>On</strong>
+            </div>
+            <div class="signal">
+              <span class="metric-label">Normal query</span>
+              <strong>1 search</strong>
+            </div>
+            <div class="signal">
+              <span class="metric-label">Daily brief</span>
+              <strong>8:00</strong>
+            </div>
+            <div class="signal">
+              <span class="metric-label">Focus</span>
+              <strong>AZ + Tech</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="home-grid" style="margin-top: 22px">
+        <div class="panel chat-panel glass">
+          <div class="panel-inner">
+            <p class="eyebrow">Conversation</p>
+            <div class="chat-feed">
+              <div class="message agent">
+                I&apos;m tracking Arizona housing, rates, macro pressure, and your watchlist. Ask in plain English.
+              </div>
+              <div class="message user">What changed today that I should care about?</div>
+              <div class="message agent">
+                I&apos;ll search current web sources first, then verify against FRED, FHFA, SEC, Alpha Vantage, and saved reports.
+              </div>
+            </div>
+          </div>
+          <div class="panel-inner">
+            <div class="composer">
+              <textarea>Ask anything about markets, housing, companies, macro, or world news...</textarea>
+              <div class="composer-footer">
+                <div class="pill-row">
+                  <span class="pill good">Personalized</span>
+                  <span class="pill">Sources hidden until needed</span>
+                </div>
+                <button class="button primary">Ask VerityDesk</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="rail">
+          <div class="topic-card orbital-card">
+            <div class="topic-top">
+              <p class="eyebrow" style="margin: 0">Briefing</p>
+              <span class="pill good">Ready</span>
+            </div>
+            <h2 class="topic-title">Daily briefing</h2>
+            <p class="topic-copy">The top market, macro, housing, and watchlist signals in one readable brief.</p>
+          </div>
+
+          <div class="topic-card orbital-card">
+            <div class="topic-top">
+              <p class="eyebrow" style="margin: 0">Local</p>
+              <span class="pill">Arizona</span>
+            </div>
+            <h2 class="topic-title">Housing pulse</h2>
+            <p class="topic-copy">Median prices, inventory, affordability, rates, and what is only a national proxy.</p>
+          </div>
+
+          <div class="topic-card orbital-card">
+            <div class="topic-top">
+              <p class="eyebrow" style="margin: 0">Markets</p>
+              <span class="pill">Live</span>
+            </div>
+            <h2 class="topic-title">Risk radar</h2>
+            <p class="topic-copy">S&amp;P 500, yields, credit, commodities, sectors, and volatility in plain language.</p>
+          </div>
+
+          <div class="topic-card orbital-card">
+            <div class="topic-top">
+              <p class="eyebrow" style="margin: 0">Watchlist</p>
+              <span class="pill">AAPL, MSFT</span>
+            </div>
+            <h2 class="topic-title">Company moves</h2>
+            <p class="topic-copy">Fresh company news plus filings and data-provider context when it matters.</p>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>
+

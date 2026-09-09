@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Phase 9 UI Option A</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">V</div>
+          <div>
+            <div class="brand-name">VerityDesk</div>
+            <div class="brand-subtitle">Personal market intelligence</div>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="text-btn">Preferences</button>
+          <button class="icon-btn" aria-label="Sources">S</button>
+        </div>
+      </header>
+
+      <main class="container layout-two">
+        <section>
+          <p class="section-title">Assistant Home</p>
+          <h1 class="hero-title">Ask once. Get the sourced answer.</h1>
+          <p class="hero-copy">
+            Tavily checks the live web first, then VerityDesk uses your APIs and saved context to ground the answer.
+          </p>
+
+          <div class="ask-box">
+            <textarea>What is happening with housing in Arizona?</textarea>
+            <div class="ask-footer">
+              <div class="pill-row">
+                <span class="pill good">Live web on</span>
+                <span class="pill">Arizona</span>
+                <span class="pill">AAPL, MSFT</span>
+              </div>
+              <button class="primary-btn">Ask</button>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-top: 24px">
+            <div class="panel-inner">
+              <p class="section-title">Answer Preview</p>
+              <div class="answer-card">
+                <h2>Arizona housing is still affordability-led.</h2>
+                <p>
+                  Current web evidence points to buyers staying rate-sensitive while inventory and local affordability remain the
+                  main swing factors. The official data is slower moving, so the safest read is that local conditions need fresh
+                  web context plus FHFA and mortgage-rate confirmation.
+                </p>
+                <p>
+                  This is research only, not financial advice or a recommendation.
+                </p>
+                <div class="pill-row">
+                  <span class="pill">Reuters</span>
+                  <span class="pill">FHFA</span>
+                  <span class="pill">Freddie Mac</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="stack">
+          <div class="panel">
+            <div class="panel-inner">
+              <p class="section-title">Today</p>
+              <div class="briefing">
+                <div class="brief-item">
+                  <div class="brief-label">Markets</div>
+                  <p class="brief-headline">Rates remain the key pressure point.</p>
+                  <p class="brief-copy">Watch yields, credit spreads, and the next inflation print.</p>
+                </div>
+                <div class="brief-item">
+                  <div class="brief-label">Watchlist</div>
+                  <p class="brief-headline">AAPL and MSFT need catalyst checks.</p>
+                  <p class="brief-copy">Live web search is the first stop for company-specific updates.</p>
+                </div>
+                <div class="brief-item">
+                  <div class="brief-label">Housing</div>
+                  <p class="brief-headline">Arizona stays in focus.</p>
+                  <p class="brief-copy">Regional data is blended with national mortgage context.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-inner">
+              <p class="section-title">Source Status</p>
+              <div class="source-list">
+                <div class="source-row">
+                  <div>
+                    <div class="source-name">Tavily</div>
+                    <div class="source-meta">Primary live web</div>
+                  </div>
+                  <span class="pill good">On</span>
+                </div>
+                <div class="source-row">
+                  <div>
+                    <div class="source-name">FRED, FHFA, SEC</div>
+                    <div class="source-meta">Supporting data</div>
+                  </div>
+                  <span class="pill good">Ready</span>
+                </div>
+                <div class="source-row">
+                  <div>
+                    <div class="source-name">Tavily usage</div>
+                    <div class="source-meta">Normal question</div>
+                  </div>
+                  <span class="pill warn">1 search</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
+  </body>
+</html>
+

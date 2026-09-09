@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Tech Settings</title>
+    <link rel="stylesheet" href="./tech.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">V</div>
+        <div>
+          <div class="brand-name">VerityDesk</div>
+          <div class="brand-subtitle">Settings and sources</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="./option-d-tech-home.html">Home</a>
+        <a class="active" href="./option-d-tech-settings.html">Settings</a>
+      </nav>
+    </header>
+
+    <main class="container settings-grid">
+      <section class="panel">
+        <div class="panel-inner">
+          <div class="source-header">
+            <div>
+              <p class="eyebrow">Preferences</p>
+              <h1 class="hero-title">Tune what VerityDesk watches.</h1>
+            </div>
+            <button class="button primary">Refresh All Sources</button>
+          </div>
+          <p class="muted">
+            These preferences shape broad questions, daily briefings, and suggested research cards.
+          </p>
+
+          <div class="form-grid" style="margin-top: 24px">
+            <div class="field">
+              <label for="watchlist">Watchlist</label>
+              <input id="watchlist" value="AAPL, MSFT, SPY" />
+            </div>
+            <div class="field">
+              <label for="regions">Preferred Regions</label>
+              <input id="regions" value="Arizona, Phoenix metro" />
+            </div>
+            <div class="field">
+              <label for="topics">Topics</label>
+              <input id="topics" value="Housing, rates, macro, company news, world news" />
+            </div>
+            <div class="field">
+              <label for="personal-note">About Me And My Interests</label>
+              <textarea id="personal-note" style="background:#081626;border:1px solid var(--line);border-radius:8px;color:var(--ink);min-height:120px;padding:12px;width:100%;resize:vertical">I live in Arizona and care about housing affordability, mortgage rates, broad market risk, and how AAPL/MSFT news might affect my watchlist. Keep answers concise and explain uncertainty clearly.</textarea>
+            </div>
+            <div class="field">
+              <label for="briefing">Daily Briefing Time</label>
+              <input id="briefing" value="8:00 AM local" />
+            </div>
+          </div>
+
+          <div class="metric-row">
+            <div class="metric">
+              <div class="metric-label">Live Search</div>
+              <div class="metric-value">On</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Normal Query</div>
+              <div class="metric-value">1</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Auto Brief</div>
+              <div class="metric-value">On</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-inner">
+          <p class="eyebrow">Connected Sources</p>
+          <div class="source-list">
+            <div class="source-card">
+              <div class="source-header">
+                <div class="source-name">Tavily</div>
+                <span class="toggle">Auto</span>
+              </div>
+              <p class="source-desc">Primary live web search for current questions, regional context, and citations.</p>
+              <div class="source-actions">
+                <button class="button secondary">Details</button>
+              </div>
+            </div>
+
+            <div class="source-card">
+              <div class="source-header">
+                <div class="source-name">FRED</div>
+                <span class="toggle">Auto</span>
+              </div>
+              <p class="source-desc">Rates, unemployment, macro series, and official economic observations.</p>
+              <div class="source-actions">
+                <button class="button secondary">Details</button>
+              </div>
+            </div>
+
+            <div class="source-card">
+              <div class="source-header">
+                <div class="source-name">FHFA and Freddie Mac</div>
+                <span class="toggle">Auto</span>
+              </div>
+              <p class="source-desc">House price index data and national mortgage-rate context for housing questions.</p>
+              <div class="source-actions">
+                <button class="button secondary">Details</button>
+              </div>
+            </div>
+
+            <div class="source-card">
+              <div class="source-header">
+                <div class="source-name">SEC, Alpha Vantage, Finnhub</div>
+                <span class="toggle">Auto</span>
+              </div>
+              <p class="source-desc">Filings, company news, quote context, earnings signals, and market data support.</p>
+              <div class="source-actions">
+                <button class="button secondary">Details</button>
+              </div>
+            </div>
+
+            <div class="source-card">
+              <div class="source-header">
+                <div class="source-name">NewsAPI, BBC, GDELT</div>
+                <span class="toggle">Auto</span>
+              </div>
+              <p class="source-desc">World news, business headlines, geopolitics, and broad market narratives.</p>
+              <div class="source-actions">
+                <button class="button secondary">Details</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </body>
+</html>

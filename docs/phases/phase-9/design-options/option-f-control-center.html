@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Control Center Concept</title>
+    <link rel="stylesheet" href="./tech.css" />
+    <style>
+      body {
+        background:
+          linear-gradient(rgba(80, 160, 255, 0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(80, 160, 255, 0.045) 1px, transparent 1px),
+          radial-gradient(circle at 18% 5%, rgba(47, 129, 247, 0.18), transparent 34rem),
+          #050914;
+        background-size: 42px 42px, 42px 42px, auto, auto;
+      }
+
+      .control-layout {
+        display: grid;
+        gap: 22px;
+        grid-template-columns: 420px minmax(0, 1fr);
+      }
+
+      .profile-stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .matrix {
+        background: rgba(13, 27, 46, 0.86);
+        border: 1px solid rgba(119, 158, 203, 0.24);
+        border-radius: 18px;
+        overflow: hidden;
+      }
+
+      .matrix-head,
+      .matrix-row {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: 1.1fr 1.7fr 120px;
+        padding: 16px 18px;
+      }
+
+      .matrix-head {
+        background: rgba(47, 129, 247, 0.12);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .matrix-row {
+        border-top: 1px solid rgba(119, 158, 203, 0.18);
+      }
+
+      .matrix-row strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .note-box {
+        background: rgba(3, 10, 20, 0.86);
+        border: 1px solid rgba(47, 129, 247, 0.42);
+        border-radius: 16px;
+        min-height: 180px;
+        padding: 14px;
+      }
+
+      .note-box textarea {
+        background: transparent;
+        border: 0;
+        color: var(--ink);
+        min-height: 150px;
+        outline: 0;
+        resize: vertical;
+        width: 100%;
+      }
+
+      .setting-band {
+        align-items: center;
+        background: linear-gradient(90deg, rgba(47, 129, 247, 0.18), rgba(20, 184, 196, 0.06));
+        border: 1px solid rgba(119, 158, 203, 0.24);
+        border-radius: 18px;
+        display: flex;
+        justify-content: space-between;
+        padding: 18px;
+      }
+
+      @media (max-width: 1050px) {
+        .control-layout,
+        .matrix-head,
+        .matrix-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">V</div>
+        <div>
+          <div class="brand-name">VerityDesk</div>
+          <div class="brand-subtitle">Control center</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="./option-f-console-grid.html">Console</a>
+        <a class="active" href="./option-f-control-center.html">Control Center</a>
+      </nav>
+    </header>
+
+    <main class="container control-layout">
+      <section class="profile-stack">
+        <div class="panel">
+          <div class="panel-inner">
+            <p class="eyebrow">Personal Context</p>
+            <h1 style="font-size: 36px; line-height: 1.05; margin: 0">What should the agent know?</h1>
+            <p class="muted">This becomes prompt context for chat, cards, and daily briefings.</p>
+            <div class="note-box">
+              <textarea>I live in Arizona and care about housing affordability, mortgage rates, broad market risk, and AAPL/MSFT updates. Prefer concise answers with sources and clear uncertainty.</textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-inner">
+            <p class="eyebrow">Preferences</p>
+            <div class="form-grid">
+              <div class="field">
+                <label>Watchlist</label>
+                <input value="AAPL, MSFT, SPY" />
+              </div>
+              <div class="field">
+                <label>Regions</label>
+                <input value="Arizona, Phoenix metro" />
+              </div>
+              <div class="field">
+                <label>Briefing Time</label>
+                <input value="8:00 AM local" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="setting-band">
+          <div>
+            <p class="eyebrow" style="margin-bottom: 6px">Sources</p>
+            <h2 style="margin: 0">All connected research inputs</h2>
+          </div>
+          <button class="button primary">Refresh All Sources</button>
+        </div>
+
+        <div class="matrix" style="margin-top: 18px">
+          <div class="matrix-head">
+            <div>Source</div>
+            <div>What it provides</div>
+            <div>Status</div>
+          </div>
+          <div class="matrix-row">
+            <div><strong>Tavily</strong><span class="muted">Live web</span></div>
+            <div class="muted">Current search across credible web sources for flexible questions and citations.</div>
+            <div><span class="pill good">Auto</span></div>
+          </div>
+          <div class="matrix-row">
+            <div><strong>FRED</strong><span class="muted">Macro API</span></div>
+            <div class="muted">Rates, labor, and official economic series used to verify web narratives.</div>
+            <div><span class="pill good">Auto</span></div>
+          </div>
+          <div class="matrix-row">
+            <div><strong>FHFA / Freddie Mac</strong><span class="muted">Housing</span></div>
+            <div class="muted">House-price index data and national mortgage-rate context.</div>
+            <div><span class="pill good">Auto</span></div>
+          </div>
+          <div class="matrix-row">
+            <div><strong>SEC / Alpha / Finnhub</strong><span class="muted">Companies</span></div>
+            <div class="muted">Filings, company news, quote context, market data, and earnings signals.</div>
+            <div><span class="pill good">Auto</span></div>
+          </div>
+          <div class="matrix-row">
+            <div><strong>NewsAPI / BBC / GDELT</strong><span class="muted">News</span></div>
+            <div class="muted">World news, business headlines, geopolitics, and broad narrative context.</div>
+            <div><span class="pill good">Auto</span></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+

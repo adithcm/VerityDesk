@@ -186,7 +186,7 @@ def build_live_response(
     ("question", "expected_text", "expected_agents"),
     [
         ("What is happening with housing in Arizona?", "Arizona housing conditions", {"HousingAgent"}),
-        ("What are mortgage rates in AZ?", "mortgage-rate pressure", {"HousingAgent", "MarketAgent"}),
+        ("What are mortgage rates in AZ?", "national mortgage-rate context", {"HousingAgent", "MarketAgent"}),
         ("What matters for my watchlist today?", "AAPL and MSFT", {"CompanyAgent", "MarketAgent"}),
         ("What changed with Apple this week?", "Apple-related news this week", {"CompanyAgent"}),
         (
@@ -215,7 +215,8 @@ def test_phase8_regression_questions_use_web_first_clean_answer(
     assert "Coordinator selected" not in response.summary
     assert "Source path:" not in response.summary
     assert "Fused evidence source path" not in response.summary
-    assert "Sources:" in response.summary
+    assert "Sources:" not in response.summary
+    assert "Major Trends:" in response.summary
     assert any(citation.source_id == "tavily" for citation in response.citations)
     assert "EvidenceFusionAgent" in response.agents_ran
     assert expected_agents.issubset(set(response.agents_ran))

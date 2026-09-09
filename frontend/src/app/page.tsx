@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -31,6 +31,11 @@ const navigation = [
 ] as const;
 
 type View = (typeof navigation)[number];
+type ShellNavItem = {
+  label: string;
+  title: string;
+  view: View;
+};
 type RunMode = "all" | "rss" | "official_api";
 type FreshnessStatus = "fresh" | "stale" | "failed" | "skipped" | "not_configured";
 type AgentIntent =
@@ -261,12 +266,18 @@ type ProactiveSuggestionsResponse = {
 };
 
 type PersonalizationProfile = {
+  personalNote: string;
   location: string;
+  housingMarkets: string;
   watchlist: string;
   companies: string;
   priorityTopics: string[];
+  sectors: string;
   housingInterests: string[];
   macroInterests: string[];
+  riskPreference: "conservative" | "balanced" | "aggressive";
+  investingStyle: "long_term" | "medium_term" | "short_term" | "mixed";
+  answerFormat: "brief" | "decision_memo" | "watchlist";
   ignoredTopics: string;
   briefingStyle: "quick" | "balanced" | "detailed";
   briefingTime: string;
@@ -318,6 +329,15 @@ const watchlistRows = [
   { symbol: "SPY", focus: "Broad market risk", state: "Monitor" },
   { symbol: "QQQ", focus: "Growth and AI exposure", state: "Monitor" },
   { symbol: "TLT", focus: "Rates sensitivity", state: "Monitor" },
+];
+
+const shellNavigation: ShellNavItem[] = [
+  { label: "Ask", title: "Ask VerityDesk", view: "Dashboard" },
+  { label: "Day", title: "Daily Briefing", view: "Daily Briefing" },
+  { label: "Rpt", title: "Reports", view: "Reports" },
+  { label: "Src", title: "Sources", view: "Sources" },
+  { label: "Co", title: "Watchlist", view: "Watchlist" },
+  { label: "Set", title: "Settings", view: "Settings" },
 ];
 
 export default function Home() {
@@ -638,10 +658,19 @@ export default function Home() {
 
   async function submitAgentQuery(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    await runAgentQuery(agentQuery, manualAgentContext);
+  }
+
+  async function runAgentQuery(query: string, useManualContext: boolean) {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      return;
+    }
+
     setAgentLoading(true);
     setAgentError(null);
-    const inferredContext = inferAgentContext(agentQuery, personalizationProfile);
-    const requestContext = manualAgentContext
+    const inferredContext = inferAgentContext(trimmedQuery, personalizationProfile);
+    const requestContext = useManualContext
       ? {
           ...inferredContext,
           intent: agentIntent,
@@ -653,13 +682,15 @@ export default function Home() {
     setAgentIntent(requestContext.intent);
     setAgentDomain(requestContext.domain);
     setAgentTicker(requestContext.tickers.join(", "));
+    setAgentQuery(trimmedQuery);
+    setActiveView("Dashboard");
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/agents/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_query: agentQuery,
+          user_query: trimmedQuery,
           intent: requestContext.intent,
           domains: [requestContext.domain],
           tickers: requestContext.tickers,
@@ -817,52 +848,82 @@ export default function Home() {
     }
   }
 
+  function askFromShell(question?: string) {
+    if (question) {
+      setManualAgentContext(false);
+      setAgentQuery(question);
+      runAgentQuery(question, false);
+      return;
+    }
+    setManualAgentContext(false);
+    setActiveView("Dashboard");
+  }
+
   return (
-    <main className="min-h-screen bg-[#f5f7f8] text-[#111827]">
-      <div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
-        <aside className="border-b border-[#d7dee3] bg-white px-4 py-4 lg:border-b-0 lg:border-r">
-          <div className="flex items-center justify-between gap-3 lg:block">
-            <div>
-              <p className="text-xs font-semibold uppercase text-[#25636b]">InvestorAgent</p>
-              <h1 className="mt-1 text-xl font-semibold">Market Workspace</h1>
-            </div>
-            <div className="rounded-md border border-[#d7dee3] px-2 py-1 text-xs font-medium text-[#4b5563]">
-              Phase 5.6
-            </div>
-          </div>
+    <main className="min-h-screen bg-[#020617] text-[#f8fafc]">
+      <div className="fixed inset-0 -z-10 bg-[linear-gradient(rgba(34,211,238,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.035)_1px,transparent_1px),radial-gradient(circle_at_76%_10%,rgba(244,114,182,0.16),transparent_28rem),radial-gradient(circle_at_8%_68%,rgba(163,230,53,0.11),transparent_30rem),#020617] bg-[length:38px_38px,38px_38px,auto,auto,auto]" />
 
-          <nav className="mt-5 flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
-            {navigation.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setActiveView(item)}
-                className={`min-h-10 rounded-md px-3 py-2 text-left text-sm font-medium transition ${
-                  activeView === item ? "bg-[#143642] text-white" : "text-[#374151] hover:bg-[#eef3f5]"
-                }`}
-              >
-                {item}
-              </button>
-            ))}
-          </nav>
-
-          <div className="mt-6 hidden border-t border-[#e5eaf0] pt-4 text-xs leading-5 text-[#5b6573] lg:block">
-            {FINANCIAL_DISCLAIMER}
+      <header className="flex min-h-[70px] items-center justify-between gap-4 border-b border-cyan-300/20 px-5 md:px-7">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-lime-300/60 bg-[#020617] font-mono text-sm font-black text-lime-300">
+            V
           </div>
+          <div>
+            <p className="font-mono text-sm font-black uppercase text-lime-300">VerityDesk</p>
+            <p className="text-xs font-semibold text-slate-400">Live web primary / APIs corroborate</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveView("Settings")}
+            className="min-h-10 rounded-lg border border-[#1d3558] px-3 text-sm font-black text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-200"
+          >
+            Settings
+          </button>
+          <button
+            type="button"
+            onClick={triggerIngestionRun}
+            disabled={runLoading}
+            className="min-h-10 rounded-lg bg-lime-300 px-4 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-500"
+          >
+            {runLoading ? "Refreshing" : "Refresh Sources"}
+          </button>
+        </div>
+      </header>
+
+      <div className="mx-auto grid max-w-[1440px] gap-4 p-4 lg:grid-cols-[82px_minmax(0,1fr)_390px] lg:gap-5 lg:p-6">
+        <aside className="flex gap-2 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.32)] lg:min-h-[calc(100vh-118px)] lg:flex-col">
+          {shellNavigation.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              title={item.title}
+              onClick={() => setActiveView(item.view)}
+              className={`h-[54px] w-[54px] rounded-[10px] border bg-[#020617] font-mono text-xs font-black transition ${
+                activeView === item.view
+                  ? "border-cyan-300 text-cyan-200 shadow-[0_0_28px_rgba(34,211,238,0.16)]"
+                  : "border-[#1d3558] text-slate-400 hover:border-cyan-300/50 hover:text-cyan-200"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
         </aside>
 
-        <section className="min-w-0 px-5 py-5 md:px-8">
-          <AppHeader
-            activeView={activeView}
-            sourceData={sourceData}
-            sourcesLoading={sourcesLoading}
-            healthData={healthData}
-            ingestionLoading={ingestionLoading}
-          />
+        <section className="min-w-0 overflow-hidden rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
+          <div className="flex min-h-11 items-center gap-2 border-b border-[#1d3558] bg-[#020617]/90 px-4">
+            <span className="h-2.5 w-2.5 rounded-full bg-pink-400" />
+            <span className="h-2.5 w-2.5 rounded-full bg-orange-400" />
+            <span className="h-2.5 w-2.5 rounded-full bg-lime-300" />
+            <span className="ml-2 font-mono text-xs font-bold text-slate-400">
+              {activeView === "Dashboard" ? "veritydesk run --mode=answer --citations=hidden" : `veritydesk open --view=${activeView.toLowerCase().replaceAll(" ", "-")}`}
+            </span>
+          </div>
 
-          <div className="mt-5">
+          <div className="p-5 md:p-7">
             {activeView === "Dashboard" && (
-              <DashboardView
+              <ConsoleAskView
                 healthData={healthData}
                 scheduleData={scheduleData}
                 ingestionError={ingestionError}
@@ -870,18 +931,14 @@ export default function Home() {
                 reportListData={reportListData}
                 reportsLoading={reportsLoading}
                 reportsError={reportsError}
-                suggestionsData={suggestionsData}
-                suggestionsLoading={suggestionsLoading}
-                suggestionsError={suggestionsError}
-                loadSuggestions={loadSuggestions}
-                applySuggestion={applySuggestion}
-                setActiveView={setActiveView}
                 agentQuery={agentQuery}
                 agentLoading={agentLoading}
+                agentResponse={agentResponse}
+                agentError={agentError}
+                personalizationProfile={personalizationProfile}
                 setAgentQuery={setAgentQuery}
                 setManualAgentContext={setManualAgentContext}
                 submitAgentQuery={submitAgentQuery}
-                personalizationProfile={personalizationProfile}
               />
             )}
             {activeView === "Daily Briefing" && (
@@ -959,18 +1016,38 @@ export default function Home() {
             )}
             {activeView === "Settings" && (
               <SettingsView
+                sourceData={sourceData}
+                sourceError={sourceError}
+                sourcesLoading={sourcesLoading}
                 healthData={healthData}
                 scheduleData={scheduleData}
                 scheduleSaving={scheduleSaving}
                 scheduleError={scheduleError}
+                ingestionError={ingestionError}
+                ingestionLoading={ingestionLoading}
+                runMode={runMode}
+                runLoading={runLoading}
                 personalizationProfile={personalizationProfile}
                 profileSavedAt={profileSavedAt}
+                setRunMode={setRunMode}
+                triggerIngestionRun={triggerIngestionRun}
                 saveSchedule={saveSchedule}
                 savePersonalizationProfile={savePersonalizationProfile}
               />
             )}
           </div>
         </section>
+
+        <BriefingCardsPanel
+          personalizationProfile={personalizationProfile}
+          sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
+          scheduleData={scheduleData}
+          suggestionsData={suggestionsData}
+          suggestionsLoading={suggestionsLoading}
+          suggestionsError={suggestionsError}
+          askFromShell={askFromShell}
+          openSettings={() => setActiveView("Settings")}
+        />
       </div>
     </main>
   );
@@ -1004,6 +1081,376 @@ function AppHeader({
       </div>
     </header>
   );
+}
+
+function ConsoleAskView({
+  healthData,
+  scheduleData,
+  ingestionError,
+  ingestionLoading,
+  reportListData,
+  reportsLoading,
+  reportsError,
+  agentQuery,
+  agentLoading,
+  agentResponse,
+  agentError,
+  personalizationProfile,
+  setAgentQuery,
+  setManualAgentContext,
+  submitAgentQuery,
+}: {
+  healthData: SourceHealthResponse | null;
+  scheduleData: DailyScheduleConfig | null;
+  ingestionError: string | null;
+  ingestionLoading: boolean;
+  reportListData: ReportListResponse | null;
+  reportsLoading: boolean;
+  reportsError: string | null;
+  agentQuery: string;
+  agentLoading: boolean;
+  agentResponse: AgentResponse | null;
+  agentError: string | null;
+  personalizationProfile: PersonalizationProfile;
+  setAgentQuery: (value: string) => void;
+  setManualAgentContext: (value: boolean) => void;
+  submitAgentQuery: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const latestReport = reportListData?.reports[0] ?? null;
+  const sourceStatusText = summarizeSourceStatus(healthData, ingestionLoading, ingestionError);
+  const inferredContext = inferAgentContext(agentQuery, personalizationProfile);
+
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-4">
+        <div className="font-mono text-sm font-bold text-lime-300">veritydesk / ask / profile loaded</div>
+        <div>
+          <h1 className="max-w-4xl text-[clamp(2.6rem,6vw,4.8rem)] font-black leading-[0.94] tracking-normal text-white">
+            Ask once. Get the brief.
+          </h1>
+          <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400">
+            Type one question. VerityDesk handles live web search, API checks, source ranking, and agent routing behind the scenes.
+          </p>
+        </div>
+      </section>
+
+      <form
+        onSubmit={submitAgentQuery}
+        className="rounded-xl border border-cyan-300/30 bg-[#020617] p-4 shadow-[inset_0_0_0_1px_rgba(163,230,53,0.04)]"
+      >
+        <label className="sr-only" htmlFor="console-question">
+          Question
+        </label>
+        <textarea
+          id="console-question"
+          value={agentQuery}
+          onChange={(event) => {
+            setAgentQuery(event.target.value);
+            setManualAgentContext(false);
+          }}
+          placeholder="Ask about markets, housing, companies, rates, world news, or what matters today."
+          className="min-h-36 w-full resize-y border-0 bg-transparent text-xl leading-8 text-white outline-none placeholder:text-slate-600 md:text-2xl"
+        />
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#1d3558] pt-4">
+          <div className="flex flex-wrap gap-2">
+            <NeonChip variant="live">Tavily web search</NeonChip>
+            <NeonChip variant="search">APIs verify</NeonChip>
+            <NeonChip>{personalizationProfile.location ? `${personalizationProfile.location} context` : "Profile context"}</NeonChip>
+          </div>
+          <button
+            type="submit"
+            disabled={agentLoading || !agentQuery.trim()}
+            className="min-h-11 rounded-lg bg-lime-300 px-5 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+          >
+            {agentLoading ? "Thinking" : "Run Answer"}
+          </button>
+        </div>
+      </form>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <ConsoleMetric label="Sources" value={sourceStatusText} />
+        <ConsoleMetric label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
+        <ConsoleMetric label="Auto route" value={formatAgentIntent(inferredContext.intent)} />
+      </div>
+
+      <section className="rounded-xl border border-[#1d3558] bg-[#0a1628]/75 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Answer</p>
+            <h2 className="mt-1 text-2xl font-bold text-white">
+              {agentResponse ? "Here is what VerityDesk found." : latestReport ? latestReport.title : "Ready when you are."}
+            </h2>
+          </div>
+          {agentResponse && <NeonChip variant="live">Confidence: {agentResponse.confidence}</NeonChip>}
+        </div>
+
+        {agentError && <p className="mt-4 rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-200">{agentError}</p>}
+        {reportsError && !agentResponse && (
+          <p className="mt-4 rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-200">{reportsError}</p>
+        )}
+        {reportsLoading && !agentResponse && <p className="mt-4 text-sm text-slate-400">Loading the latest saved briefing.</p>}
+
+        {!agentResponse && !agentError && !reportsLoading && (
+          <div className="mt-4">
+            <p className="whitespace-pre-line text-sm leading-7 text-slate-300">
+              {cleanAnswerText(latestReport?.summary ?? latestReport?.body) ?? "Ask a question or click one of the briefing cards to start."}
+            </p>
+            {latestReport && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <NeonChip>Retrieved {formatDateTime(latestReport.as_of ?? latestReport.created_at)}</NeonChip>
+                <NeonChip>{latestReport.citations.length} sources</NeonChip>
+              </div>
+            )}
+          </div>
+        )}
+
+        {agentResponse && (
+          <div className="mt-4 space-y-4">
+            <p className="whitespace-pre-line text-sm leading-7 text-slate-300">{agentResponse.summary}</p>
+            <p className="rounded-lg border border-[#1d3558] bg-[#020617]/70 p-3 text-xs leading-5 text-slate-400">
+              {FINANCIAL_DISCLAIMER}
+            </p>
+            <EvidenceDrawer response={agentResponse} />
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function BriefingCardsPanel({
+  personalizationProfile,
+  sourceStatusText,
+  scheduleData,
+  suggestionsData,
+  suggestionsLoading,
+  suggestionsError,
+  askFromShell,
+  openSettings,
+}: {
+  personalizationProfile: PersonalizationProfile;
+  sourceStatusText: string;
+  scheduleData: DailyScheduleConfig | null;
+  suggestionsData: ProactiveSuggestionsResponse | null;
+  suggestionsLoading: boolean;
+  suggestionsError: string | null;
+  askFromShell: (question?: string) => void;
+  openSettings: () => void;
+}) {
+  const cards = buildBriefingCards(personalizationProfile);
+
+  return (
+    <aside className="grid content-start gap-4 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-white">Quick Briefings</h2>
+          <p className="mt-1 font-mono text-xs font-black uppercase text-slate-500">Auto routed</p>
+        </div>
+        <button type="button" onClick={openSettings} className="text-sm font-bold text-cyan-300">
+          Tune
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => askFromShell(buildDailyBriefingPrompt(personalizationProfile))}
+        className="min-h-28 rounded-xl border border-lime-300/35 bg-[linear-gradient(135deg,rgba(163,230,53,0.12),transparent_44%),#020617] p-4 text-left transition hover:border-lime-300/70"
+      >
+        <p className="text-lg font-bold text-white">Daily Briefing</p>
+        <p className="mt-2 text-sm leading-5 text-slate-400">Generate today&apos;s personalized market, housing, company, and world-risk brief.</p>
+      </button>
+
+      {cards.map((card) => (
+        <button
+          key={card.title}
+          type="button"
+          onClick={() => askFromShell(card.prompt)}
+          className={`min-h-28 rounded-xl border bg-[#020617] p-4 text-left transition hover:border-cyan-300/70 ${card.borderClass}`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-lg font-bold text-white">{card.title}</p>
+            <span className={`mt-1 h-2 w-2 rounded-full ${card.dotClass}`} />
+          </div>
+          <p className="mt-2 text-sm leading-5 text-slate-400">{card.description}</p>
+        </button>
+      ))}
+
+      <div className="rounded-xl border border-[#1d3558] bg-[#020617]/80 p-4">
+        <p className="font-mono text-xs font-black uppercase text-cyan-300">System</p>
+        <div className="mt-3 grid gap-2">
+          <SourceStripRow label="Sources" value={sourceStatusText} />
+          <SourceStripRow label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
+          <SourceStripRow label="Next run" value={formatDateTime(scheduleData?.next_run_at)} />
+          <SourceStripRow label="Location" value={personalizationProfile.location || "Set in Settings"} />
+        </div>
+      </div>
+
+      <details className="rounded-xl border border-[#1d3558] bg-[#020617]/60 p-4">
+        <summary className="cursor-pointer font-mono text-xs font-black uppercase text-slate-400">Suggested next questions</summary>
+        {suggestionsLoading && <p className="mt-3 text-sm text-slate-400">Loading suggestions.</p>}
+        {suggestionsError && <p className="mt-3 text-sm text-red-200">{suggestionsError}</p>}
+        {!suggestionsLoading && !suggestionsError && (
+          <div className="mt-3 grid gap-2">
+            {(suggestionsData?.suggestions ?? []).slice(0, 3).map((suggestion) => (
+              <button
+                key={suggestion.id}
+                type="button"
+                onClick={() => askFromShell(suggestion.prompt)}
+                className="rounded-lg border border-[#1d3558] px-3 py-2 text-left text-sm leading-5 text-slate-300 hover:border-cyan-300/50"
+              >
+                {suggestion.title}
+              </button>
+            ))}
+            {(!suggestionsData || suggestionsData.suggestions.length === 0) && (
+              <p className="text-sm text-slate-400">No suggestions available yet.</p>
+            )}
+          </div>
+        )}
+      </details>
+    </aside>
+  );
+}
+
+function ConsoleMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
+      <p className="font-mono text-xs font-black uppercase text-slate-500">{label}</p>
+      <p className="mt-2 text-lg font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+function NeonChip({ children, variant }: { children: ReactNode; variant?: "live" | "search" }) {
+  const className =
+    variant === "live"
+      ? "border-lime-300/45 text-lime-300"
+      : variant === "search"
+        ? "border-cyan-300/45 text-cyan-300"
+        : "border-[#1d3558] text-slate-400";
+
+  return (
+    <span className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-black ${className}`}>
+      {children}
+    </span>
+  );
+}
+
+function SourceStripRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm font-semibold text-slate-400">{label}</span>
+      <span className="text-right font-mono text-xs font-black text-lime-300">{value}</span>
+    </div>
+  );
+}
+
+function buildBriefingCards(profile: PersonalizationProfile) {
+  const location = profile.location || "my saved area";
+  const housingMarkets = compactListLabel(splitList(profile.housingMarkets));
+  const watchlist = compactListLabel(splitList(profile.watchlist));
+  const marketFocus = compactListLabel(profile.priorityTopics);
+  const sectors = compactListLabel(splitList(profile.sectors));
+  const promptContext = cardPromptContext(profile);
+
+  return [
+    {
+      title: "Local Housing Pulse",
+      description: `Rates, affordability, inventory, and local housing signals for ${housingMarkets === "Not set" ? location : housingMarkets}.`,
+      prompt: [
+        `Give me a local housing pulse for ${housingMarkets === "Not set" ? location : housingMarkets}.`,
+        "Use a simple structure: Bottom Line, Major Trends, What Changed Recently, Why It Matters To Me, What To Watch Next, and Uncertainty/Data Gaps.",
+        "Cover trends in mortgage rates, affordability, inventory, prices, buyer/seller leverage, rent-vs-buy pressure, local demand, and local news.",
+        "For each major trend, say whether it looks strengthening, weakening, mixed, or unclear.",
+        "Use live web research first, then verify with housing and macro APIs where useful.",
+        promptContext,
+      ].join("\n"),
+      borderClass: "border-cyan-300/30",
+      dotClass: "bg-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.8)]",
+    },
+    {
+      title: "Market Setup",
+      description: `Indexes, rates, sector tone, volatility, and risks based on ${marketFocus}.`,
+      prompt: [
+        "Give me today's market setup.",
+        `Focus on my priority topics (${marketFocus}) and sectors (${sectors}).`,
+        "Use a simple structure: Bottom Line, Major Trends, What Changed Recently, Why It Matters To Me, What To Watch Next, and Uncertainty/Data Gaps.",
+        "Cover trends in indexes, rates/yields, sector rotation, volatility, commodities, macro sentiment, liquidity, and risk appetite.",
+        "For each major trend, say whether it looks strengthening, weakening, mixed, or unclear.",
+        "Do not give direct buy, sell, or hold recommendations.",
+        promptContext,
+      ].join("\n"),
+      borderClass: "border-lime-300/30",
+      dotClass: "bg-lime-300 shadow-[0_0_24px_rgba(163,230,53,0.8)]",
+    },
+    {
+      title: "Watchlist Moves",
+      description: `News, filings, earnings, analyst signals, and catalysts for ${watchlist === "Not set" ? "my watchlist" : watchlist}.`,
+      prompt: [
+        `What changed for ${watchlist === "Not set" ? "the companies and tickers I follow" : watchlist} recently?`,
+        "Use a simple structure: Bottom Line, Major Trends, What Changed Recently, Why It Matters To Me, What To Watch Next, and Uncertainty/Data Gaps.",
+        "Cover trends in earnings expectations, guidance, filings, analyst revisions, product momentum, sentiment, sector pressure, and major catalysts.",
+        "For each major trend, say whether it looks strengthening, weakening, mixed, or unclear.",
+        "Explain why each item matters and what to monitor next without direct trading instructions.",
+        promptContext,
+      ].join("\n"),
+      borderClass: "border-pink-300/30",
+      dotClass: "bg-pink-300 shadow-[0_0_24px_rgba(244,114,182,0.8)]",
+    },
+    {
+      title: "World Risk Radar",
+      description: "Geopolitics, commodities, policy, regulation, and market spillovers.",
+      prompt: [
+        "Give me a world risk radar update.",
+        "Use a simple structure: Bottom Line, Major Trends, What Changed Recently, Why It Matters To Me, What To Watch Next, and Uncertainty/Data Gaps.",
+        "Cover trends in geopolitics, energy/commodities, regulation/policy, trade/tariffs, inflation pressure, capital flows, and investor sentiment.",
+        "For each major trend, say whether it looks strengthening, weakening, mixed, or unclear.",
+        `Prioritize what matters to my interests (${marketFocus}) and risk preference (${formatProfileChoice(profile.riskPreference)}).`,
+        promptContext,
+      ].join("\n"),
+      borderClass: "border-orange-300/30",
+      dotClass: "bg-orange-300 shadow-[0_0_24px_rgba(251,146,60,0.8)]",
+    },
+  ];
+}
+
+function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
+  const promptContext = cardPromptContext(profile);
+
+  return [
+    "Give me today's personalized briefing.",
+    "Cover world news, market setup, rates and macro, local housing, watchlist companies, and major risks.",
+    "Use a simple structure: Bottom Line, Major Trends, What Changed Recently, Why It Matters To Me, What To Watch Next, and Uncertainty/Data Gaps.",
+    "Analyze cross-category trends in global risk, markets, rates/macro, housing, company/watchlist news, consumer/labor, credit, and commodities.",
+    "For each major trend, say whether it looks strengthening, weakening, mixed, or unclear.",
+    "Prioritize what matters to my saved profile and keep the answer easy to scan.",
+    "Use live web research first, then use direct APIs and stored data to verify or add context.",
+    "Do not give direct buy, sell, or hold recommendations.",
+    promptContext,
+  ].join("\n");
+}
+
+function cardPromptContext(profile: PersonalizationProfile) {
+  const sections = [
+    profile.personalNote ? `Personal note: ${profile.personalNote}` : null,
+    profile.location ? `Primary location: ${profile.location}` : null,
+    profile.housingMarkets ? `Housing markets to track: ${profile.housingMarkets}` : null,
+    profile.watchlist ? `Watchlist tickers: ${profile.watchlist}` : null,
+    profile.companies ? `Companies to track: ${profile.companies}` : null,
+    profile.priorityTopics.length > 0 ? `Priority topics: ${profile.priorityTopics.join(", ")}` : null,
+    profile.sectors ? `Sectors to watch: ${profile.sectors}` : null,
+    profile.housingInterests.length > 0 ? `Housing interests: ${profile.housingInterests.join(", ")}` : null,
+    profile.macroInterests.length > 0 ? `Macro interests: ${profile.macroInterests.join(", ")}` : null,
+    `Risk preference: ${formatProfileChoice(profile.riskPreference)}`,
+    `Investing style: ${formatProfileChoice(profile.investingStyle)}`,
+    `Preferred answer format: ${formatProfileChoice(profile.answerFormat)}`,
+    profile.ignoredTopics ? `Ignore or de-emphasize: ${profile.ignoredTopics}` : null,
+  ].filter(Boolean);
+
+  return `Use this saved user context:\n${sections.map((section) => `- ${section}`).join("\n")}`;
+}
+
+function formatProfileChoice(value: string) {
+  return value.replaceAll("_", " ");
 }
 
 function DashboardView({
@@ -1159,7 +1606,7 @@ function DashboardView({
               <p className="text-sm font-semibold">{dailyReport.title}</p>
               <p className="mt-1 text-xs text-[#5b6573]">Retrieved At {formatDateTime(dailyReport.as_of ?? dailyReport.created_at)}</p>
               <p className="mt-3 line-clamp-5 text-sm leading-6 text-[#374151]">
-                {dailyReport.summary ?? dailyReport.body}
+                {cleanAnswerText(dailyReport.summary ?? dailyReport.body)}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <StatusBadge status={dailyReport.confidence} />
@@ -1379,10 +1826,10 @@ function CompactReportPreview({ report }: { report: ReportResponse }) {
         <p className="text-sm font-semibold">{report.title}</p>
         <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(report.as_of)}</p>
         <p className="mt-3 max-h-72 overflow-auto whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
-          {report.body}
+          {cleanAnswerText(report.body)}
         </p>
       </div>
-      <CitationList citations={report.citations} />
+      <ReportEvidenceDrawer report={report} />
     </div>
   );
 }
@@ -1433,7 +1880,7 @@ function MarketStrategyCard({
               {marketReport.body}
             </p>
           </div>
-          <CitationList citations={marketReport.citations} />
+          <ReportEvidenceDrawer report={marketReport} />
         </div>
       )}
     </section>
@@ -1630,7 +2077,7 @@ function ReportsView({
                   <span className="text-xs text-[#5b6573]">{formatDateTime(report.as_of ?? report.created_at)}</span>
                 </div>
                 <p className="mt-2 text-sm font-semibold">{report.title}</p>
-                <p className="mt-2 line-clamp-2 text-sm text-[#5b6573]">{report.summary ?? report.body}</p>
+                <p className="mt-2 line-clamp-2 text-sm text-[#5b6573]">{cleanAnswerText(report.summary ?? report.body)}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <StatusBadge status={report.confidence} />
                   <span className="rounded-md border border-[#e5eaf0] px-2 py-1 text-xs font-semibold text-[#5b6573]">
@@ -1677,7 +2124,7 @@ function ReportDetailPanel({
         <div>
           <p className="text-sm font-semibold uppercase text-[#25636b]">{formatReportType(report.report_type)}</p>
           <h3 className="mt-1 text-xl font-semibold">{report.title}</h3>
-          <p className="mt-2 text-sm text-[#5b6573]">{report.summary}</p>
+          <p className="mt-2 text-sm text-[#5b6573]">{cleanAnswerText(report.summary)}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -1751,22 +2198,19 @@ function ReportReadingPanel({ report, variant }: { report: ReportResponse; varia
       {variant === "briefing" && (
         <div>
           <p className="text-sm font-semibold">{report.title}</p>
-          {report.summary && <p className="mt-2 text-sm leading-6 text-[#5b6573]">{report.summary}</p>}
+          {report.summary && <p className="mt-2 text-sm leading-6 text-[#5b6573]">{cleanAnswerText(report.summary)}</p>}
         </div>
       )}
 
       <article className="whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-4 text-sm leading-7 text-[#374151]">
-        {report.body}
+        {cleanAnswerText(report.body)}
       </article>
 
       <p className="rounded-md border border-[#e5eaf0] bg-white p-3 text-xs leading-5 text-[#5b6573]">
         {FINANCIAL_DISCLAIMER}
       </p>
 
-      <details className="rounded-md border border-[#e5eaf0] p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-[#143642]">Sources and citations</summary>
-        <CitationList citations={report.citations} />
-      </details>
+      <ReportEvidenceDrawer report={report} />
     </div>
   );
 }
@@ -2024,7 +2468,7 @@ function WatchlistView({
                 {companyReport.body}
               </p>
             </div>
-            <CitationList citations={companyReport.citations} />
+            <ReportEvidenceDrawer report={companyReport} />
           </div>
         )}
       </section>
@@ -2208,12 +2652,7 @@ function AgentChatView({
                 {agentResponse.summary}
               </p>
             </div>
-            <InlineList title="Agents Run" values={agentResponse.agents_ran} />
-            <ClaimsList claims={agentResponse.claims} />
-            <CitationList citations={agentResponse.citations} />
-            <InlineList title="Risks" values={agentResponse.risks} />
-            <InlineList title="Follow-up Questions" values={agentResponse.follow_up_questions} />
-            <GuardrailDetails response={agentResponse} />
+            <EvidenceDrawer response={agentResponse} />
           </div>
         )}
       </section>
@@ -2303,25 +2742,118 @@ function InlineList({ title, values }: { title: string; values: string[] }) {
   );
 }
 
+function EvidenceDrawer({ response }: { response: AgentResponse }) {
+  const latestRetrievedAt = latestCitationTimestamp(response.citations);
+
+  return (
+    <details className="rounded-xl border border-cyan-300/20 bg-[#020617]/80 p-4">
+      <summary className="cursor-pointer list-none">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">View Sources</p>
+            <p className="mt-1 text-sm text-slate-400">
+              {response.citations.length} citations hidden by default
+              {latestRetrievedAt ? ` · latest retrieved ${formatDateTime(latestRetrievedAt)}` : ""}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <NeonChip>Confidence: {response.confidence}</NeonChip>
+            <NeonChip>{response.requires_guardrail_review ? "Review needed" : "Guardrail passed"}</NeonChip>
+          </div>
+        </div>
+      </summary>
+      <div className="mt-4 grid gap-4">
+        <EvidenceMetaGrid
+          items={[
+            ["Citations", String(response.citations.length)],
+            ["Confidence", response.confidence],
+            ["Retrieved At", formatDateTime(latestRetrievedAt)],
+            ["Review Needed", response.requires_guardrail_review ? "Yes" : "No"],
+          ]}
+        />
+        <CitationList citations={response.citations} />
+        <details className="rounded-lg border border-[#1d3558] bg-[#07111f]/75 p-3">
+          <summary className="cursor-pointer font-mono text-xs font-black uppercase text-slate-400">Analysis Details</summary>
+          <div className="mt-4 grid gap-4">
+            <InlineList title="Agents Run" values={response.agents_ran} />
+            <ClaimsList claims={response.claims} />
+            <InlineList title="Risks" values={response.risks} />
+            <InlineList title="Follow-up Questions" values={response.follow_up_questions} />
+            <GuardrailDetails response={response} />
+          </div>
+        </details>
+      </div>
+    </details>
+  );
+}
+
+function ReportEvidenceDrawer({ report }: { report: ReportResponse }) {
+  const latestRetrievedAt = latestCitationTimestamp(report.citations);
+
+  return (
+    <details className="rounded-xl border border-cyan-300/20 bg-[#020617]/80 p-4">
+      <summary className="cursor-pointer list-none">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">View Sources</p>
+            <p className="mt-1 text-sm text-slate-400">
+              {report.citations.length} citations hidden by default
+              {latestRetrievedAt ? ` · latest retrieved ${formatDateTime(latestRetrievedAt)}` : ""}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <NeonChip>Confidence: {report.confidence}</NeonChip>
+            <NeonChip>Retrieved {formatDateTime(report.as_of ?? report.created_at)}</NeonChip>
+          </div>
+        </div>
+      </summary>
+      <div className="mt-4 grid gap-4">
+        <EvidenceMetaGrid
+          items={[
+            ["Citations", String(report.citations.length)],
+            ["Confidence", report.confidence],
+            ["Retrieved At", formatDateTime(latestRetrievedAt ?? report.as_of ?? report.created_at)],
+            ["Guardrail", report.guardrail_status],
+          ]}
+        />
+        <CitationList citations={report.citations} />
+      </div>
+    </details>
+  );
+}
+
+function EvidenceMetaGrid({ items }: { items: Array<[string, string]> }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {items.map(([label, value]) => (
+        <div key={label} className="rounded-lg border border-[#1d3558] bg-[#07111f]/75 p-3">
+          <p className="font-mono text-[0.65rem] font-black uppercase text-slate-500">{label}</p>
+          <p className="mt-1 text-sm font-bold text-slate-200">{value || "--"}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ClaimsList({ claims }: { claims: AgentResponse["claims"] }) {
   return (
     <div>
-      <p className="text-sm font-semibold">Claims</p>
+      <p className="text-sm font-semibold text-slate-200">Claims</p>
       {claims.length === 0 ? (
-        <p className="mt-2 text-sm text-[#5b6573]">No structured claims returned.</p>
+        <p className="mt-2 text-sm text-slate-500">No structured claims returned.</p>
       ) : (
         <div className="mt-2 space-y-2">
           {claims.map((claim, index) => (
-            <div key={`${claim.claim}-${index}`} className="rounded-md border border-[#e5eaf0] p-3">
+            <div key={`${claim.claim}-${index}`} className="rounded-lg border border-[#1d3558] bg-[#07111f]/75 p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={claim.confidence} />
-                <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-medium text-[#4b5563]">
+                <span className="rounded-md border border-[#1d3558] px-2 py-1 text-xs font-medium text-slate-400">
                   {claim.claim_type}
                 </span>
               </div>
-              <p className="mt-2 text-sm text-[#374151]">{claim.claim}</p>
+              <p className="mt-2 text-sm text-slate-300">{claim.claim}</p>
               {claim.source_ids.length > 0 && (
-                <p className="mt-2 text-xs text-[#5b6573]">Sources: {claim.source_ids.join(", ")}</p>
+                <p className="mt-2 text-xs text-slate-500">Sources: {claim.source_ids.join(", ")}</p>
               )}
             </div>
           ))}
@@ -2334,26 +2866,32 @@ function ClaimsList({ claims }: { claims: AgentResponse["claims"] }) {
 function CitationList({ citations }: { citations: AgentResponse["citations"] }) {
   return (
     <div>
-      <p className="text-sm font-semibold">Citations</p>
+      <p className="text-sm font-semibold text-slate-200">Citations</p>
       {citations.length === 0 ? (
-        <p className="mt-2 rounded-md border border-dashed border-[#cbd5dc] p-3 text-sm text-[#5b6573]">
+        <p className="mt-2 rounded-lg border border-dashed border-[#1d3558] p-3 text-sm text-slate-500">
           No citations returned for this response.
         </p>
       ) : (
         <div className="mt-2 space-y-2">
           {citations.map((citation, index) => (
-            <div key={`${citation.source_id}-${citation.title}-${index}`} className="rounded-md border border-[#e5eaf0] p-3">
-              <p className="text-sm font-medium">
-                {citation.url ? <a href={citation.url}>{citation.title}</a> : citation.title}
+            <div key={`${citation.source_id}-${citation.title}-${index}`} className="rounded-lg border border-[#1d3558] bg-[#07111f]/75 p-3">
+              <p className="text-sm font-medium text-slate-100">
+                {citation.url ? (
+                  <a className="text-cyan-300 underline-offset-4 hover:underline" href={citation.url}>
+                    {citation.title}
+                  </a>
+                ) : (
+                  citation.title
+                )}
               </p>
-              <p className="mt-1 text-xs text-[#5b6573]">
+              <p className="mt-1 text-xs text-slate-500">
                 {[citation.publisher, citation.source_id].filter(Boolean).join(" | ")}
               </p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 <SettingRow label="Published" value={formatDateTime(citation.published_at)} />
-                <SettingRow label="Retrieved" value={formatDateTime(citation.retrieved_at)} />
+                <SettingRow label="Retrieved At" value={formatDateTime(citation.retrieved_at)} />
               </div>
-              <p className="mt-2 text-sm text-[#5b6573]">{citation.supports_claim}</p>
+              <p className="mt-2 text-sm text-slate-400">{citation.supports_claim}</p>
             </div>
           ))}
         </div>
@@ -2368,8 +2906,8 @@ function GuardrailDetails({ response }: { response: AgentResponse }) {
 
   return (
     <div>
-      <p className="text-sm font-semibold">Guardrail Review</p>
-      <div className="mt-2 rounded-md border border-[#e5eaf0] p-3">
+      <p className="text-sm font-semibold text-slate-200">Guardrail Review</p>
+      <div className="mt-2 rounded-lg border border-[#1d3558] bg-[#07111f]/75 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={response.guardrail.status} />
           {response.requires_guardrail_review && (
@@ -2381,7 +2919,7 @@ function GuardrailDetails({ response }: { response: AgentResponse }) {
         {issues.length > 0 && <InlineList title="Issues" values={issues} />}
         {bannedPhrases.length > 0 && <InlineList title="Blocked Phrases" values={bannedPhrases} />}
         {response.guardrail.rewritten_text && (
-          <p className="mt-3 rounded-md bg-[#f8fafb] p-3 text-sm text-[#5b6573]">
+          <p className="mt-3 rounded-lg border border-[#1d3558] bg-[#020617]/70 p-3 text-sm text-slate-400">
             Safer wording was applied to the final response.
           </p>
         )}
@@ -2391,26 +2929,48 @@ function GuardrailDetails({ response }: { response: AgentResponse }) {
 }
 
 function SettingsView({
+  sourceData,
+  sourceError,
+  sourcesLoading,
   healthData,
   scheduleData,
   scheduleSaving,
   scheduleError,
+  ingestionError,
+  ingestionLoading,
+  runMode,
+  runLoading,
   personalizationProfile,
   profileSavedAt,
+  setRunMode,
+  triggerIngestionRun,
   saveSchedule,
   savePersonalizationProfile,
 }: {
+  sourceData: SourceCatalogResponse | null;
+  sourceError: string | null;
+  sourcesLoading: boolean;
   healthData: SourceHealthResponse | null;
   scheduleData: DailyScheduleConfig | null;
   scheduleSaving: boolean;
   scheduleError: string | null;
+  ingestionError: string | null;
+  ingestionLoading: boolean;
+  runMode: RunMode;
+  runLoading: boolean;
   personalizationProfile: PersonalizationProfile;
   profileSavedAt: string | null;
+  setRunMode: (mode: RunMode) => void;
+  triggerIngestionRun: () => void;
   saveSchedule: (nextSchedule: DailyScheduleConfig) => Promise<void>;
   savePersonalizationProfile: (nextProfile: PersonalizationProfile) => void;
 }) {
   const schedule = scheduleData ?? defaultScheduleConfig();
   const [profileDraft, setProfileDraft] = useState<PersonalizationProfile>(personalizationProfile);
+  const healthBySourceKey = useMemo(
+    () => new Map(healthData?.sources.map((source) => [source.source_key, source]) ?? []),
+    [healthData],
+  );
 
   useEffect(() => {
     setProfileDraft(personalizationProfile);
@@ -2440,80 +3000,166 @@ function SettingsView({
   }
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-        <h3 className="text-lg font-semibold">App Settings</h3>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <SettingRow label="Backend URL" value={API_BASE_URL} />
-          <SettingRow label="Source Mode" value="Catalog and ingestion status" />
-          <SettingRow label="Storage" value="Local SQLite" />
-          <SettingRow label="Tracked Sources" value={String(healthData?.total ?? 0)} />
+    <div className="grid gap-5 text-slate-100">
+      <section className="rounded-xl border border-cyan-300/20 bg-[#020617]/70 p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p className="font-mono text-sm font-black text-lime-300">veritydesk settings --profile --sources --automation</p>
+            <h1 className="mt-3 text-4xl font-black leading-none text-white md:text-5xl">Control center.</h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+              Settings holds the complexity so the home screen can stay simple. Save who you are, what you care about, when the app should refresh, and which sources are healthy.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <select
+              value={runMode}
+              onChange={(event) => setRunMode(event.target.value as RunMode)}
+              className="h-10 rounded-lg border border-[#1d3558] bg-[#020617] px-3 text-sm font-semibold text-slate-200 outline-none focus:border-cyan-300"
+            >
+              <option value="all">All sources</option>
+              <option value="rss">News feeds only</option>
+              <option value="official_api">Official APIs only</option>
+            </select>
+            <button
+              type="button"
+              onClick={triggerIngestionRun}
+              disabled={runLoading}
+              className="min-h-10 rounded-lg bg-lime-300 px-4 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+            >
+              {runLoading ? "Refreshing" : "Refresh All Sources"}
+            </button>
+          </div>
         </div>
       </section>
 
-      <form onSubmit={submitProfile} className="rounded-md border border-[#d7dee3] bg-white p-4">
+      <form onSubmit={submitProfile} className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Personalization</h3>
-            <p className="mt-1 text-sm text-[#5b6573]">
-              Tell InvestorAgent what matters to you once. Later milestones will use this to auto-select context.
-            </p>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Personal context</p>
+            <h2 className="mt-1 text-2xl font-bold text-white">Tell VerityDesk what matters once.</h2>
           </div>
           <button
             type="submit"
-            className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white"
+            className="min-h-10 rounded-lg bg-lime-300 px-4 text-sm font-black text-[#102000]"
           >
-            Save Personalization
+            Save Profile
           </button>
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <label className="block text-sm font-medium" htmlFor="profile-location">
-            Where are you based?
-            <input
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+          <label className="block text-sm font-bold text-slate-200" htmlFor="profile-note">
+            About you and your interests
+            <textarea
+              id="profile-note"
+              value={profileDraft.personalNote}
+              onChange={(event) => updateProfile({ personalNote: event.target.value })}
+              placeholder="Example: I live in Arizona, care about housing affordability, mortgage rates, broad market risk, and long-term technology companies. Keep answers concise and practical."
+              className="mt-2 min-h-36 w-full resize-y rounded-xl border border-[#1d3558] bg-[#020617] px-4 py-3 text-sm leading-6 text-slate-300 outline-none focus:border-cyan-300"
+            />
+          </label>
+
+          <div className="grid gap-3">
+            <SettingsTextInput
               id="profile-location"
+              label="Preferred location"
               value={profileDraft.location}
-              onChange={(event) => updateProfile({ location: event.target.value })}
               placeholder="Phoenix, AZ"
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+              onChange={(value) => updateProfile({ location: value })}
             />
-          </label>
-
-          <label className="block text-sm font-medium" htmlFor="profile-briefing-time">
-            Preferred briefing time
-            <input
-              id="profile-briefing-time"
-              type="time"
-              value={profileDraft.briefingTime}
-              onChange={(event) => updateProfile({ briefingTime: event.target.value })}
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+            <SettingsSelect
+              id="profile-briefing-style"
+              label="Answer style"
+              value={profileDraft.briefingStyle}
+              onChange={(value) => updateProfile({ briefingStyle: value as PersonalizationProfile["briefingStyle"] })}
+              options={[
+                ["quick", "Quick"],
+                ["balanced", "Balanced"],
+                ["detailed", "Detailed"],
+              ]}
             />
-          </label>
-
-          <label className="block text-sm font-medium" htmlFor="profile-watchlist">
-            What do you watch?
-            <input
-              id="profile-watchlist"
-              value={profileDraft.watchlist}
-              onChange={(event) => updateProfile({ watchlist: event.target.value.toUpperCase() })}
-              placeholder="AAPL, MSFT, SPY, QQQ"
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
-            />
-          </label>
-
-          <label className="block text-sm font-medium" htmlFor="profile-companies">
-            What companies matter to you?
-            <input
-              id="profile-companies"
-              value={profileDraft.companies}
-              onChange={(event) => updateProfile({ companies: event.target.value })}
-              placeholder="Apple, Nvidia, Tesla"
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
-            />
-          </label>
+          </div>
         </div>
 
-        <div className="mt-5 grid gap-4 xl:grid-cols-3">
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <SettingsTextInput
+            id="profile-watchlist"
+            label="Watchlist"
+            value={profileDraft.watchlist}
+            placeholder="AAPL, MSFT, SPY, QQQ"
+            onChange={(value) => updateProfile({ watchlist: value.toUpperCase() })}
+          />
+          <SettingsTextInput
+            id="profile-companies"
+            label="Companies"
+            value={profileDraft.companies}
+            placeholder="Apple, Nvidia, Tesla"
+            onChange={(value) => updateProfile({ companies: value })}
+          />
+          <SettingsTextInput
+            id="profile-housing-markets"
+            label="Housing markets"
+            value={profileDraft.housingMarkets}
+            placeholder="Phoenix, Scottsdale, Tucson"
+            onChange={(value) => updateProfile({ housingMarkets: value })}
+          />
+          <SettingsTextInput
+            id="profile-sectors"
+            label="Sectors to watch"
+            value={profileDraft.sectors}
+            placeholder="AI, semiconductors, homebuilders, banks"
+            onChange={(value) => updateProfile({ sectors: value })}
+          />
+          <SettingsTextInput
+            id="profile-ignore"
+            label="Ignore these topics"
+            value={profileDraft.ignoredTopics}
+            placeholder="crypto, small caps, meme stocks"
+            onChange={(value) => updateProfile({ ignoredTopics: value })}
+          />
+          <SettingsTextInput
+            id="profile-briefing-time"
+            label="Preferred briefing time"
+            value={profileDraft.briefingTime}
+            type="time"
+            onChange={(value) => updateProfile({ briefingTime: value })}
+          />
+          <SettingsSelect
+            id="profile-risk"
+            label="Risk preference"
+            value={profileDraft.riskPreference}
+            onChange={(value) => updateProfile({ riskPreference: value as PersonalizationProfile["riskPreference"] })}
+            options={[
+              ["conservative", "Conservative"],
+              ["balanced", "Balanced"],
+              ["aggressive", "Aggressive"],
+            ]}
+          />
+          <SettingsSelect
+            id="profile-investing-style"
+            label="Investing style"
+            value={profileDraft.investingStyle}
+            onChange={(value) => updateProfile({ investingStyle: value as PersonalizationProfile["investingStyle"] })}
+            options={[
+              ["long_term", "Long-term"],
+              ["medium_term", "Medium-term"],
+              ["short_term", "Short-term"],
+              ["mixed", "Mixed"],
+            ]}
+          />
+          <SettingsSelect
+            id="profile-answer-format"
+            label="Preferred answer format"
+            value={profileDraft.answerFormat}
+            onChange={(value) => updateProfile({ answerFormat: value as PersonalizationProfile["answerFormat"] })}
+            options={[
+              ["brief", "Brief"],
+              ["decision_memo", "Decision memo"],
+              ["watchlist", "Watchlist"],
+            ]}
+          />
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-3 text-slate-200">
           <CheckboxGroup
             title="Topics to prioritize"
             options={topicOptions}
@@ -2534,52 +3180,27 @@ function SettingsView({
           />
         </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_280px]">
-          <label className="block text-sm font-medium" htmlFor="profile-ignore">
-            What should InvestorAgent ignore?
-            <input
-              id="profile-ignore"
-              value={profileDraft.ignoredTopics}
-              onChange={(event) => updateProfile({ ignoredTopics: event.target.value })}
-              placeholder="crypto, small caps, meme stocks"
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
-            />
-          </label>
-          <label className="block text-sm font-medium" htmlFor="profile-briefing-style">
-            Briefing style
-            <select
-              id="profile-briefing-style"
-              value={profileDraft.briefingStyle}
-              onChange={(event) => updateProfile({ briefingStyle: event.target.value as PersonalizationProfile["briefingStyle"] })}
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
-            >
-              <option value="quick">Quick</option>
-              <option value="balanced">Balanced</option>
-              <option value="detailed">Detailed</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="mt-4 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
-          <p className="text-sm font-semibold">Saved profile summary</p>
-          <p className="mt-2 text-sm leading-6 text-[#5b6573]">{profileSummary(personalizationProfile)}</p>
-          <p className="mt-1 text-xs text-[#5b6573]">Saved At {formatDateTime(profileSavedAt)}</p>
+        <div className="mt-5 rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
+          <p className="font-mono text-xs font-black uppercase text-cyan-300">Saved profile</p>
+          <p className="mt-2 text-sm leading-6 text-slate-400">{profileSummary(personalizationProfile)}</p>
+          <p className="mt-2 text-xs text-slate-500">Saved At {formatDateTime(profileSavedAt)}</p>
         </div>
       </form>
 
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+      <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Daily Automation</h3>
-            <p className="mt-1 text-sm text-[#5b6573]">
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Automation</p>
+            <h2 className="mt-1 text-2xl font-bold text-white">Daily run</h2>
+            <p className="mt-1 text-sm text-slate-400">
               Runs while the local backend is open. Schedule settings are saved locally.
             </p>
           </div>
           <StatusBadge status={schedule.enabled ? "enabled" : "off"} />
         </div>
-        {scheduleError && <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{scheduleError}</p>}
+        {scheduleError && <p className="mt-4 rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-200">{scheduleError}</p>}
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="flex items-center gap-3 rounded-md border border-[#e5eaf0] p-3 text-sm font-medium">
+          <label className="flex items-center gap-3 rounded-xl border border-[#1d3558] bg-[#020617]/70 p-3 text-sm font-bold text-slate-200">
             <input
               type="checkbox"
               checked={schedule.enabled}
@@ -2588,7 +3209,7 @@ function SettingsView({
             />
             Daily run
           </label>
-          <label className="flex items-center gap-3 rounded-md border border-[#e5eaf0] p-3 text-sm font-medium">
+          <label className="flex items-center gap-3 rounded-xl border border-[#1d3558] bg-[#020617]/70 p-3 text-sm font-bold text-slate-200">
             <input
               type="checkbox"
               checked={schedule.generate_daily_briefing}
@@ -2597,40 +3218,176 @@ function SettingsView({
             />
             Generate daily briefing
           </label>
-          <label className="block text-sm font-medium" htmlFor="schedule-time">
-            Scheduled Time
-            <input
-              id="schedule-time"
-              type="time"
-              value={schedule.local_time}
-              disabled={scheduleSaving}
-              onChange={(event) => updateSchedule({ local_time: event.target.value })}
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
-            />
-          </label>
-          <label className="block text-sm font-medium" htmlFor="schedule-mode">
-            Run Mode
-            <select
-              id="schedule-mode"
-              value={schedule.mode}
-              disabled={scheduleSaving}
-              onChange={(event) => updateSchedule({ mode: event.target.value as RunMode })}
-              className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
-            >
-              <option value="all">All sources</option>
-              <option value="rss">RSS only</option>
-              <option value="official_api">Official APIs only</option>
-            </select>
-          </label>
+          <SettingsTextInput
+            id="schedule-time"
+            label="Scheduled time"
+            value={schedule.local_time}
+            type="time"
+            disabled={scheduleSaving}
+            onChange={(value) => updateSchedule({ local_time: value })}
+          />
+          <SettingsSelect
+            id="schedule-mode"
+            label="Run mode"
+            value={schedule.mode}
+            disabled={scheduleSaving}
+            onChange={(value) => updateSchedule({ mode: value as RunMode })}
+            options={[
+              ["all", "All sources"],
+              ["rss", "News feeds only"],
+              ["official_api", "Official APIs only"],
+            ]}
+          />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <SettingRow label="Next Run" value={formatDateTime(schedule.next_run_at)} />
-          <SettingRow label="Last Run" value={formatDateTime(schedule.last_run_at)} />
-          <SettingRow label="Last Status" value={schedule.last_status ?? "--"} />
+          <ConsoleMetric label="Next run" value={formatDateTime(schedule.next_run_at)} />
+          <ConsoleMetric label="Last run" value={formatDateTime(schedule.last_run_at)} />
+          <ConsoleMetric label="Last status" value={schedule.last_status ?? "--"} />
         </div>
-        {scheduleSaving && <p className="mt-4 text-sm text-[#5b6573]">Saving schedule.</p>}
+        {scheduleSaving && <p className="mt-4 text-sm text-slate-400">Saving schedule.</p>}
+      </section>
+
+      <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Sources</p>
+            <h2 className="mt-1 text-2xl font-bold text-white">Connected data</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-400">
+              These sources support the assistant behind the scenes. Use one refresh for all sources, then inspect details only when something needs attention.
+            </p>
+          </div>
+          <div className="grid min-w-44 gap-2">
+            <SourceStripRow label="Working" value={String(healthData?.fresh_count ?? 0)} />
+            <SourceStripRow label="Needs check" value={String(needsCheckCount(healthData))} />
+          </div>
+        </div>
+        <StatusBlock loading={sourcesLoading || ingestionLoading} error={sourceError || ingestionError} />
+        <div className="mt-5 grid gap-3 xl:grid-cols-2">
+          {(sourceData?.sources ?? []).map((source) => {
+            const health = healthBySourceKey.get(source.id);
+            const sourceStatus = sourceStatusSummary(source, health);
+            return (
+              <SourceSettingsCard
+                key={source.id}
+                source={source}
+                health={health}
+                statusLabel={sourceStatus.label}
+                description={sourceStatus.description}
+                nextStep={sourceStatus.nextStep}
+              />
+            );
+          })}
+        </div>
       </section>
     </div>
+  );
+}
+
+function SettingsTextInput({
+  id,
+  label,
+  value,
+  placeholder,
+  type = "text",
+  disabled = false,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  placeholder?: string;
+  type?: "text" | "time";
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block text-sm font-bold text-slate-200" htmlFor={id}>
+      {label}
+      <input
+        id={id}
+        type={type}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="mt-2 h-11 w-full rounded-xl border border-[#1d3558] bg-[#020617] px-4 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-cyan-300 disabled:cursor-not-allowed disabled:text-slate-500"
+      />
+    </label>
+  );
+}
+
+function SettingsSelect({
+  id,
+  label,
+  value,
+  options,
+  disabled = false,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  options: Array<[string, string]>;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block text-sm font-bold text-slate-200" htmlFor={id}>
+      {label}
+      <select
+        id={id}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 h-11 w-full rounded-xl border border-[#1d3558] bg-[#020617] px-4 text-sm text-slate-200 outline-none focus:border-cyan-300 disabled:cursor-not-allowed disabled:text-slate-500"
+      >
+        {options.map(([optionValue, labelText]) => (
+          <option key={optionValue} value={optionValue}>
+            {labelText}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SourceSettingsCard({
+  source,
+  health,
+  statusLabel,
+  description,
+  nextStep,
+}: {
+  source: SourceEntry;
+  health: SourceHealthItem | undefined;
+  statusLabel: string;
+  description: string;
+  nextStep: string;
+}) {
+  return (
+    <article className="rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-bold text-white">{source.name}</h3>
+          <p className="mt-1 text-xs font-semibold text-slate-500">{formatAccessMethod(source.access_method)}</p>
+        </div>
+        <StatusBadge status={statusLabel} />
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-400">{description}</p>
+      <div className="mt-4 grid gap-2 md:grid-cols-2">
+        <SourceStripRow label="Last updated" value={formatDateTime(health?.last_success_at ?? health?.last_attempt_at)} />
+        <SourceStripRow label="Next step" value={nextStep} />
+      </div>
+      {source.domains.length > 0 && (
+        <p className="mt-3 text-xs leading-5 text-slate-500">Provides: {source.domains.slice(0, 4).join(", ")}</p>
+      )}
+      {health?.last_error && (
+        <details className="mt-3 rounded-lg border border-orange-300/20 bg-orange-950/10 p-3">
+          <summary className="cursor-pointer text-xs font-black uppercase text-orange-300">Technical message</summary>
+          <p className="mt-2 text-xs leading-5 text-orange-200">{health.last_error}</p>
+        </details>
+      )}
+    </article>
   );
 }
 
@@ -2646,11 +3403,11 @@ function CheckboxGroup({
   onToggle: (value: string) => void;
 }) {
   return (
-    <fieldset className="rounded-md border border-[#e5eaf0] p-3">
-      <legend className="px-1 text-sm font-semibold">{title}</legend>
+    <fieldset className="rounded-xl border border-[#1d3558] bg-[#020617]/70 p-3">
+      <legend className="px-1 text-sm font-bold text-slate-200">{title}</legend>
       <div className="mt-2 grid gap-2">
         {options.map((option) => (
-          <label key={option} className="flex min-h-9 items-center gap-2 text-sm text-[#374151]">
+          <label key={option} className="flex min-h-9 items-center gap-2 text-sm text-slate-300">
             <input
               type="checkbox"
               checked={values.includes(option)}
@@ -2985,6 +3742,29 @@ function formatDateTime(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+function cleanAnswerText(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const cleaned = value
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("Coordinator selected:"))
+    .join("\n")
+    .trim();
+
+  return cleaned || null;
+}
+
+function latestCitationTimestamp(citations: AgentResponse["citations"]) {
+  const timestamps = citations
+    .map((citation) => citation.retrieved_at ?? citation.published_at)
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => new Date(right).getTime() - new Date(left).getTime());
+
+  return timestamps[0] ?? null;
+}
+
 function formatScheduleTime(scheduleData: DailyScheduleConfig | null) {
   if (!scheduleData) {
     return "--";
@@ -3071,12 +3851,18 @@ function defaultScheduleConfig(): DailyScheduleConfig {
 
 function defaultPersonalizationProfile(): PersonalizationProfile {
   return {
+    personalNote: "",
     location: "",
+    housingMarkets: "",
     watchlist: "SPY, QQQ, TLT",
     companies: "",
     priorityTopics: ["Markets", "Housing", "U.S. economy"],
+    sectors: "",
     housingInterests: ["Mortgage rates", "Affordability"],
     macroInterests: ["Inflation", "Interest rates", "Fed policy"],
+    riskPreference: "balanced",
+    investingStyle: "long_term",
+    answerFormat: "brief",
     ignoredTopics: "",
     briefingStyle: "balanced",
     briefingTime: "08:00",
@@ -3106,13 +3892,19 @@ function loadPersonalizationProfile() {
 function normalizePersonalizationProfile(profile: PersonalizationProfile): PersonalizationProfile {
   return {
     ...profile,
+    personalNote: profile.personalNote.trim(),
     location: profile.location.trim(),
+    housingMarkets: normalizeListText(profile.housingMarkets),
     watchlist: normalizeListText(profile.watchlist).toUpperCase(),
     companies: normalizeListText(profile.companies),
+    sectors: normalizeListText(profile.sectors),
     ignoredTopics: normalizeListText(profile.ignoredTopics),
     priorityTopics: uniqueList(profile.priorityTopics),
     housingInterests: uniqueList(profile.housingInterests),
     macroInterests: uniqueList(profile.macroInterests),
+    riskPreference: profile.riskPreference || "balanced",
+    investingStyle: profile.investingStyle || "long_term",
+    answerFormat: profile.answerFormat || "brief",
     briefingTime: profile.briefingTime || "08:00",
   };
 }
@@ -3149,13 +3941,16 @@ function compactListLabel(values: string[]) {
 }
 
 function buildPersonalizedQuestions(profile: PersonalizationProfile) {
-  const location = profile.location || "my area";
+  const location = compactListLabel(splitList(profile.housingMarkets)) === "Not set"
+    ? profile.location || "my area"
+    : compactListLabel(splitList(profile.housingMarkets));
   const watchlist = compactListLabel(splitList(profile.watchlist));
   const companies = compactListLabel(splitList(profile.companies));
+  const sectors = compactListLabel(splitList(profile.sectors));
 
   return [
     `What matters for ${watchlist === "Not set" ? "my watchlist" : watchlist} today?`,
-    `What should I watch in markets this morning based on my interests?`,
+    `What should I watch in markets this morning based on ${sectors === "Not set" ? "my interests" : sectors}?`,
     `How are rates affecting housing in ${location}?`,
     companies === "Not set" ? "What company news should I pay attention to?" : `What changed with ${companies} this week?`,
   ];
@@ -3165,10 +3960,15 @@ function inferAgentContext(query: string, profile: PersonalizationProfile): Infe
   const normalizedQuery = query.toLowerCase();
   const queryTickers = inferTickers(query);
   const profileTickers = splitList(profile.watchlist).map((ticker) => ticker.toUpperCase());
-  const tickers = queryTickers.length > 0 ? queryTickers : profileTickers;
   const companies = inferCompanies(query, profile);
   const location = inferLocation(query, profile);
   const intent = inferIntent(normalizedQuery, queryTickers, companies);
+  const tickers =
+    queryTickers.length > 0 || shouldUseProfileTickers(normalizedQuery, intent)
+      ? queryTickers.length > 0
+        ? queryTickers
+        : profileTickers
+      : [];
   const domain = inferDomain(intent, normalizedQuery);
   const timeWindow = inferTimeWindow(normalizedQuery);
   const explanation = buildInferenceExplanation(intent, domain, tickers, companies, location, timeWindow);
@@ -3182,6 +3982,18 @@ function inferAgentContext(query: string, profile: PersonalizationProfile): Infe
     timeWindow,
     explanation,
   };
+}
+
+function shouldUseProfileTickers(normalizedQuery: string, intent: AgentIntent) {
+  if (intent === "daily_briefing") {
+    return true;
+  }
+
+  if (containsAny(normalizedQuery, ["watchlist", "portfolio", "my stocks", "tickers i follow", "companies i follow"])) {
+    return true;
+  }
+
+  return intent === "company_research" && containsAny(normalizedQuery, ["stock", "stocks", "shares", "earnings", "company"]);
 }
 
 function inferIntent(normalizedQuery: string, tickers: string[], companies: string[]): AgentIntent {
@@ -3359,11 +4171,14 @@ function containsAny(value: string, terms: string[]) {
 
 function profileSummary(profile: PersonalizationProfile) {
   const location = profile.location || "no location yet";
+  const housingMarkets = compactListLabel(splitList(profile.housingMarkets));
   const watchlist = compactListLabel(splitList(profile.watchlist));
+  const sectors = compactListLabel(splitList(profile.sectors));
   const topics = compactListLabel(profile.priorityTopics);
   const ignoredTopics = compactListLabel(splitList(profile.ignoredTopics));
 
-  return `Location: ${location}. Watchlist: ${watchlist}. Priority topics: ${topics}. Ignored topics: ${ignoredTopics}. Briefing style: ${profile.briefingStyle}.`;
+  const note = profile.personalNote ? `Note: ${profile.personalNote}. ` : "";
+  return `${note}Location: ${location}. Housing markets: ${housingMarkets}. Watchlist: ${watchlist}. Sectors: ${sectors}. Priority topics: ${topics}. Risk: ${formatProfileChoice(profile.riskPreference)}. Investing style: ${formatProfileChoice(profile.investingStyle)}. Answer format: ${formatProfileChoice(profile.answerFormat)}. Ignored topics: ${ignoredTopics}. Briefing style: ${profile.briefingStyle}.`;
 }
 
 function formatAgentIntent(intent: AgentIntent) {

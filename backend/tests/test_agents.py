@@ -62,7 +62,6 @@ def test_agent_query_endpoint_runs_coordinator_and_domain_agents(monkeypatch) ->
     assert payload["agents_ran"] == [
         "CoordinatorAgent",
         "EvidenceFusionAgent",
-        "CompanyAgent",
         "MarketAgent",
         "MacroAgent",
         "CitationAgent",
@@ -120,13 +119,45 @@ def test_route_agent_names_for_housing_macro_query() -> None:
         regions=["US"],
     )
 
-    assert agents.route_agent_names(context) == ["MarketAgent", "MacroAgent", "HousingAgent"]
+    assert agents.route_agent_names(context) == ["HousingAgent", "MacroAgent", "MarketAgent"]
 
 
 def test_route_agent_names_for_general_update_defaults_to_news_and_market() -> None:
     context = AgentContext(
         request_id="request-2",
         user_query="Give me a quick update",
+        intent="general_research",
+    )
+
+    assert agents.route_agent_names(context) == ["NewsDigestAgent", "MarketAgent"]
+
+
+def test_route_agent_names_for_market_etf_does_not_run_company_agent() -> None:
+    context = AgentContext(
+        request_id="request-market",
+        user_query="What matters for SPY and QQQ today?",
+        intent="market_research",
+        tickers=["SPY", "QQQ"],
+    )
+
+    assert agents.route_agent_names(context) == ["MarketAgent", "MacroAgent"]
+
+
+def test_route_agent_names_for_company_ticker_runs_company_agent() -> None:
+    context = AgentContext(
+        request_id="request-company",
+        user_query="What changed for AAPL this week?",
+        intent="general_research",
+        tickers=["AAPL"],
+    )
+
+    assert agents.route_agent_names(context) == ["CompanyAgent"]
+
+
+def test_route_agent_names_for_world_risk_uses_news_first() -> None:
+    context = AgentContext(
+        request_id="request-risk",
+        user_query="Give me a world risk radar update for commodities and markets.",
         intent="general_research",
     )
 
@@ -154,6 +185,40 @@ def test_synthesis_keeps_user_answer_clean_and_guarded() -> None:
     assert "Coordinator selected" not in result
     assert "MarketAgent (medium confidence)" not in result
     assert "Evidence is limited." not in result
+
+
+def test_template_synthesis_uses_simple_trend_sections() -> None:
+    result = agents.synthesize_agent_results(
+        [
+            AgentResult(
+                agent_name="MarketAgent",
+                summary="Rates and market tone are mixed.",
+                confidence="medium",
+            )
+        ],
+        request=AgentQueryRequest(user_query="What changed in markets?"),
+        evidence_packet=EvidencePacket(
+            request_id="request-1",
+            query="What changed in markets?",
+            items=[
+                EvidencePacketItem(
+                    source_kind="live_web",
+                    source_id="tavily",
+                    title="Markets update",
+                    publisher="Example Source",
+                    published_at="2026-09-09",
+                    summary="Market trend signals are mixed as rates remain elevated.",
+                    source_quality="reputable",
+                    relevance_score=0.8,
+                )
+            ],
+        ),
+    )
+
+    assert "Bottom Line:" in result
+    assert "Major Trends:" in result
+    assert "Uncertainty/Data Gaps:" in result
+    assert "Sources:" not in result
 
 
 def test_format_synthesis_evidence_includes_user_query_and_citations() -> None:
@@ -282,7 +347,8 @@ def test_synthesis_with_packet_avoids_raw_internal_trace() -> None:
     assert "Coordinator selected" not in result
     assert "Fused evidence source path" not in result
     assert "Source path:" not in result
-    assert "Sources:" in result
+    assert "Sources:" not in result
+    assert "Major Trends:" in result
 
 
 def test_citation_format_includes_source_dates_and_url() -> None:

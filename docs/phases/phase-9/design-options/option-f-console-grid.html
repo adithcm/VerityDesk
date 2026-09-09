@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Console Grid Concept</title>
+    <link rel="stylesheet" href="./tech.css" />
+    <style>
+      body {
+        background:
+          linear-gradient(rgba(80, 160, 255, 0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(80, 160, 255, 0.045) 1px, transparent 1px),
+          radial-gradient(circle at 20% 0%, rgba(47, 129, 247, 0.22), transparent 34rem),
+          radial-gradient(circle at 90% 20%, rgba(20, 184, 196, 0.14), transparent 28rem),
+          #050914;
+        background-size: 42px 42px, 42px 42px, auto, auto, auto;
+      }
+
+      .workspace {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: 88px minmax(0, 1fr) 420px;
+      }
+
+      .side-rail {
+        align-items: center;
+        background: rgba(8, 22, 38, 0.72);
+        border: 1px solid rgba(119, 158, 203, 0.24);
+        border-radius: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: calc(100vh - 124px);
+        padding: 16px 10px;
+      }
+
+      .rail-button {
+        align-items: center;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(119, 158, 203, 0.2);
+        border-radius: 16px;
+        color: var(--muted);
+        display: flex;
+        font-size: 12px;
+        font-weight: 850;
+        height: 58px;
+        justify-content: center;
+        width: 58px;
+      }
+
+      .rail-button.active {
+        background: linear-gradient(135deg, rgba(47, 129, 247, 0.75), rgba(20, 184, 196, 0.58));
+        color: white;
+      }
+
+      .console {
+        background: linear-gradient(180deg, rgba(13, 27, 46, 0.86), rgba(6, 15, 27, 0.92));
+        border: 1px solid rgba(119, 158, 203, 0.28);
+        border-radius: 18px;
+        min-height: calc(100vh - 124px);
+        overflow: hidden;
+      }
+
+      .console-head {
+        border-bottom: 1px solid rgba(119, 158, 203, 0.22);
+        padding: 26px;
+      }
+
+      .console-body {
+        display: grid;
+        gap: 16px;
+        padding: 26px;
+      }
+
+      .terminal-line {
+        color: #9df3cf;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 13px;
+        margin-bottom: 12px;
+      }
+
+      .large-prompt {
+        background: rgba(3, 10, 20, 0.86);
+        border: 1px solid rgba(47, 129, 247, 0.48);
+        border-radius: 16px;
+        box-shadow: inset 0 0 0 1px rgba(20, 184, 196, 0.09);
+        padding: 18px;
+      }
+
+      .large-prompt textarea {
+        background: transparent;
+        border: 0;
+        color: white;
+        font-size: 22px;
+        line-height: 1.35;
+        min-height: 128px;
+        outline: 0;
+        resize: vertical;
+        width: 100%;
+      }
+
+      .answer-preview {
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(119, 158, 203, 0.22);
+        border-radius: 16px;
+        padding: 20px;
+      }
+
+      .signal-board {
+        display: grid;
+        gap: 14px;
+      }
+
+      .signal-tile {
+        background: rgba(13, 27, 46, 0.82);
+        border: 1px solid rgba(119, 158, 203, 0.24);
+        border-radius: 18px;
+        overflow: hidden;
+      }
+
+      .signal-band {
+        background: linear-gradient(90deg, rgba(47, 129, 247, 0.32), rgba(20, 184, 196, 0.08));
+        min-height: 8px;
+      }
+
+      .signal-content {
+        padding: 18px;
+      }
+
+      .signal-content h2 {
+        font-size: 20px;
+        margin: 0;
+      }
+
+      .signal-content p {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .split-row {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .micro-card {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(119, 158, 203, 0.2);
+        border-radius: 16px;
+        padding: 14px;
+      }
+
+      @media (max-width: 1050px) {
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .side-rail {
+          flex-direction: row;
+          min-height: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">V</div>
+        <div>
+          <div class="brand-name">VerityDesk</div>
+          <div class="brand-subtitle">Signal console</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a class="active" href="./option-f-console-grid.html">Console</a>
+        <a href="./option-f-control-center.html">Control Center</a>
+      </nav>
+    </header>
+
+    <main class="container workspace">
+      <aside class="side-rail">
+        <button class="rail-button active">Ask</button>
+        <button class="rail-button">Day</button>
+        <button class="rail-button">AZ</button>
+        <button class="rail-button">Mkt</button>
+        <button class="rail-button">Co</button>
+      </aside>
+
+      <section class="console">
+        <div class="console-head">
+          <p class="terminal-line">veritydesk / live-web primary / api verified / personal context loaded</p>
+          <h1 class="hero-title">Research console</h1>
+          <p class="muted">A single focused workspace for asking questions and reading the answer.</p>
+        </div>
+        <div class="console-body">
+          <div class="large-prompt">
+            <textarea>What is happening with Arizona housing and mortgage rates this week?</textarea>
+            <div class="composer-footer">
+              <div class="pill-row">
+                <span class="pill good">Tavily primary</span>
+                <span class="pill">FRED + FHFA support</span>
+                <span class="pill">Personal note included</span>
+              </div>
+              <button class="button primary">Run</button>
+            </div>
+          </div>
+
+          <div class="answer-preview">
+            <p class="eyebrow">Latest Answer</p>
+            <h2 style="margin: 0 0 12px">Arizona housing is mostly a rate-and-affordability story right now.</h2>
+            <p class="muted">
+              The answer area stays readable: two or three paragraphs, a short what-to-watch list, then citations tucked below.
+            </p>
+            <div class="pill-row">
+              <span class="pill">Sources: 5</span>
+              <span class="pill">Retrieved today</span>
+              <span class="pill warn">1 Tavily search</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="signal-board">
+        <article class="signal-tile">
+          <div class="signal-band"></div>
+          <div class="signal-content">
+            <p class="eyebrow">Briefing</p>
+            <h2>Today&apos;s read</h2>
+            <p>Markets, macro, housing, watchlist, and world news collapsed into one short daily answer.</p>
+          </div>
+        </article>
+
+        <div class="split-row">
+          <article class="micro-card">
+            <p class="eyebrow">AZ</p>
+            <h3>Housing</h3>
+            <p class="muted">Prices, inventory, rates.</p>
+          </article>
+          <article class="micro-card">
+            <p class="eyebrow">MKT</p>
+            <h3>Risk</h3>
+            <p class="muted">S&amp;P, yields, credit.</p>
+          </article>
+        </div>
+
+        <article class="signal-tile">
+          <div class="signal-band"></div>
+          <div class="signal-content">
+            <p class="eyebrow">Watchlist</p>
+            <h2>AAPL and MSFT</h2>
+            <p>Click for a focused briefing based on current news, filings, and market context.</p>
+          </div>
+        </article>
+
+        <article class="signal-tile">
+          <div class="signal-band"></div>
+          <div class="signal-content">
+            <p class="eyebrow">Macro</p>
+            <h2>Rates and credit</h2>
+            <p>Fed signals, mortgage rates, inflation, labor, and credit stress in plain English.</p>
+          </div>
+        </article>
+      </aside>
+    </main>
+  </body>
+</html>
+
