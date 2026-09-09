@@ -183,7 +183,7 @@ Milestone doc: [milestone-9.5-agent-orchestration-cleanup.md](milestone-9.5-agen
 
 ### 9.6 Prompt And Answer Format Revamp
 
-Status: Planned
+Status: Complete
 
 - Update prompts so answers are:
   - natural-language first
@@ -194,6 +194,8 @@ Status: Planned
   - guarded against direct buy/sell/hold advice
 - Reduce repetitive disclaimers while preserving compliance.
 - Do not expose internal agent routing in the main answer.
+
+Milestone doc: [milestone-9.6-prompt-answer-format.md](milestone-9.6-prompt-answer-format.md)
 
 ### 9.7 Hidden Citations And Evidence Drawer
 

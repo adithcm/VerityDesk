@@ -187,6 +187,40 @@ def test_synthesis_keeps_user_answer_clean_and_guarded() -> None:
     assert "Evidence is limited." not in result
 
 
+def test_template_synthesis_uses_simple_trend_sections() -> None:
+    result = agents.synthesize_agent_results(
+        [
+            AgentResult(
+                agent_name="MarketAgent",
+                summary="Rates and market tone are mixed.",
+                confidence="medium",
+            )
+        ],
+        request=AgentQueryRequest(user_query="What changed in markets?"),
+        evidence_packet=EvidencePacket(
+            request_id="request-1",
+            query="What changed in markets?",
+            items=[
+                EvidencePacketItem(
+                    source_kind="live_web",
+                    source_id="tavily",
+                    title="Markets update",
+                    publisher="Example Source",
+                    published_at="2026-09-09",
+                    summary="Market trend signals are mixed as rates remain elevated.",
+                    source_quality="reputable",
+                    relevance_score=0.8,
+                )
+            ],
+        ),
+    )
+
+    assert "Bottom Line:" in result
+    assert "Major Trends:" in result
+    assert "Uncertainty/Data Gaps:" in result
+    assert "Sources:" not in result
+
+
 def test_format_synthesis_evidence_includes_user_query_and_citations() -> None:
     evidence = agents.format_synthesis_evidence(
         [
@@ -313,7 +347,8 @@ def test_synthesis_with_packet_avoids_raw_internal_trace() -> None:
     assert "Coordinator selected" not in result
     assert "Fused evidence source path" not in result
     assert "Source path:" not in result
-    assert "Sources:" in result
+    assert "Sources:" not in result
+    assert "Major Trends:" in result
 
 
 def test_citation_format_includes_source_dates_and_url() -> None:

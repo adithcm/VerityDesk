@@ -1368,7 +1368,9 @@ function buildBriefingCards(profile: PersonalizationProfile) {
       description: `Rates, affordability, inventory, and local housing signals for ${housingMarkets === "Not set" ? location : housingMarkets}.`,
       prompt: [
         `Give me a local housing pulse for ${housingMarkets === "Not set" ? location : housingMarkets}.`,
-        "Cover mortgage rates, affordability, inventory, prices, buyer/seller conditions, and local news.",
+        "Use a simple structure: Bottom Line, Major Trends, What Changed Recently, Why It Matters To Me, What To Watch Next, and Uncertainty/Data Gaps.",
+        "Cover trends in mortgage rates, affordability, inventory, prices, buyer/seller leverage, rent-vs-buy pressure, local demand, and local news.",
+        "For each major trend, say whether it looks strengthening, weakening, mixed, or unclear.",
         "Use live web research first, then verify with housing and macro APIs where useful.",
         promptContext,
       ].join("\n"),
@@ -1381,7 +1383,9 @@ function buildBriefingCards(profile: PersonalizationProfile) {
       prompt: [
         "Give me today's market setup.",
         `Focus on my priority topics (${marketFocus}) and sectors (${sectors}).`,
-        "Cover indexes, rates, sector tone, volatility, commodities, macro drivers, and risks.",
+        "Use a simple structure: Bottom Line, Major Trends, What Changed Recently, Why It Matters To Me, What To Watch Next, and Uncertainty/Data Gaps.",
+        "Cover trends in indexes, rates/yields, sector rotation, volatility, commodities, macro sentiment, liquidity, and risk appetite.",
+        "For each major trend, say whether it looks strengthening, weakening, mixed, or unclear.",
         "Do not give direct buy, sell, or hold recommendations.",
         promptContext,
       ].join("\n"),
@@ -1393,7 +1397,9 @@ function buildBriefingCards(profile: PersonalizationProfile) {
       description: `News, filings, earnings, analyst signals, and catalysts for ${watchlist === "Not set" ? "my watchlist" : watchlist}.`,
       prompt: [
         `What changed for ${watchlist === "Not set" ? "the companies and tickers I follow" : watchlist} recently?`,
-        "Cover company news, filings, earnings, analyst signals, product updates, and major catalysts.",
+        "Use a simple structure: Bottom Line, Major Trends, What Changed Recently, Why It Matters To Me, What To Watch Next, and Uncertainty/Data Gaps.",
+        "Cover trends in earnings expectations, guidance, filings, analyst revisions, product momentum, sentiment, sector pressure, and major catalysts.",
+        "For each major trend, say whether it looks strengthening, weakening, mixed, or unclear.",
         "Explain why each item matters and what to monitor next without direct trading instructions.",
         promptContext,
       ].join("\n"),
@@ -1405,7 +1411,9 @@ function buildBriefingCards(profile: PersonalizationProfile) {
       description: "Geopolitics, commodities, policy, regulation, and market spillovers.",
       prompt: [
         "Give me a world risk radar update.",
-        "Cover geopolitics, commodities, policy, regulation, inflation spillovers, and investor sentiment.",
+        "Use a simple structure: Bottom Line, Major Trends, What Changed Recently, Why It Matters To Me, What To Watch Next, and Uncertainty/Data Gaps.",
+        "Cover trends in geopolitics, energy/commodities, regulation/policy, trade/tariffs, inflation pressure, capital flows, and investor sentiment.",
+        "For each major trend, say whether it looks strengthening, weakening, mixed, or unclear.",
         `Prioritize what matters to my interests (${marketFocus}) and risk preference (${formatProfileChoice(profile.riskPreference)}).`,
         promptContext,
       ].join("\n"),
@@ -1421,6 +1429,9 @@ function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
   return [
     "Give me today's personalized briefing.",
     "Cover world news, market setup, rates and macro, local housing, watchlist companies, and major risks.",
+    "Use a simple structure: Bottom Line, Major Trends, What Changed Recently, Why It Matters To Me, What To Watch Next, and Uncertainty/Data Gaps.",
+    "Analyze cross-category trends in global risk, markets, rates/macro, housing, company/watchlist news, consumer/labor, credit, and commodities.",
+    "For each major trend, say whether it looks strengthening, weakening, mixed, or unclear.",
     "Prioritize what matters to my saved profile and keep the answer easy to scan.",
     "Use live web research first, then use direct APIs and stored data to verify or add context.",
     "Do not give direct buy, sell, or hold recommendations.",

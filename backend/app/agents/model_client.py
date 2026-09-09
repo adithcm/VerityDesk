@@ -119,9 +119,14 @@ def build_template_synthesis_summary(lines: list[str]) -> str:
     if not evidence_lines:
         return "I do not have enough current source-backed evidence to answer this with confidence yet."
 
-    opening = "Here is the clearest source-backed read from the available evidence."
     details = " ".join(evidence_lines[:3])
-    return f"{opening}\n\n{details}"
+    return (
+        "Bottom Line: Here is the clearest source-backed read from the available evidence.\n\n"
+        f"Major Trends: {details}\n\n"
+        "What Changed Recently: Recent evidence should be treated as directional unless multiple current sources confirm it.\n\n"
+        "Why It Matters: The main practical value is understanding what is moving, what is still uncertain, and what deserves attention next.\n\n"
+        "Uncertainty/Data Gaps: Confidence depends on the freshness, specificity, and agreement of the available sources."
+    )
 
 
 def clean_evidence_line(line: str) -> str:
@@ -136,7 +141,9 @@ def build_prompt(agent_name: str, instructions: str, evidence: str) -> str:
     return (
         f"You are {agent_name}, a careful research agent for a local market intelligence app.\n"
         "Use only the provided evidence. Do not invent facts. Do not give direct buy, sell, or hold instructions. "
-        "Keep the answer concise and include uncertainty when evidence is thin.\n\n"
+        "Keep the answer concise and include uncertainty when evidence is thin. For final synthesis, prefer these "
+        "sections when helpful: Bottom Line, Major Trends, What Changed Recently, Why It Matters, What To Watch Next, "
+        "and Uncertainty/Data Gaps. Do not dump citations into the main answer; citations are handled separately.\n\n"
         f"Agent instructions:\n{instructions}\n\n"
         f"Evidence:\n{evidence}"
     )

@@ -24,7 +24,6 @@ from app.schemas.agent import (
 )
 from app.schemas.evidence_packet import EvidencePacket
 from app.services.agent_runtime import AgentRegistry, AgentRunLogger, AgentRuntime, build_agent_context
-from app.services.citations import format_sources_section
 from app.services.evidence_fusion import build_evidence_packet
 from app.services.guardrails import (
     FINANCIAL_DISCLAIMER,
@@ -171,8 +170,6 @@ def synthesize_agent_results(
         sections.extend(["", "What To Watch:"])
         sections.extend(f"- {item}" for item in watch_items[:4])
 
-    sections.extend(["", format_sources_section(citations or [])])
-
     return "\n".join(sections)
 
 
@@ -189,11 +186,15 @@ def build_natural_language_answer(
     return build_default_summarizer().summarize(
         agent_name="SynthesisAgent",
         instructions=(
-            "Write a direct, natural-language answer to the user's question in 2-3 short paragraphs. "
-            "Start with the answer, not process details. Use the fused evidence packet first, then specialist "
-            "summaries as supporting interpretation. Do not mention internal agent names, coordinator routing, "
-            "source paths, retrieval statuses, or debug details in the user-facing answer. Mention uncertainty "
-            "plainly when evidence is thin or live web retrieval was skipped. "
+            "Write a direct, natural-language answer to the user's question. Start with the answer, not process "
+            "details. Use this structure when useful: Bottom Line, Major Trends, What Changed Recently, "
+            "Why It Matters, What To Watch Next, and Uncertainty/Data Gaps. Keep each section short and avoid "
+            "long lists. Explain the direction of major trends and whether they appear to be strengthening, "
+            "weakening, mixed, or unclear. Use the fused evidence packet first, then specialist summaries as "
+            "supporting interpretation. Do not mention internal agent names, coordinator routing, source paths, "
+            "retrieval statuses, or debug details in the user-facing answer. Do not include a long Sources section; "
+            "citations are returned separately for the UI details drawer. Mention uncertainty plainly when evidence "
+            "is thin or live web retrieval was skipped. "
             "Do not give direct buy, sell, or hold instructions, and do not present price targets as recommendations."
         ),
         evidence=evidence,
