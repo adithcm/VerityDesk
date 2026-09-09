@@ -209,7 +209,7 @@ Milestone doc: [milestone-9.7-hidden-citations-evidence-drawer.md](milestone-9.7
 
 ### 9.8 End-To-End Phase 9 Local Testing
 
-Status: Planned
+Status: Baseline Complete, User Review Pending
 
 - Run the app locally and test:
   - chatbot questions
@@ -220,6 +220,8 @@ Status: Planned
   - citation drawer
   - mobile/responsive layout
 - Tune UI and prompts based on real use.
+
+Milestone doc: [milestone-9.8-end-to-end-local-testing.md](milestone-9.8-end-to-end-local-testing.md)
 
 ## Definition Of Done
 

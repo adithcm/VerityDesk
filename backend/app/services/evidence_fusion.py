@@ -214,11 +214,50 @@ def filter_source_ids_for_kind(source_ids: list[str], source_kind: EvidencePacke
 
 def series_ids_for_context(context: AgentContext, plan: ResearchWorkflowPlan) -> list[str]:
     text = f"{context.user_query} {' '.join(plan.domains)} {' '.join(plan.regions)}".lower()
+    user_text = context.user_query.lower()
+    has_housing_terms = any(term in text for term in ("housing", "home", "mortgage", "real estate"))
+    has_stock_terms = any(
+        term in text
+        for term in (
+            "stocks",
+            "stock",
+            "equity",
+            "equities",
+            "s&p",
+            "sp500",
+            "nasdaq",
+            "dow",
+            "ticker",
+            "watchlist",
+            "earnings",
+            "shares",
+        )
+    ) or bool(plan.tickers or plan.companies)
+    has_user_stock_terms = any(
+        term in user_text
+        for term in (
+            "market",
+            "stocks",
+            "stock",
+            "equity",
+            "equities",
+            "s&p",
+            "sp500",
+            "nasdaq",
+            "dow",
+            "ticker",
+            "watchlist",
+            "earnings",
+            "shares",
+        )
+    ) or bool(plan.tickers or plan.companies)
     series_ids: list[str] = []
-    if any(term in text for term in ("housing", "home", "mortgage", "real estate")):
+    if has_housing_terms:
         series_ids.extend(["MORTGAGE30US", "FREDDIE_PMMS:*", "FHFA_HPI:*", "CENSUS_EITS:MHS:*", "CENSUS_EITS:RESSALES:*"])
     if any(term in text for term in ("market", "rate", "rates", "yield", "stocks", "s&p", "sp500")):
-        series_ids.extend(["FEDFUNDS", "MORTGAGE30US", "ALPHA_VANTAGE:QUOTE:*", "FINNHUB:QUOTE:*"])
+        series_ids.extend(["FEDFUNDS", "MORTGAGE30US"])
+        if has_stock_terms and has_user_stock_terms and not (has_housing_terms and not bool(plan.tickers or plan.companies)):
+            series_ids.extend(["ALPHA_VANTAGE:QUOTE:*", "FINNHUB:QUOTE:*"])
     if any(term in text for term in ("macro", "economy", "inflation", "jobs", "labor", "unemployment")):
         series_ids.extend(["FEDFUNDS", "UNRATE"])
     return dedupe_strings(series_ids)

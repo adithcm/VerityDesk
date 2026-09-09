@@ -1193,7 +1193,7 @@ function ConsoleAskView({
         {!agentResponse && !agentError && !reportsLoading && (
           <div className="mt-4">
             <p className="whitespace-pre-line text-sm leading-7 text-slate-300">
-              {latestReport?.summary ?? latestReport?.body ?? "Ask a question or click one of the briefing cards to start."}
+              {cleanAnswerText(latestReport?.summary ?? latestReport?.body) ?? "Ask a question or click one of the briefing cards to start."}
             </p>
             {latestReport && (
               <div className="mt-4 flex flex-wrap gap-2">
@@ -1606,7 +1606,7 @@ function DashboardView({
               <p className="text-sm font-semibold">{dailyReport.title}</p>
               <p className="mt-1 text-xs text-[#5b6573]">Retrieved At {formatDateTime(dailyReport.as_of ?? dailyReport.created_at)}</p>
               <p className="mt-3 line-clamp-5 text-sm leading-6 text-[#374151]">
-                {dailyReport.summary ?? dailyReport.body}
+                {cleanAnswerText(dailyReport.summary ?? dailyReport.body)}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <StatusBadge status={dailyReport.confidence} />
@@ -1826,7 +1826,7 @@ function CompactReportPreview({ report }: { report: ReportResponse }) {
         <p className="text-sm font-semibold">{report.title}</p>
         <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(report.as_of)}</p>
         <p className="mt-3 max-h-72 overflow-auto whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
-          {report.body}
+          {cleanAnswerText(report.body)}
         </p>
       </div>
       <ReportEvidenceDrawer report={report} />
@@ -2077,7 +2077,7 @@ function ReportsView({
                   <span className="text-xs text-[#5b6573]">{formatDateTime(report.as_of ?? report.created_at)}</span>
                 </div>
                 <p className="mt-2 text-sm font-semibold">{report.title}</p>
-                <p className="mt-2 line-clamp-2 text-sm text-[#5b6573]">{report.summary ?? report.body}</p>
+                <p className="mt-2 line-clamp-2 text-sm text-[#5b6573]">{cleanAnswerText(report.summary ?? report.body)}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <StatusBadge status={report.confidence} />
                   <span className="rounded-md border border-[#e5eaf0] px-2 py-1 text-xs font-semibold text-[#5b6573]">
@@ -2124,7 +2124,7 @@ function ReportDetailPanel({
         <div>
           <p className="text-sm font-semibold uppercase text-[#25636b]">{formatReportType(report.report_type)}</p>
           <h3 className="mt-1 text-xl font-semibold">{report.title}</h3>
-          <p className="mt-2 text-sm text-[#5b6573]">{report.summary}</p>
+          <p className="mt-2 text-sm text-[#5b6573]">{cleanAnswerText(report.summary)}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -2198,12 +2198,12 @@ function ReportReadingPanel({ report, variant }: { report: ReportResponse; varia
       {variant === "briefing" && (
         <div>
           <p className="text-sm font-semibold">{report.title}</p>
-          {report.summary && <p className="mt-2 text-sm leading-6 text-[#5b6573]">{report.summary}</p>}
+          {report.summary && <p className="mt-2 text-sm leading-6 text-[#5b6573]">{cleanAnswerText(report.summary)}</p>}
         </div>
       )}
 
       <article className="whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-4 text-sm leading-7 text-[#374151]">
-        {report.body}
+        {cleanAnswerText(report.body)}
       </article>
 
       <p className="rounded-md border border-[#e5eaf0] bg-white p-3 text-xs leading-5 text-[#5b6573]">
@@ -3742,6 +3742,20 @@ function formatDateTime(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+function cleanAnswerText(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const cleaned = value
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("Coordinator selected:"))
+    .join("\n")
+    .trim();
+
+  return cleaned || null;
+}
+
 function latestCitationTimestamp(citations: AgentResponse["citations"]) {
   const timestamps = citations
     .map((citation) => citation.retrieved_at ?? citation.published_at)
@@ -3946,10 +3960,15 @@ function inferAgentContext(query: string, profile: PersonalizationProfile): Infe
   const normalizedQuery = query.toLowerCase();
   const queryTickers = inferTickers(query);
   const profileTickers = splitList(profile.watchlist).map((ticker) => ticker.toUpperCase());
-  const tickers = queryTickers.length > 0 ? queryTickers : profileTickers;
   const companies = inferCompanies(query, profile);
   const location = inferLocation(query, profile);
   const intent = inferIntent(normalizedQuery, queryTickers, companies);
+  const tickers =
+    queryTickers.length > 0 || shouldUseProfileTickers(normalizedQuery, intent)
+      ? queryTickers.length > 0
+        ? queryTickers
+        : profileTickers
+      : [];
   const domain = inferDomain(intent, normalizedQuery);
   const timeWindow = inferTimeWindow(normalizedQuery);
   const explanation = buildInferenceExplanation(intent, domain, tickers, companies, location, timeWindow);
@@ -3963,6 +3982,18 @@ function inferAgentContext(query: string, profile: PersonalizationProfile): Infe
     timeWindow,
     explanation,
   };
+}
+
+function shouldUseProfileTickers(normalizedQuery: string, intent: AgentIntent) {
+  if (intent === "daily_briefing") {
+    return true;
+  }
+
+  if (containsAny(normalizedQuery, ["watchlist", "portfolio", "my stocks", "tickers i follow", "companies i follow"])) {
+    return true;
+  }
+
+  return intent === "company_research" && containsAny(normalizedQuery, ["stock", "stocks", "shares", "earnings", "company"]);
 }
 
 function inferIntent(normalizedQuery: string, tickers: string[], companies: string[]): AgentIntent {

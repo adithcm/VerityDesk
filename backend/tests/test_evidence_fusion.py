@@ -35,7 +35,21 @@ def seed_packet_evidence(session):
         domains=["Housing and Real Estate"],
         access_method="download",
     )
-    session.add_all([bbc, fhfa])
+    fred = Source(
+        name="FRED API",
+        base_url="https://api.stlouisfed.org/fred",
+        source_type="official_api",
+        domains=["Markets and Rates"],
+        access_method="api",
+    )
+    finnhub = Source(
+        name="Finnhub",
+        base_url="https://finnhub.io",
+        source_type="official_api",
+        domains=["Markets and Rates"],
+        access_method="api",
+    )
+    session.add_all([bbc, fhfa, fred, finnhub])
     session.flush()
     session.add_all(
         [
@@ -63,6 +77,28 @@ def seed_packet_evidence(session):
                 released_at=now - timedelta(days=20),
                 retrieved_at=now - timedelta(days=1),
                 region="Arizona",
+            ),
+            EconomicObservation(
+                source=fred,
+                series_id="MORTGAGE30US",
+                series_name="30-Year Fixed Rate Mortgage Average in the United States",
+                value=6.7,
+                unit="percent",
+                period=now.date().isoformat(),
+                released_at=now,
+                retrieved_at=now,
+                region=None,
+            ),
+            EconomicObservation(
+                source=finnhub,
+                series_id="FINNHUB:QUOTE:TSLA:PRICE",
+                series_name="Finnhub Quote - TSLA Price",
+                value=250.1,
+                unit="USD",
+                period="2026-09-08",
+                released_at=now - timedelta(days=1),
+                retrieved_at=now - timedelta(hours=20),
+                region=None,
             ),
             Report(
                 report_type="housing_macro",
@@ -191,3 +227,25 @@ def test_evidence_packet_uses_one_shared_live_web_search(monkeypatch) -> None:
     assert len(calls) == 1
     assert packet.retrieval_statuses[0].channel == "live_web"
     assert any(item.source_kind == "live_web" for item in packet.items)
+
+
+def test_housing_rate_packet_excludes_unrelated_stock_quote_api_items(monkeypatch) -> None:
+    def fake_run_live_web_search(request):
+        return fake_live_web_response(request.query)
+
+    monkeypatch.setattr(evidence_fusion, "run_live_web_search", fake_run_live_web_search)
+
+    with build_session() as session:
+        seed_packet_evidence(session)
+        context = AgentContext(
+            request_id="request-4",
+            user_query="What is happening with mortgage rates today?",
+            intent="housing_macro_research",
+        )
+        plan = build_research_workflow_plan(context, ["HousingAgent", "MacroAgent"])
+
+        packet = build_evidence_packet(context=context, plan=plan, session=session)
+
+    series_ids = [item.metadata.get("series_id") for item in packet.items]
+    assert "MORTGAGE30US" in series_ids
+    assert not any(str(series_id).startswith("FINNHUB:QUOTE:") for series_id in series_ids)
