@@ -18,6 +18,7 @@ from app.services.official_api_ingestion import (
 from app.services.personalization import read_user_preferences
 from app.services.reports import generate_daily_briefing, generate_housing_report, generate_macro_report, generate_market_strategy
 from app.services.rss_ingestion import RSSFeedConfig, get_configured_rss_feeds, ingest_rss_feed
+from app.services.watchlist import evaluate_watch_items
 
 
 @dataclass(frozen=True)
@@ -249,7 +250,11 @@ def run_due_daily_workflow_without_lock(session: Session, now: datetime | None =
     if settings.daily_report_enabled:
         report_ids = generate_daily_topic_reports(session, current_time)
         report_id = report_ids[0] if report_ids else None
-        message = f"{message} Generated {len(report_ids)} daily topic panel reports."
+        watch_result = evaluate_watch_items(session)
+        message = (
+            f"{message} Generated {len(report_ids)} daily topic panel reports. "
+            f"Checked {watch_result.checked} watch items, triggered {watch_result.triggered} alerts."
+        )
 
     completed_at = datetime.now(UTC)
     settings = get_or_create_user_settings(session)

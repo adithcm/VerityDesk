@@ -259,6 +259,46 @@ type ProactiveSuggestion = {
   guardrail_note: string;
 };
 
+type WatchAlertResponse = {
+  id: number;
+  watch_item_id: number;
+  report_id: number | null;
+  title: string;
+  message: string;
+  status: string;
+  triggered_at: string;
+  acknowledged_at: string | null;
+  metadata: Record<string, unknown>;
+};
+
+type WatchItemResponse = {
+  id: number;
+  title: string;
+  category: string;
+  query: string;
+  status: string;
+  priority: string;
+  enabled: boolean;
+  last_checked_at: string | null;
+  last_matched_at: string | null;
+  last_summary: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  alerts: WatchAlertResponse[];
+};
+
+type WatchItemListResponse = {
+  items: WatchItemResponse[];
+  total: number;
+};
+
+type WatchEvaluationResponse = {
+  checked: number;
+  triggered: number;
+  alerts: WatchAlertResponse[];
+};
+
 type ProactiveSuggestionsResponse = {
   suggestions: ProactiveSuggestion[];
   total: number;
@@ -327,12 +367,6 @@ const macroInterestOptions = [
   "Fed policy",
 ];
 
-const watchlistRows = [
-  { symbol: "SPY", focus: "Broad market risk", state: "Monitor" },
-  { symbol: "QQQ", focus: "Growth and AI exposure", state: "Monitor" },
-  { symbol: "TLT", focus: "Rates sensitivity", state: "Monitor" },
-];
-
 const shellNavigation: ShellNavItem[] = [
   { label: "Ask", title: "Ask VerityDesk", view: "Dashboard" },
   { label: "Day", title: "Daily Briefing", view: "Daily Briefing" },
@@ -393,6 +427,13 @@ export default function Home() {
   const [suggestionsData, setSuggestionsData] = useState<ProactiveSuggestionsResponse | null>(null);
   const [suggestionsLoading, setSuggestionsLoading] = useState(true);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [watchItemsData, setWatchItemsData] = useState<WatchItemListResponse | null>(null);
+  const [watchItemsLoading, setWatchItemsLoading] = useState(true);
+  const [watchItemsError, setWatchItemsError] = useState<string | null>(null);
+  const [watchEvaluationLoading, setWatchEvaluationLoading] = useState(false);
+  const [newWatchTitle, setNewWatchTitle] = useState("");
+  const [newWatchQuery, setNewWatchQuery] = useState("");
+  const [newWatchCategory, setNewWatchCategory] = useState("custom");
   const [personalizationProfile, setPersonalizationProfile] = useState<PersonalizationProfile>(defaultPersonalizationProfile());
   const [profileSavedAt, setProfileSavedAt] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -447,6 +488,7 @@ export default function Home() {
     loadAgentRuns();
     loadReports();
     loadSuggestions();
+    loadWatchItems();
   }, []);
 
   useEffect(() => {
@@ -533,6 +575,85 @@ export default function Home() {
       setSuggestionsData(null);
     } finally {
       setSuggestionsLoading(false);
+    }
+  }
+
+  async function loadWatchItems() {
+    setWatchItemsLoading(true);
+    setWatchItemsError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/watchlist/items`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Watch item request failed with status ${response.status}`);
+      }
+      setWatchItemsData((await response.json()) as WatchItemListResponse);
+    } catch (error) {
+      setWatchItemsError(error instanceof Error ? error.message : "Could not load watch items");
+      setWatchItemsData(null);
+    } finally {
+      setWatchItemsLoading(false);
+    }
+  }
+
+  async function createWatchItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!newWatchTitle.trim() || !newWatchQuery.trim()) {
+      return;
+    }
+
+    setWatchItemsError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/watchlist/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newWatchTitle.trim(),
+          query: newWatchQuery.trim(),
+          category: newWatchCategory,
+          priority: "normal",
+          enabled: true,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Watch item create failed with status ${response.status}`);
+      }
+      setNewWatchTitle("");
+      setNewWatchQuery("");
+      setNewWatchCategory("custom");
+      await loadWatchItems();
+    } catch (error) {
+      setWatchItemsError(error instanceof Error ? error.message : "Could not create watch item");
+    }
+  }
+
+  async function deleteWatchItem(watchItemId: number) {
+    setWatchItemsError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/watchlist/items/${watchItemId}`, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error(`Watch item delete failed with status ${response.status}`);
+      }
+      await loadWatchItems();
+    } catch (error) {
+      setWatchItemsError(error instanceof Error ? error.message : "Could not delete watch item");
+    }
+  }
+
+  async function evaluateWatchItems() {
+    setWatchEvaluationLoading(true);
+    setWatchItemsError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/watchlist/evaluate`, { method: "POST" });
+      if (!response.ok) {
+        throw new Error(`Watch item check failed with status ${response.status}`);
+      }
+      (await response.json()) as WatchEvaluationResponse;
+      await loadWatchItems();
+    } catch (error) {
+      setWatchItemsError(error instanceof Error ? error.message : "Could not check watch items");
+    } finally {
+      setWatchEvaluationLoading(false);
     }
   }
 
@@ -1004,13 +1125,26 @@ export default function Home() {
             )}
             {activeView === "Watchlist" && (
               <WatchlistView
+                watchItemsData={watchItemsData}
+                watchItemsLoading={watchItemsLoading}
+                watchItemsError={watchItemsError}
+                watchEvaluationLoading={watchEvaluationLoading}
+                newWatchTitle={newWatchTitle}
+                newWatchQuery={newWatchQuery}
+                newWatchCategory={newWatchCategory}
                 companyTicker={companyTicker}
                 companyName={companyName}
                 companyReport={companyReport}
                 companyReportLoading={companyReportLoading}
                 companyReportError={companyReportError}
+                setNewWatchTitle={setNewWatchTitle}
+                setNewWatchQuery={setNewWatchQuery}
+                setNewWatchCategory={setNewWatchCategory}
                 setCompanyTicker={setCompanyTicker}
                 setCompanyName={setCompanyName}
+                createWatchItem={createWatchItem}
+                deleteWatchItem={deleteWatchItem}
+                evaluateWatchItems={evaluateWatchItems}
                 generateCompanyReport={generateCompanyReport}
               />
             )}
@@ -1826,6 +1960,14 @@ function cardPromptContext(profile: PersonalizationProfile) {
 
 function formatProfileChoice(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function titleCase(value: string) {
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 }
 
 function DashboardView({
@@ -2745,54 +2887,187 @@ function SourcesView({
 }
 
 function WatchlistView({
+  watchItemsData,
+  watchItemsLoading,
+  watchItemsError,
+  watchEvaluationLoading,
+  newWatchTitle,
+  newWatchQuery,
+  newWatchCategory,
   companyTicker,
   companyName,
   companyReport,
   companyReportLoading,
   companyReportError,
+  setNewWatchTitle,
+  setNewWatchQuery,
+  setNewWatchCategory,
   setCompanyTicker,
   setCompanyName,
+  createWatchItem,
+  deleteWatchItem,
+  evaluateWatchItems,
   generateCompanyReport,
 }: {
+  watchItemsData: WatchItemListResponse | null;
+  watchItemsLoading: boolean;
+  watchItemsError: string | null;
+  watchEvaluationLoading: boolean;
+  newWatchTitle: string;
+  newWatchQuery: string;
+  newWatchCategory: string;
   companyTicker: string;
   companyName: string;
   companyReport: ReportResponse | null;
   companyReportLoading: boolean;
   companyReportError: string | null;
+  setNewWatchTitle: (value: string) => void;
+  setNewWatchQuery: (value: string) => void;
+  setNewWatchCategory: (value: string) => void;
   setCompanyTicker: (value: string) => void;
   setCompanyName: (value: string) => void;
+  createWatchItem: (event: FormEvent<HTMLFormElement>) => void;
+  deleteWatchItem: (watchItemId: number) => void;
+  evaluateWatchItems: () => void;
   generateCompanyReport: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-        <h3 className="text-lg font-semibold">Watchlist</h3>
-        <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-1">
-          {watchlistRows.map((row) => (
-            <div key={row.symbol} className="rounded-md border border-[#e5eaf0] p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-lg font-semibold">{row.symbol}</p>
-                <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-medium text-[#25636b]">
-                  {row.state}
-                </span>
+    <div className="grid gap-4">
+      <section className="rounded-xl border border-cyan-300/20 bg-[#020617] p-4 text-slate-100">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Watch Items</p>
+            <h3 className="mt-1 text-xl font-bold text-white">Things VerityDesk should keep an eye on</h3>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+              Save plain-English signals. Daily refresh checks them against saved reports and flags anything that looks meaningful.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={evaluateWatchItems}
+            disabled={watchEvaluationLoading}
+            className="min-h-10 rounded-lg border border-lime-300/40 px-4 text-sm font-black text-lime-300 transition hover:border-lime-300 disabled:cursor-not-allowed disabled:text-slate-500"
+          >
+            {watchEvaluationLoading ? "Checking" : "Check Watch Items"}
+          </button>
+        </div>
+
+        <form onSubmit={createWatchItem} className="mt-5 grid gap-3 rounded-xl border border-[#1d3558] bg-[#07111f] p-4 lg:grid-cols-[0.8fr_1.3fr_0.6fr_auto]">
+          <label className="block text-sm font-bold text-slate-300" htmlFor="watch-title">
+            Name
+            <input
+              id="watch-title"
+              value={newWatchTitle}
+              onChange={(event) => setNewWatchTitle(event.target.value)}
+              placeholder="Mortgage rates below 6.5"
+              className="mt-2 h-10 w-full rounded-lg border border-[#1d3558] bg-[#020617] px-3 text-sm text-white outline-none focus:border-cyan-300"
+            />
+          </label>
+          <label className="block text-sm font-bold text-slate-300" htmlFor="watch-query">
+            What To Watch
+            <input
+              id="watch-query"
+              value={newWatchQuery}
+              onChange={(event) => setNewWatchQuery(event.target.value)}
+              placeholder="Tell me when Arizona affordability or mortgage rates meaningfully change"
+              className="mt-2 h-10 w-full rounded-lg border border-[#1d3558] bg-[#020617] px-3 text-sm text-white outline-none focus:border-cyan-300"
+            />
+          </label>
+          <label className="block text-sm font-bold text-slate-300" htmlFor="watch-category">
+            Category
+            <select
+              id="watch-category"
+              value={newWatchCategory}
+              onChange={(event) => setNewWatchCategory(event.target.value)}
+              className="mt-2 h-10 w-full rounded-lg border border-[#1d3558] bg-[#020617] px-3 text-sm text-white outline-none focus:border-cyan-300"
+            >
+              {["custom", "market", "company", "housing", "macro", "world"].map((category) => (
+                <option key={category} value={category}>
+                  {titleCase(category)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="submit"
+            disabled={!newWatchTitle.trim() || !newWatchQuery.trim()}
+            className="min-h-10 self-end rounded-lg bg-cyan-300 px-4 text-sm font-black text-[#04111f] disabled:cursor-not-allowed disabled:bg-slate-500"
+          >
+            Add
+          </button>
+        </form>
+
+        {watchItemsError && <p className="mt-4 rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-100">{watchItemsError}</p>}
+
+        <div className="mt-5 grid gap-3">
+          {watchItemsLoading && <div className="rounded-xl border border-[#1d3558] bg-[#07111f] p-4 text-sm text-slate-400">Loading watch items.</div>}
+          {!watchItemsLoading && (watchItemsData?.items ?? []).length === 0 && (
+            <div className="rounded-xl border border-dashed border-[#1d3558] bg-[#07111f] p-5 text-sm leading-6 text-slate-400">
+              No watch items yet. Add one like "Phoenix inventory rising" or "Fed cut odds changing" and VerityDesk will check it during daily refresh.
+            </div>
+          )}
+          {(watchItemsData?.items ?? []).map((item) => (
+            <div key={item.id} className="rounded-xl border border-[#1d3558] bg-[#07111f] p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-lg font-bold text-white">{item.title}</p>
+                    <NeonChip variant={item.status === "alert" ? "live" : item.status === "quiet" ? undefined : "search"}>
+                      {titleCase(item.status)}
+                    </NeonChip>
+                    <NeonChip>{titleCase(item.category)}</NeonChip>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">{item.query}</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-300">
+                    {item.last_summary ?? "Waiting for the first check against saved daily reports."}
+                  </p>
+                  <p className="mt-2 font-mono text-xs font-bold uppercase text-slate-500">
+                    Last checked {formatDateTime(item.last_checked_at)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => deleteWatchItem(item.id)}
+                  className="min-h-9 rounded-lg border border-[#1d3558] px-3 text-xs font-black text-slate-400 transition hover:border-red-300/50 hover:text-red-200"
+                >
+                  Remove
+                </button>
               </div>
-              <p className="mt-3 text-sm text-[#5b6573]">{row.focus}</p>
+              {item.alerts.length > 0 && (
+                <details className="mt-3 rounded-lg border border-cyan-300/20 bg-[#020617] p-3">
+                  <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">
+                    Alerts ({item.alerts.length})
+                  </summary>
+                  <div className="mt-3 grid gap-2">
+                    {item.alerts.slice(0, 3).map((alert) => (
+                      <div key={alert.id} className="rounded-lg border border-[#1d3558] p-3 text-sm text-slate-300">
+                        <p className="font-bold text-white">{alert.title}</p>
+                        <p className="mt-1 leading-5">{alert.message}</p>
+                        <p className="mt-2 font-mono text-xs font-bold uppercase text-slate-500">
+                          {formatDateTime(alert.triggered_at)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
           ))}
         </div>
       </section>
 
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+      <section className="rounded-xl border border-cyan-300/20 bg-[#020617] p-4 text-slate-100">
         <form onSubmit={generateCompanyReport}>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <h3 className="text-lg font-semibold">Company Research</h3>
-              <p className="mt-1 text-sm text-[#5b6573]">Generate a saved company report from filings, news, and market context.</p>
+              <p className="font-mono text-xs font-black uppercase text-cyan-300">Company Deep Dive</p>
+              <h3 className="mt-1 text-xl font-bold text-white">Generate a saved company report</h3>
+              <p className="mt-2 text-sm text-slate-400">Use filings, news, market context, and live research for a company-specific read.</p>
             </div>
             <button
               type="submit"
               disabled={companyReportLoading || (!companyTicker.trim() && !companyName.trim())}
-              className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
+              className="min-h-10 rounded-lg bg-lime-300 px-4 py-2 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-500"
             >
               {companyReportLoading ? "Generating" : "Generate Company Report"}
             </button>
@@ -2804,7 +3079,7 @@ function WatchlistView({
                 id="company-ticker"
                 value={companyTicker}
                 onChange={(event) => setCompanyTicker(event.target.value.toUpperCase())}
-                className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+                className="mt-2 h-10 w-full rounded-lg border border-[#1d3558] bg-[#07111f] px-3 text-sm text-white outline-none focus:border-cyan-300"
               />
             </label>
             <label className="block text-sm font-medium" htmlFor="company-name">
@@ -2813,7 +3088,7 @@ function WatchlistView({
                 id="company-name"
                 value={companyName}
                 onChange={(event) => setCompanyName(event.target.value)}
-                className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+                className="mt-2 h-10 w-full rounded-lg border border-[#1d3558] bg-[#07111f] px-3 text-sm text-white outline-none focus:border-cyan-300"
               />
             </label>
           </div>
@@ -2823,7 +3098,7 @@ function WatchlistView({
           <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{companyReportError}</p>
         )}
         {!companyReport && !companyReportError && (
-          <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+          <div className="mt-4 rounded-xl border border-dashed border-[#1d3558] bg-[#07111f] p-6 text-sm text-slate-400">
             No company report generated in this session yet.
           </div>
         )}

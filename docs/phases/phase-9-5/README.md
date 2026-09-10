@@ -190,12 +190,14 @@ Milestone doc: [milestones/9.5.5-change-tracking-and-signal-labels.md](milestone
 
 ### 9.5.6 Watch Items And Alerts Foundation
 
-Status: Planned
+Status: Complete
 
 - Let users save things to watch.
 - Track watch item status daily.
 - Add alert thresholds and meaningful-change rules.
 - Keep notifications local-first for now.
+
+Milestone doc: [milestones/9.5.6-watch-items-and-alerts-foundation.md](milestones/9.5.6-watch-items-and-alerts-foundation.md)
 
 ### 9.5.7 Final Simplification And Local Testing
 
