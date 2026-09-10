@@ -266,6 +266,7 @@ type ProactiveSuggestionsResponse = {
 };
 
 type PersonalizationProfile = {
+  profileName: string;
   personalNote: string;
   location: string;
   housingMarkets: string;
@@ -294,6 +295,7 @@ type InferredAgentContext = {
 };
 
 const PERSONALIZATION_STORAGE_KEY = "investoragent.personalization.v1";
+const SETUP_COMPLETE_STORAGE_KEY = "investoragent.setupComplete.v1";
 
 const topicOptions = [
   "World news",
@@ -393,6 +395,7 @@ export default function Home() {
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const [personalizationProfile, setPersonalizationProfile] = useState<PersonalizationProfile>(defaultPersonalizationProfile());
   const [profileSavedAt, setProfileSavedAt] = useState<string | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -449,6 +452,7 @@ export default function Home() {
   useEffect(() => {
     const savedProfile = loadPersonalizationProfile();
     setPersonalizationProfile(savedProfile);
+    setSetupOpen(!isSetupComplete(savedProfile));
     setAgentTicker(savedProfile.watchlist);
     if (savedProfile.companies.trim()) {
       setCompanyName(firstListItem(savedProfile.companies));
@@ -461,6 +465,7 @@ export default function Home() {
   function savePersonalizationProfile(nextProfile: PersonalizationProfile) {
     setPersonalizationProfile(nextProfile);
     localStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(nextProfile));
+    localStorage.setItem(SETUP_COMPLETE_STORAGE_KEY, "true");
     setProfileSavedAt(new Date().toISOString());
     if (nextProfile.watchlist.trim()) {
       setAgentTicker(nextProfile.watchlist);
@@ -862,6 +867,22 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#020617] text-[#f8fafc]">
       <div className="fixed inset-0 -z-10 bg-[linear-gradient(rgba(34,211,238,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.035)_1px,transparent_1px),radial-gradient(circle_at_76%_10%,rgba(244,114,182,0.16),transparent_28rem),radial-gradient(circle_at_8%_68%,rgba(163,230,53,0.11),transparent_30rem),#020617] bg-[length:38px_38px,38px_38px,auto,auto,auto]" />
+      {setupOpen && (
+        <SetupProfileFlow
+          profile={personalizationProfile}
+          sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
+          scheduleData={scheduleData}
+          onSave={(nextProfile) => {
+            savePersonalizationProfile(nextProfile);
+            setSetupOpen(false);
+            setActiveView("Dashboard");
+          }}
+          onSkip={() => {
+            localStorage.setItem(SETUP_COMPLETE_STORAGE_KEY, "true");
+            setSetupOpen(false);
+          }}
+        />
+      )}
 
       <header className="flex min-h-[70px] items-center justify-between gap-4 border-b border-cyan-300/20 px-5 md:px-7">
         <div className="flex items-center gap-3">
@@ -1033,6 +1054,7 @@ export default function Home() {
                 triggerIngestionRun={triggerIngestionRun}
                 saveSchedule={saveSchedule}
                 savePersonalizationProfile={savePersonalizationProfile}
+                openSetup={() => setSetupOpen(true)}
               />
             )}
           </div>
@@ -1344,6 +1366,207 @@ function SourceStripRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function SetupProfileFlow({
+  profile,
+  sourceStatusText,
+  scheduleData,
+  onSave,
+  onSkip,
+}: {
+  profile: PersonalizationProfile;
+  sourceStatusText: string;
+  scheduleData: DailyScheduleConfig | null;
+  onSave: (profile: PersonalizationProfile) => void;
+  onSkip: () => void;
+}) {
+  const [draft, setDraft] = useState<PersonalizationProfile>(profile);
+
+  useEffect(() => {
+    setDraft(profile);
+  }, [profile]);
+
+  function updateDraft(patch: Partial<PersonalizationProfile>) {
+    setDraft((current) => ({ ...current, ...patch }));
+  }
+
+  function toggleDraftOption(field: "priorityTopics" | "housingInterests" | "macroInterests", value: string) {
+    setDraft((current) => {
+      const currentValues = current[field];
+      const nextValues = currentValues.includes(value)
+        ? currentValues.filter((item) => item !== value)
+        : [...currentValues, value];
+      return { ...current, [field]: nextValues };
+    });
+  }
+
+  function submitSetup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSave(normalizePersonalizationProfile(draft));
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#020617]/92 px-4 py-6 backdrop-blur-md">
+      <form
+        onSubmit={submitSetup}
+        className="mx-auto grid max-w-5xl gap-5 rounded-2xl border border-cyan-300/25 bg-[#07111f] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.55)] md:p-7"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="font-mono text-sm font-black uppercase text-lime-300">VerityDesk setup</p>
+            <h1 className="mt-3 max-w-3xl text-4xl font-black leading-none text-white md:text-5xl">
+              Tell it once. Let it brief you daily.
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">
+              Create a local profile so VerityDesk can personalize daily panels, chatbot answers, sources, and watch items without asking for the same context every time.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onSkip}
+            className="min-h-10 rounded-lg border border-[#1d3558] px-4 text-sm font-black text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-200"
+          >
+            Skip For Now
+          </button>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
+          <section className="rounded-xl border border-cyan-300/20 bg-[#020617]/70 p-4">
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Profile</p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <SettingsTextInput
+                id="setup-profile-name"
+                label="Profile name"
+                value={draft.profileName}
+                placeholder="Adith's briefing"
+                onChange={(value) => updateDraft({ profileName: value })}
+              />
+              <SettingsTextInput
+                id="setup-location"
+                label="Primary location"
+                value={draft.location}
+                placeholder="Phoenix, AZ"
+                onChange={(value) => updateDraft({ location: value })}
+              />
+              <SettingsTextInput
+                id="setup-housing"
+                label="Housing markets"
+                value={draft.housingMarkets}
+                placeholder="Phoenix, Scottsdale, Tucson"
+                onChange={(value) => updateDraft({ housingMarkets: value })}
+              />
+              <SettingsTextInput
+                id="setup-watchlist"
+                label="Watchlist"
+                value={draft.watchlist}
+                placeholder="SPY, QQQ, TLT"
+                onChange={(value) => updateDraft({ watchlist: value.toUpperCase() })}
+              />
+              <SettingsTextInput
+                id="setup-companies"
+                label="Companies"
+                value={draft.companies}
+                placeholder="Apple, Nvidia, Tesla"
+                onChange={(value) => updateDraft({ companies: value })}
+              />
+              <SettingsTextInput
+                id="setup-sectors"
+                label="Sectors"
+                value={draft.sectors}
+                placeholder="AI, homebuilders, banks"
+                onChange={(value) => updateDraft({ sectors: value })}
+              />
+            </div>
+            <label className="mt-4 block text-sm font-bold text-slate-200" htmlFor="setup-note">
+              What should VerityDesk know?
+              <textarea
+                id="setup-note"
+                value={draft.personalNote}
+                onChange={(event) => updateDraft({ personalNote: event.target.value })}
+                placeholder="Example: Keep answers practical. I care about Arizona housing, mortgage rates, broad market risk, and long-term tech."
+                className="mt-2 min-h-28 w-full resize-y rounded-xl border border-[#1d3558] bg-[#020617] px-4 py-3 text-sm leading-6 text-slate-300 outline-none focus:border-cyan-300"
+              />
+            </label>
+          </section>
+
+          <section className="grid gap-4">
+            <div className="rounded-xl border border-lime-300/25 bg-[linear-gradient(135deg,rgba(163,230,53,0.12),transparent_42%),#020617] p-4">
+              <p className="font-mono text-xs font-black uppercase text-lime-300">Local access</p>
+              <h2 className="mt-2 text-xl font-bold text-white">Saved on this Mac</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                This setup creates a local profile for personalization. A simple local passcode or full account login can be added when cloud sync becomes necessary.
+              </p>
+            </div>
+            <div className="rounded-xl border border-cyan-300/20 bg-[#020617]/70 p-4">
+              <p className="font-mono text-xs font-black uppercase text-cyan-300">System check</p>
+              <div className="mt-4 grid gap-2">
+                <SourceStripRow label="Sources" value={sourceStatusText} />
+                <SourceStripRow label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
+                <SourceStripRow label="Briefing time" value={formatScheduleTime(scheduleData)} />
+              </div>
+            </div>
+            <div className="rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
+              <p className="font-mono text-xs font-black uppercase text-slate-500">Output style</p>
+              <div className="mt-3 grid gap-3">
+                <SettingsSelect
+                  id="setup-briefing-style"
+                  label="Briefing detail"
+                  value={draft.briefingStyle}
+                  onChange={(value) => updateDraft({ briefingStyle: value as PersonalizationProfile["briefingStyle"] })}
+                  options={[
+                    ["quick", "Quick"],
+                    ["balanced", "Balanced"],
+                    ["detailed", "Detailed"],
+                  ]}
+                />
+                <SettingsTextInput
+                  id="setup-briefing-time"
+                  label="Preferred briefing time"
+                  type="time"
+                  value={draft.briefingTime}
+                  onChange={(value) => updateDraft({ briefingTime: value })}
+                />
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section className="grid gap-4 lg:grid-cols-3">
+          <CheckboxGroup
+            title="Topics"
+            options={topicOptions}
+            values={draft.priorityTopics}
+            onToggle={(value) => toggleDraftOption("priorityTopics", value)}
+          />
+          <CheckboxGroup
+            title="Housing"
+            options={housingInterestOptions}
+            values={draft.housingInterests}
+            onToggle={(value) => toggleDraftOption("housingInterests", value)}
+          />
+          <CheckboxGroup
+            title="Macro"
+            options={macroInterestOptions}
+            values={draft.macroInterests}
+            onToggle={(value) => toggleDraftOption("macroInterests", value)}
+          />
+        </section>
+
+        <div className="flex flex-col gap-3 border-t border-[#1d3558] pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm leading-6 text-slate-400">
+            You can change all of this later in Settings.
+          </p>
+          <button
+            type="submit"
+            className="min-h-11 rounded-lg bg-lime-300 px-5 text-sm font-black text-[#102000]"
+          >
+            Save And Start
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function buildBriefingCards(profile: PersonalizationProfile) {
   const location = profile.location || "my saved area";
   const housingMarkets = compactListLabel(splitList(profile.housingMarkets));
@@ -1431,6 +1654,7 @@ function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
 
 function cardPromptContext(profile: PersonalizationProfile) {
   const sections = [
+    profile.profileName ? `Profile: ${profile.profileName}` : null,
     profile.personalNote ? `Personal note: ${profile.personalNote}` : null,
     profile.location ? `Primary location: ${profile.location}` : null,
     profile.housingMarkets ? `Housing markets to track: ${profile.housingMarkets}` : null,
@@ -2946,6 +3170,7 @@ function SettingsView({
   triggerIngestionRun,
   saveSchedule,
   savePersonalizationProfile,
+  openSetup,
 }: {
   sourceData: SourceCatalogResponse | null;
   sourceError: string | null;
@@ -2964,6 +3189,7 @@ function SettingsView({
   triggerIngestionRun: () => void;
   saveSchedule: (nextSchedule: DailyScheduleConfig) => Promise<void>;
   savePersonalizationProfile: (nextProfile: PersonalizationProfile) => void;
+  openSetup: () => void;
 }) {
   const schedule = scheduleData ?? defaultScheduleConfig();
   const [profileDraft, setProfileDraft] = useState<PersonalizationProfile>(personalizationProfile);
@@ -3044,6 +3270,13 @@ function SettingsView({
           >
             Save Profile
           </button>
+          <button
+            type="button"
+            onClick={openSetup}
+            className="min-h-10 rounded-lg border border-cyan-300/30 px-4 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
+          >
+            Run Setup
+          </button>
         </div>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
@@ -3059,6 +3292,13 @@ function SettingsView({
           </label>
 
           <div className="grid gap-3">
+            <SettingsTextInput
+              id="profile-name"
+              label="Profile name"
+              value={profileDraft.profileName}
+              placeholder="My VerityDesk"
+              onChange={(value) => updateProfile({ profileName: value })}
+            />
             <SettingsTextInput
               id="profile-location"
               label="Preferred location"
@@ -3851,6 +4091,7 @@ function defaultScheduleConfig(): DailyScheduleConfig {
 
 function defaultPersonalizationProfile(): PersonalizationProfile {
   return {
+    profileName: "",
     personalNote: "",
     location: "",
     housingMarkets: "",
@@ -3889,9 +4130,18 @@ function loadPersonalizationProfile() {
   }
 }
 
+function isSetupComplete(profile: PersonalizationProfile) {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  return window.localStorage.getItem(SETUP_COMPLETE_STORAGE_KEY) === "true" || Boolean(profile.profileName || profile.location || profile.personalNote);
+}
+
 function normalizePersonalizationProfile(profile: PersonalizationProfile): PersonalizationProfile {
   return {
     ...profile,
+    profileName: profile.profileName.trim(),
     personalNote: profile.personalNote.trim(),
     location: profile.location.trim(),
     housingMarkets: normalizeListText(profile.housingMarkets),
@@ -4170,6 +4420,7 @@ function containsAny(value: string, terms: string[]) {
 }
 
 function profileSummary(profile: PersonalizationProfile) {
+  const profileName = profile.profileName || "local profile";
   const location = profile.location || "no location yet";
   const housingMarkets = compactListLabel(splitList(profile.housingMarkets));
   const watchlist = compactListLabel(splitList(profile.watchlist));
@@ -4178,7 +4429,7 @@ function profileSummary(profile: PersonalizationProfile) {
   const ignoredTopics = compactListLabel(splitList(profile.ignoredTopics));
 
   const note = profile.personalNote ? `Note: ${profile.personalNote}. ` : "";
-  return `${note}Location: ${location}. Housing markets: ${housingMarkets}. Watchlist: ${watchlist}. Sectors: ${sectors}. Priority topics: ${topics}. Risk: ${formatProfileChoice(profile.riskPreference)}. Investing style: ${formatProfileChoice(profile.investingStyle)}. Answer format: ${formatProfileChoice(profile.answerFormat)}. Ignored topics: ${ignoredTopics}. Briefing style: ${profile.briefingStyle}.`;
+  return `${profileName}. ${note}Location: ${location}. Housing markets: ${housingMarkets}. Watchlist: ${watchlist}. Sectors: ${sectors}. Priority topics: ${topics}. Risk: ${formatProfileChoice(profile.riskPreference)}. Investing style: ${formatProfileChoice(profile.investingStyle)}. Answer format: ${formatProfileChoice(profile.answerFormat)}. Ignored topics: ${ignoredTopics}. Briefing style: ${profile.briefingStyle}.`;
 }
 
 function formatAgentIntent(intent: AgentIntent) {

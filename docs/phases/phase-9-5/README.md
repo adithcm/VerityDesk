@@ -146,12 +146,14 @@ Milestone doc: [milestones/9.5.1-product-direction-docs.md](milestones/9.5.1-pro
 
 ### 9.5.2 Setup And Profile Flow
 
-Status: Planned
+Status: Complete
 
 - Add first-time setup/onboarding.
 - Store local profile details and preferences.
 - Make the existing Settings page feel like profile management after setup.
 - Keep the flow simple and non-technical.
+
+Milestone doc: [milestones/9.5.2-setup-and-profile-flow.md](milestones/9.5.2-setup-and-profile-flow.md)
 
 ### 9.5.3 Daily Topic Panel Model
 
