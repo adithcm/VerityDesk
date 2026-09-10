@@ -113,7 +113,8 @@ InvestorAgent should support two main deployment paths:
 Deployment timing:
 
 - Phase 9 is the final UI, prompting, and product polish pass after source and agent functionality are stronger.
-- Phase 10 packages the app as a local macOS desktop app.
+- Phase 9.5 is the post-Phase 9 product differentiation pass: automatic daily topic panels, first-time setup/profile, clearer Markdown answers, change tracking, watch items, alerts foundation, and widget ideas.
+- Phase 10 packages the app as a local macOS desktop app with background refresh behavior.
 - Phase 11 focuses on portable deployment for other systems.
 
 ## Source Principles
