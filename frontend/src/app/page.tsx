@@ -1220,9 +1220,9 @@ function ConsoleAskView({
 
         {!agentResponse && !agentError && !reportsLoading && (
           <div className="mt-4">
-            <p className="whitespace-pre-line text-sm leading-7 text-slate-300">
-              {cleanAnswerText(latestReport?.summary ?? latestReport?.body) ?? "Ask a question or click one of the briefing cards to start."}
-            </p>
+            <MarkdownAnswer
+              text={cleanAnswerText(latestReport?.summary ?? latestReport?.body) ?? "Ask a question or click one of the briefing cards to start."}
+            />
             {latestReport && (
               <div className="mt-4 flex flex-wrap gap-2">
                 <NeonChip>Retrieved {formatDateTime(latestReport.as_of ?? latestReport.created_at)}</NeonChip>
@@ -1234,7 +1234,7 @@ function ConsoleAskView({
 
         {agentResponse && (
           <div className="mt-4 space-y-4">
-            <p className="whitespace-pre-line text-sm leading-7 text-slate-300">{agentResponse.summary}</p>
+            <MarkdownAnswer text={agentResponse.summary} />
             <p className="rounded-lg border border-[#1d3558] bg-[#020617]/70 p-3 text-xs leading-5 text-slate-400">
               {FINANCIAL_DISCLAIMER}
             </p>
@@ -1962,9 +1962,7 @@ function DashboardView({
             <div className="mt-4">
               <p className="text-sm font-semibold">{dailyReport.title}</p>
               <p className="mt-1 text-xs text-[#5b6573]">Retrieved At {formatDateTime(dailyReport.as_of ?? dailyReport.created_at)}</p>
-              <p className="mt-3 line-clamp-5 text-sm leading-6 text-[#374151]">
-                {cleanAnswerText(dailyReport.summary ?? dailyReport.body)}
-              </p>
+              <MarkdownAnswer text={cleanAnswerText(dailyReport.summary ?? dailyReport.body)} tone="light" compact />
               <div className="mt-4 flex flex-wrap gap-2">
                 <StatusBadge status={dailyReport.confidence} />
                 <span className="rounded-md border border-[#e5eaf0] px-2 py-1 text-xs font-semibold text-[#5b6573]">
@@ -2182,9 +2180,9 @@ function CompactReportPreview({ report }: { report: ReportResponse }) {
       <div>
         <p className="text-sm font-semibold">{report.title}</p>
         <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(report.as_of)}</p>
-        <p className="mt-3 max-h-72 overflow-auto whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
-          {cleanAnswerText(report.body)}
-        </p>
+        <div className="mt-3 max-h-72 overflow-auto rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
+          <MarkdownAnswer text={cleanAnswerText(report.body)} tone="light" />
+        </div>
       </div>
       <ReportEvidenceDrawer report={report} />
     </div>
@@ -2233,9 +2231,9 @@ function MarketStrategyCard({
           <div>
             <p className="text-sm font-semibold">{marketReport.title}</p>
             <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(marketReport.as_of)}</p>
-            <p className="mt-3 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
-              {marketReport.body}
-            </p>
+            <div className="mt-3 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
+              <MarkdownAnswer text={cleanAnswerText(marketReport.body)} tone="light" />
+            </div>
           </div>
           <ReportEvidenceDrawer report={marketReport} />
         </div>
@@ -2555,12 +2553,12 @@ function ReportReadingPanel({ report, variant }: { report: ReportResponse; varia
       {variant === "briefing" && (
         <div>
           <p className="text-sm font-semibold">{report.title}</p>
-          {report.summary && <p className="mt-2 text-sm leading-6 text-[#5b6573]">{cleanAnswerText(report.summary)}</p>}
+          {report.summary && <MarkdownAnswer text={cleanAnswerText(report.summary)} tone="light" compact />}
         </div>
       )}
 
-      <article className="whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-4 text-sm leading-7 text-[#374151]">
-        {cleanAnswerText(report.body)}
+      <article className="rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-4">
+        <MarkdownAnswer text={cleanAnswerText(report.body)} tone="light" />
       </article>
 
       <p className="rounded-md border border-[#e5eaf0] bg-white p-3 text-xs leading-5 text-[#5b6573]">
@@ -2821,9 +2819,9 @@ function WatchlistView({
             <div>
               <p className="text-sm font-semibold">{companyReport.title}</p>
               <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(companyReport.as_of)}</p>
-              <p className="mt-3 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
-                {companyReport.body}
-              </p>
+              <div className="mt-3 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
+                <MarkdownAnswer text={cleanAnswerText(companyReport.body)} tone="light" />
+              </div>
             </div>
             <ReportEvidenceDrawer report={companyReport} />
           </div>
@@ -3005,9 +3003,9 @@ function AgentChatView({
             </div>
             <div>
               <p className="text-sm font-semibold">Natural Language Response</p>
-              <p className="mt-2 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
-                {agentResponse.summary}
-              </p>
+              <div className="mt-2 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
+                <MarkdownAnswer text={agentResponse.summary} tone="light" />
+              </div>
             </div>
             <EvidenceDrawer response={agentResponse} />
           </div>
@@ -3078,6 +3076,83 @@ function InferredContextPanel({
       </div>
     </section>
   );
+}
+
+function MarkdownAnswer({ text, tone = "dark", compact = false }: { text: string | null | undefined; tone?: "dark" | "light"; compact?: boolean }) {
+  const lines = (text || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const textClass = tone === "dark" ? "text-slate-300" : "text-[#374151]";
+  const mutedClass = tone === "dark" ? "text-slate-400" : "text-[#5b6573]";
+  const headingClass = tone === "dark" ? "text-cyan-200" : "text-[#143642]";
+
+  if (lines.length === 0) {
+    return <p className={`text-sm leading-7 ${mutedClass}`}>No response available yet.</p>;
+  }
+
+  return (
+    <div className={`${compact ? "space-y-2" : "space-y-3"} text-sm leading-7 ${textClass}`}>
+      {lines.map((line, index) => {
+        const heading = markdownHeadingText(line);
+        if (heading) {
+          return (
+            <h3 key={`${line}-${index}`} className={`font-mono text-xs font-black uppercase tracking-normal ${headingClass}`}>
+              {renderInlineMarkdown(heading)}
+            </h3>
+          );
+        }
+
+        const bullet = markdownBulletText(line);
+        if (bullet) {
+          return (
+            <div key={`${line}-${index}`} className="flex gap-2">
+              <span className={tone === "dark" ? "text-lime-300" : "text-[#25636b]"}>-</span>
+              <p>{renderInlineMarkdown(bullet)}</p>
+            </div>
+          );
+        }
+
+        return <p key={`${line}-${index}`}>{renderInlineMarkdown(line)}</p>;
+      })}
+    </div>
+  );
+}
+
+function markdownHeadingText(line: string) {
+  if (line.startsWith("### ")) {
+    return line.slice(4).trim();
+  }
+  if (line.startsWith("## ")) {
+    return line.slice(3).trim();
+  }
+
+  const normalized = line.replace(/\*\*/g, "").trim();
+  if (/^(bottom line|what changed|major trends|why it matters|why it matters to you|what to watch|what to watch next|confidence and gaps|uncertainty\/data gaps|uncertainty and data gaps):?$/i.test(normalized)) {
+    return normalized.replace(/:$/, "");
+  }
+
+  return null;
+}
+
+function markdownBulletText(line: string) {
+  if (line.startsWith("- ")) {
+    return line.slice(2).trim();
+  }
+  if (line.startsWith("* ")) {
+    return line.slice(2).trim();
+  }
+  return null;
+}
+
+function renderInlineMarkdown(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={`${part}-${index}`} className="font-black text-inherit">{part.slice(2, -2)}</strong>;
+    }
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
 }
 
 function InlineList({ title, values }: { title: string; values: string[] }) {

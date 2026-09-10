@@ -216,7 +216,7 @@ def test_phase8_regression_questions_use_web_first_clean_answer(
     assert "Source path:" not in response.summary
     assert "Fused evidence source path" not in response.summary
     assert "Sources:" not in response.summary
-    assert "Major Trends:" in response.summary
+    assert "## Major Trends" in response.summary
     assert any(citation.source_id == "tavily" for citation in response.citations)
     assert "EvidenceFusionAgent" in response.agents_ran
     assert expected_agents.issubset(set(response.agents_ran))

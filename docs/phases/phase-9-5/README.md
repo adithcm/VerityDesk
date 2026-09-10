@@ -168,12 +168,14 @@ Milestone doc: [milestones/9.5.3-daily-topic-panel-model.md](milestones/9.5.3-da
 
 ### 9.5.4 Markdown Answer Rendering
 
-Status: Planned
+Status: Complete
 
 - Update prompts to produce scan-friendly Markdown.
 - Render Markdown safely in the frontend.
 - Style headers, bold text, bullets, and compact sections.
 - Preserve hidden citations.
+
+Milestone doc: [milestones/9.5.4-markdown-answer-rendering.md](milestones/9.5.4-markdown-answer-rendering.md)
 
 ### 9.5.5 Change Tracking And Signal Labels
 

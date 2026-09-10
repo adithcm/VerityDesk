@@ -215,9 +215,9 @@ def test_template_synthesis_uses_simple_trend_sections() -> None:
         ),
     )
 
-    assert "Bottom Line:" in result
-    assert "Major Trends:" in result
-    assert "Uncertainty/Data Gaps:" in result
+    assert "## Bottom Line" in result
+    assert "## Major Trends" in result
+    assert "## Confidence And Gaps" in result
     assert "Sources:" not in result
 
 
@@ -348,7 +348,7 @@ def test_synthesis_with_packet_avoids_raw_internal_trace() -> None:
     assert "Fused evidence source path" not in result
     assert "Source path:" not in result
     assert "Sources:" not in result
-    assert "Major Trends:" in result
+    assert "## Major Trends" in result
 
 
 def test_citation_format_includes_source_dates_and_url() -> None:

@@ -187,9 +187,10 @@ def build_natural_language_answer(
         agent_name="SynthesisAgent",
         instructions=(
             "Write a direct, natural-language answer to the user's question. Start with the answer, not process "
-            "details. Use this structure when useful: Bottom Line, Major Trends, What Changed Recently, "
-            "Why It Matters, What To Watch Next, and Uncertainty/Data Gaps. Keep each section short and avoid "
-            "long lists. Explain the direction of major trends and whether they appear to be strengthening, "
+            "details. Write clean Markdown with short sections such as ## Bottom Line, ## What Changed, "
+            "## Major Trends, ## Why It Matters To You, ## What To Watch, and ## Confidence And Gaps. "
+            "Use **bold** for key terms and short bullets for scanability. Explain the direction of major trends "
+            "and whether they appear to be strengthening, "
             "weakening, mixed, or unclear. Use the fused evidence packet first, then specialist summaries as "
             "supporting interpretation. Do not mention internal agent names, coordinator routing, source paths, "
             "retrieval statuses, or debug details in the user-facing answer. Do not include a long Sources section; "
