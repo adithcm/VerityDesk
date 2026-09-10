@@ -179,12 +179,14 @@ Milestone doc: [milestones/9.5.4-markdown-answer-rendering.md](milestones/9.5.4-
 
 ### 9.5.5 Change Tracking And Signal Labels
 
-Status: Planned
+Status: Complete
 
 - Compare current panel/report output with prior stored output.
 - Add `What Changed` sections.
 - Add signal labels such as `High Signal`, `Developing`, `Noise`, and `Watch Later`.
 - Add confidence/source-quality explanations.
+
+Milestone doc: [milestones/9.5.5-change-tracking-and-signal-labels.md](milestones/9.5.5-change-tracking-and-signal-labels.md)
 
 ### 9.5.6 Watch Items And Alerts Foundation
 

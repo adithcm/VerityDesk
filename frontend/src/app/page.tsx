@@ -1354,6 +1354,8 @@ type DailyTopicPanel = {
 
 function DailyTopicPanelCard({ panel }: { panel: DailyTopicPanel }) {
   const body = cleanAnswerText(panel.report?.summary ?? panel.report?.body);
+  const signalLabel = reportMetadataText(panel.report, "signal_label") ?? (panel.report ? "Developing" : "No panel yet");
+  const changeLabel = reportMetadataText(panel.report, "change_label") ?? "Waiting";
 
   return (
     <section className={`rounded-xl border bg-[#020617] p-4 ${panel.borderClass}`}>
@@ -1371,7 +1373,8 @@ function DailyTopicPanelCard({ panel }: { panel: DailyTopicPanel }) {
       </p>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-          <NeonChip>{panel.report ? `Confidence: ${panel.report.confidence}` : "No panel yet"}</NeonChip>
+          <NeonChip variant={signalChipVariant(signalLabel)}>{signalLabel}</NeonChip>
+          <NeonChip>{`Change: ${changeLabel}`}</NeonChip>
           {panel.report && <NeonChip>{panel.report.citations.length} sources</NeonChip>}
         </div>
         <button
@@ -1389,6 +1392,21 @@ function DailyTopicPanelCard({ panel }: { panel: DailyTopicPanel }) {
       )}
     </section>
   );
+}
+
+function reportMetadataText(report: ReportResponse | null | undefined, key: string) {
+  const value = report?.metadata?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function signalChipVariant(signalLabel: string): "live" | "search" | undefined {
+  if (signalLabel === "High Signal") {
+    return "live";
+  }
+  if (signalLabel === "Developing") {
+    return "search";
+  }
+  return undefined;
 }
 
 function ConsoleMetric({ label, value }: { label: string; value: string }) {

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import desc, select
@@ -31,6 +33,32 @@ REPORT_TYPE_LABELS = {
     "market_strategy": "Market Strategy",
     "housing": "Housing Report",
     "macro": "Macro Report",
+}
+
+IMPROVING_TERMS = {
+    "improving",
+    "improved",
+    "easing",
+    "cooling",
+    "lower",
+    "falling",
+    "stabilizing",
+    "relief",
+    "recovering",
+    "stronger",
+}
+
+WORSENING_TERMS = {
+    "worsening",
+    "worse",
+    "higher risk",
+    "spike",
+    "rising",
+    "tightening",
+    "escalation",
+    "stress",
+    "weakening",
+    "deteriorating",
 }
 
 DAILY_BRIEFING_DOMAINS = [
@@ -154,6 +182,7 @@ def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> 
             "requires_guardrail_review": agent_response.requires_guardrail_review,
             "follow_up_questions": agent_response.follow_up_questions,
             "risks": agent_response.risks,
+            **build_panel_signal_metadata(session, "daily_briefing", agent_response),
         },
     )
     session.add(report)
@@ -233,6 +262,7 @@ def generate_company_research(session: Session, request: CompanyResearchRequest)
             "requires_guardrail_review": agent_response.requires_guardrail_review,
             "follow_up_questions": agent_response.follow_up_questions,
             "risks": agent_response.risks,
+            **build_panel_signal_metadata(session, "company_research", agent_response),
         },
     )
     session.add(report)
@@ -290,6 +320,7 @@ def generate_market_strategy(session: Session, request: MarketStrategyRequest) -
             "follow_up_questions": agent_response.follow_up_questions,
             "risks": agent_response.risks,
             "scenario_sections_expected": ["base", "upside", "downside"],
+            **build_panel_signal_metadata(session, "market_strategy", agent_response),
         },
     )
     session.add(report)
@@ -332,6 +363,7 @@ def generate_housing_report(session: Session, request: HousingReportRequest) -> 
             "time_window": request.time_window,
             "generation_stage": "housing",
             "expected_sections": ["mortgage_rates", "affordability", "supply_demand", "risks"],
+            **build_panel_signal_metadata(session, "housing", agent_response),
         },
     )
     session.add(report)
@@ -374,6 +406,7 @@ def generate_macro_report(session: Session, request: MacroReportRequest) -> Repo
             "time_window": request.time_window,
             "generation_stage": "macro",
             "expected_sections": ["rates", "labor", "policy", "credit", "risks"],
+            **build_panel_signal_metadata(session, "macro", agent_response),
         },
     )
     session.add(report)
@@ -554,6 +587,93 @@ def build_generated_report(
         guardrail_status=agent_response.guardrail.status,
         report_metadata=report_metadata,
     )
+
+
+def build_panel_signal_metadata(
+    session: Session,
+    report_type: str,
+    agent_response: AgentQueryResponse,
+) -> dict[str, Any]:
+    previous_report = latest_previous_report(session, report_type)
+    signal_label = classify_signal(agent_response)
+    change_label = classify_change(previous_report, agent_response.summary)
+    source_count = len(agent_response.citations)
+
+    return {
+        "signal_label": signal_label,
+        "change_label": change_label,
+        "source_quality": source_quality_note(agent_response),
+        "previous_report_id": previous_report.id if previous_report else None,
+        "previous_report_as_of": format_datetime(previous_report.as_of) if previous_report else None,
+        "citation_count": source_count,
+    }
+
+
+def latest_previous_report(session: Session, report_type: str) -> Report | None:
+    return session.scalar(
+        select(Report)
+        .where(Report.report_type == report_type, Report.status == "generated")
+        .order_by(desc(Report.as_of), desc(Report.id))
+        .limit(1)
+    )
+
+
+def classify_signal(agent_response: AgentQueryResponse) -> str:
+    source_count = len(agent_response.citations)
+    summary = agent_response.summary.lower()
+
+    if source_count == 0 and any(
+        phrase in summary
+        for phrase in (
+            "no current",
+            "no specific evidence",
+            "does not include",
+            "cannot determine",
+            "could not find",
+        )
+    ):
+        return "Noise"
+    if source_count == 0 or agent_response.confidence == "low":
+        return "Watch Later"
+    if agent_response.confidence == "high" and source_count >= 3:
+        return "High Signal"
+    if agent_response.confidence == "medium" and source_count >= 5:
+        return "High Signal"
+    return "Developing"
+
+
+def classify_change(previous_report: Report | None, current_text: str) -> str:
+    if previous_report is None:
+        return "New"
+
+    previous_tokens = meaningful_tokens(previous_report.body)
+    current_tokens = meaningful_tokens(current_text)
+    if previous_tokens and current_tokens:
+        overlap = len(previous_tokens & current_tokens) / max(len(current_tokens), 1)
+        if overlap >= 0.86:
+            return "No Meaningful Change"
+
+    current_lower = current_text.lower()
+    improving_count = sum(1 for term in IMPROVING_TERMS if term in current_lower)
+    worsening_count = sum(1 for term in WORSENING_TERMS if term in current_lower)
+    if worsening_count > improving_count:
+        return "Worsening"
+    if improving_count > worsening_count:
+        return "Improving"
+    return "Mixed"
+
+
+def meaningful_tokens(text: str) -> set[str]:
+    return {token for token in re.findall(r"[a-z0-9]+", text.lower()) if len(token) >= 4}
+
+
+def source_quality_note(agent_response: AgentQueryResponse) -> str:
+    source_count = len(agent_response.citations)
+    if agent_response.confidence == "high" and source_count >= 3:
+        return "Strong: multiple current sources support the answer."
+    if source_count > 0:
+        return "Useful but developing: current sources are available, but the picture may still move."
+    return "Thin: source coverage is limited, so treat this as a watch item."
 
 
 def report_to_response(report: Report) -> ReportResponse:
