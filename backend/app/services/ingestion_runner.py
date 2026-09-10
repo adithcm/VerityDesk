@@ -9,14 +9,16 @@ from sqlalchemy.orm import Session
 
 from app.db.models import UserSettings
 from app.schemas.ingestion import DailyScheduleConfig, IngestionRunRequest, IngestionRunResponse
-from app.schemas.report import DailyBriefingRequest
+from app.schemas.report import DailyBriefingRequest, HousingReportRequest, MacroReportRequest, MarketStrategyRequest
 from app.services.official_api_ingestion import (
     OfficialAPIConfig,
     ingest_official_api_source,
     get_configured_official_api_sources,
 )
-from app.services.reports import generate_daily_briefing
+from app.services.personalization import read_user_preferences
+from app.services.reports import generate_daily_briefing, generate_housing_report, generate_macro_report, generate_market_strategy
 from app.services.rss_ingestion import RSSFeedConfig, get_configured_rss_feeds, ingest_rss_feed
+from app.services.watchlist import evaluate_watch_items
 
 
 @dataclass(frozen=True)
@@ -246,15 +248,13 @@ def run_due_daily_workflow_without_lock(session: Session, now: datetime | None =
     message = response.message
 
     if settings.daily_report_enabled:
-        report = generate_daily_briefing(
-            session,
-            DailyBriefingRequest(
-                title=f"Automatic Daily Briefing ({current_time.date().isoformat()})",
-                time_window="day",
-            ),
+        report_ids = generate_daily_topic_reports(session, current_time)
+        report_id = report_ids[0] if report_ids else None
+        watch_result = evaluate_watch_items(session)
+        message = (
+            f"{message} Generated {len(report_ids)} daily topic panel reports. "
+            f"Checked {watch_result.checked} watch items, triggered {watch_result.triggered} alerts."
         )
-        report_id = report.id
-        message = f"{message} Generated daily briefing report {report.id}."
 
     completed_at = datetime.now(UTC)
     settings = get_or_create_user_settings(session)
@@ -270,6 +270,61 @@ def run_due_daily_workflow_without_lock(session: Session, now: datetime | None =
     session.commit()
     session.refresh(settings)
     return settings_to_schedule_config(settings)
+
+
+def generate_daily_topic_reports(session: Session, current_time: datetime) -> list[int]:
+    preferences = read_user_preferences(session)
+    date_label = current_time.date().isoformat()
+    reports = [
+        generate_daily_briefing(
+            session,
+            DailyBriefingRequest(
+                title=f"Daily Briefing ({date_label})",
+                time_window="day",
+            ),
+        ),
+        generate_market_strategy(
+            session,
+            MarketStrategyRequest(
+                title=f"Market Setup ({date_label})",
+                tickers=preferences.watchlist_tickers,
+                regions=preferences.preferred_regions,
+                time_window="day",
+                user_query=(
+                    "Generate today's market setup as a daily topic panel. Focus on the highest-signal moves in "
+                    "indexes, rates, yields, volatility, sectors, commodities, liquidity, and broad risk appetite. "
+                    "Use concise Markdown with Bottom Line, What Changed, Major Trends, Why It Matters, and What To Watch."
+                ),
+            ),
+        ),
+        generate_housing_report(
+            session,
+            HousingReportRequest(
+                title=f"Local Housing Pulse ({date_label})",
+                regions=preferences.preferred_regions,
+                time_window="day",
+                user_query=(
+                    "Generate today's local housing pulse as a daily topic panel. Focus on mortgage rates, affordability, "
+                    "inventory, home prices, buyer/seller leverage, rent pressure, and local housing news. "
+                    "Use concise Markdown with Bottom Line, What Changed, Major Trends, Why It Matters, and What To Watch."
+                ),
+            ),
+        ),
+        generate_macro_report(
+            session,
+            MacroReportRequest(
+                title=f"Rates And Credit ({date_label})",
+                regions=preferences.preferred_regions,
+                time_window="day",
+                user_query=(
+                    "Generate today's rates and credit panel. Focus on rates, yields, inflation pressure, labor, "
+                    "credit conditions, Fed policy signals, and consumer stress. Use concise Markdown with Bottom Line, "
+                    "What Changed, Major Trends, Why It Matters, and What To Watch."
+                ),
+            ),
+        ),
+    ]
+    return [report.id for report in reports]
 
 
 def get_or_create_user_settings(session: Session) -> UserSettings:

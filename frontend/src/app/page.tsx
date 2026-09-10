@@ -259,6 +259,46 @@ type ProactiveSuggestion = {
   guardrail_note: string;
 };
 
+type WatchAlertResponse = {
+  id: number;
+  watch_item_id: number;
+  report_id: number | null;
+  title: string;
+  message: string;
+  status: string;
+  triggered_at: string;
+  acknowledged_at: string | null;
+  metadata: Record<string, unknown>;
+};
+
+type WatchItemResponse = {
+  id: number;
+  title: string;
+  category: string;
+  query: string;
+  status: string;
+  priority: string;
+  enabled: boolean;
+  last_checked_at: string | null;
+  last_matched_at: string | null;
+  last_summary: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  alerts: WatchAlertResponse[];
+};
+
+type WatchItemListResponse = {
+  items: WatchItemResponse[];
+  total: number;
+};
+
+type WatchEvaluationResponse = {
+  checked: number;
+  triggered: number;
+  alerts: WatchAlertResponse[];
+};
+
 type ProactiveSuggestionsResponse = {
   suggestions: ProactiveSuggestion[];
   total: number;
@@ -266,6 +306,7 @@ type ProactiveSuggestionsResponse = {
 };
 
 type PersonalizationProfile = {
+  profileName: string;
   personalNote: string;
   location: string;
   housingMarkets: string;
@@ -294,6 +335,7 @@ type InferredAgentContext = {
 };
 
 const PERSONALIZATION_STORAGE_KEY = "investoragent.personalization.v1";
+const SETUP_COMPLETE_STORAGE_KEY = "investoragent.setupComplete.v1";
 
 const topicOptions = [
   "World news",
@@ -325,18 +367,12 @@ const macroInterestOptions = [
   "Fed policy",
 ];
 
-const watchlistRows = [
-  { symbol: "SPY", focus: "Broad market risk", state: "Monitor" },
-  { symbol: "QQQ", focus: "Growth and AI exposure", state: "Monitor" },
-  { symbol: "TLT", focus: "Rates sensitivity", state: "Monitor" },
-];
-
 const shellNavigation: ShellNavItem[] = [
   { label: "Ask", title: "Ask VerityDesk", view: "Dashboard" },
   { label: "Day", title: "Daily Briefing", view: "Daily Briefing" },
   { label: "Rpt", title: "Reports", view: "Reports" },
   { label: "Src", title: "Sources", view: "Sources" },
-  { label: "Co", title: "Watchlist", view: "Watchlist" },
+  { label: "Wch", title: "Watchlist", view: "Watchlist" },
   { label: "Set", title: "Settings", view: "Settings" },
 ];
 
@@ -391,8 +427,16 @@ export default function Home() {
   const [suggestionsData, setSuggestionsData] = useState<ProactiveSuggestionsResponse | null>(null);
   const [suggestionsLoading, setSuggestionsLoading] = useState(true);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [watchItemsData, setWatchItemsData] = useState<WatchItemListResponse | null>(null);
+  const [watchItemsLoading, setWatchItemsLoading] = useState(true);
+  const [watchItemsError, setWatchItemsError] = useState<string | null>(null);
+  const [watchEvaluationLoading, setWatchEvaluationLoading] = useState(false);
+  const [newWatchTitle, setNewWatchTitle] = useState("");
+  const [newWatchQuery, setNewWatchQuery] = useState("");
+  const [newWatchCategory, setNewWatchCategory] = useState("custom");
   const [personalizationProfile, setPersonalizationProfile] = useState<PersonalizationProfile>(defaultPersonalizationProfile());
   const [profileSavedAt, setProfileSavedAt] = useState<string | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -444,11 +488,13 @@ export default function Home() {
     loadAgentRuns();
     loadReports();
     loadSuggestions();
+    loadWatchItems();
   }, []);
 
   useEffect(() => {
     const savedProfile = loadPersonalizationProfile();
     setPersonalizationProfile(savedProfile);
+    setSetupOpen(!isSetupComplete(savedProfile));
     setAgentTicker(savedProfile.watchlist);
     if (savedProfile.companies.trim()) {
       setCompanyName(firstListItem(savedProfile.companies));
@@ -461,6 +507,7 @@ export default function Home() {
   function savePersonalizationProfile(nextProfile: PersonalizationProfile) {
     setPersonalizationProfile(nextProfile);
     localStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(nextProfile));
+    localStorage.setItem(SETUP_COMPLETE_STORAGE_KEY, "true");
     setProfileSavedAt(new Date().toISOString());
     if (nextProfile.watchlist.trim()) {
       setAgentTicker(nextProfile.watchlist);
@@ -528,6 +575,85 @@ export default function Home() {
       setSuggestionsData(null);
     } finally {
       setSuggestionsLoading(false);
+    }
+  }
+
+  async function loadWatchItems() {
+    setWatchItemsLoading(true);
+    setWatchItemsError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/watchlist/items`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Watch item request failed with status ${response.status}`);
+      }
+      setWatchItemsData((await response.json()) as WatchItemListResponse);
+    } catch (error) {
+      setWatchItemsError(error instanceof Error ? error.message : "Could not load watch items");
+      setWatchItemsData(null);
+    } finally {
+      setWatchItemsLoading(false);
+    }
+  }
+
+  async function createWatchItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!newWatchTitle.trim() || !newWatchQuery.trim()) {
+      return;
+    }
+
+    setWatchItemsError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/watchlist/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newWatchTitle.trim(),
+          query: newWatchQuery.trim(),
+          category: newWatchCategory,
+          priority: "normal",
+          enabled: true,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Watch item create failed with status ${response.status}`);
+      }
+      setNewWatchTitle("");
+      setNewWatchQuery("");
+      setNewWatchCategory("custom");
+      await loadWatchItems();
+    } catch (error) {
+      setWatchItemsError(error instanceof Error ? error.message : "Could not create watch item");
+    }
+  }
+
+  async function deleteWatchItem(watchItemId: number) {
+    setWatchItemsError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/watchlist/items/${watchItemId}`, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error(`Watch item delete failed with status ${response.status}`);
+      }
+      await loadWatchItems();
+    } catch (error) {
+      setWatchItemsError(error instanceof Error ? error.message : "Could not delete watch item");
+    }
+  }
+
+  async function evaluateWatchItems() {
+    setWatchEvaluationLoading(true);
+    setWatchItemsError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/watchlist/evaluate`, { method: "POST" });
+      if (!response.ok) {
+        throw new Error(`Watch item check failed with status ${response.status}`);
+      }
+      (await response.json()) as WatchEvaluationResponse;
+      await loadWatchItems();
+    } catch (error) {
+      setWatchItemsError(error instanceof Error ? error.message : "Could not check watch items");
+    } finally {
+      setWatchEvaluationLoading(false);
     }
   }
 
@@ -739,8 +865,8 @@ export default function Home() {
     }
   }
 
-  async function generateCompanyReport(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function generateCompanyReport(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     setCompanyReportLoading(true);
     setCompanyReportError(null);
 
@@ -862,6 +988,22 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#020617] text-[#f8fafc]">
       <div className="fixed inset-0 -z-10 bg-[linear-gradient(rgba(34,211,238,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.035)_1px,transparent_1px),radial-gradient(circle_at_76%_10%,rgba(244,114,182,0.16),transparent_28rem),radial-gradient(circle_at_8%_68%,rgba(163,230,53,0.11),transparent_30rem),#020617] bg-[length:38px_38px,38px_38px,auto,auto,auto]" />
+      {setupOpen && (
+        <SetupProfileFlow
+          profile={personalizationProfile}
+          sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
+          scheduleData={scheduleData}
+          onSave={(nextProfile) => {
+            savePersonalizationProfile(nextProfile);
+            setSetupOpen(false);
+            setActiveView("Dashboard");
+          }}
+          onSkip={() => {
+            localStorage.setItem(SETUP_COMPLETE_STORAGE_KEY, "true");
+            setSetupOpen(false);
+          }}
+        />
+      )}
 
       <header className="flex min-h-[70px] items-center justify-between gap-4 border-b border-cyan-300/20 px-5 md:px-7">
         <div className="flex items-center gap-3">
@@ -983,13 +1125,26 @@ export default function Home() {
             )}
             {activeView === "Watchlist" && (
               <WatchlistView
+                watchItemsData={watchItemsData}
+                watchItemsLoading={watchItemsLoading}
+                watchItemsError={watchItemsError}
+                watchEvaluationLoading={watchEvaluationLoading}
+                newWatchTitle={newWatchTitle}
+                newWatchQuery={newWatchQuery}
+                newWatchCategory={newWatchCategory}
                 companyTicker={companyTicker}
                 companyName={companyName}
                 companyReport={companyReport}
                 companyReportLoading={companyReportLoading}
                 companyReportError={companyReportError}
+                setNewWatchTitle={setNewWatchTitle}
+                setNewWatchQuery={setNewWatchQuery}
+                setNewWatchCategory={setNewWatchCategory}
                 setCompanyTicker={setCompanyTicker}
                 setCompanyName={setCompanyName}
+                createWatchItem={createWatchItem}
+                deleteWatchItem={deleteWatchItem}
+                evaluateWatchItems={evaluateWatchItems}
                 generateCompanyReport={generateCompanyReport}
               />
             )}
@@ -1033,6 +1188,7 @@ export default function Home() {
                 triggerIngestionRun={triggerIngestionRun}
                 saveSchedule={saveSchedule}
                 savePersonalizationProfile={savePersonalizationProfile}
+                openSetup={() => setSetupOpen(true)}
               />
             )}
           </div>
@@ -1042,10 +1198,17 @@ export default function Home() {
           personalizationProfile={personalizationProfile}
           sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
           scheduleData={scheduleData}
+          reportListData={reportListData}
+          reportsLoading={reportsLoading}
           suggestionsData={suggestionsData}
           suggestionsLoading={suggestionsLoading}
           suggestionsError={suggestionsError}
-          askFromShell={askFromShell}
+          generateDailyBriefing={generateDailyBriefing}
+          generateHousingReport={generateHousingReport}
+          generateMarketStrategy={generateMarketStrategy}
+          generateCompanyReport={generateCompanyReport}
+          generateMacroReport={generateMacroReport}
+          applySuggestion={applySuggestion}
           openSettings={() => setActiveView("Settings")}
         />
       </div>
@@ -1192,9 +1355,9 @@ function ConsoleAskView({
 
         {!agentResponse && !agentError && !reportsLoading && (
           <div className="mt-4">
-            <p className="whitespace-pre-line text-sm leading-7 text-slate-300">
-              {cleanAnswerText(latestReport?.summary ?? latestReport?.body) ?? "Ask a question or click one of the briefing cards to start."}
-            </p>
+            <MarkdownAnswer
+              text={cleanAnswerText(latestReport?.summary ?? latestReport?.body) ?? "Ask a question or click one of the briefing cards to start."}
+            />
             {latestReport && (
               <div className="mt-4 flex flex-wrap gap-2">
                 <NeonChip>Retrieved {formatDateTime(latestReport.as_of ?? latestReport.created_at)}</NeonChip>
@@ -1206,7 +1369,7 @@ function ConsoleAskView({
 
         {agentResponse && (
           <div className="mt-4 space-y-4">
-            <p className="whitespace-pre-line text-sm leading-7 text-slate-300">{agentResponse.summary}</p>
+            <MarkdownAnswer text={agentResponse.summary} />
             <p className="rounded-lg border border-[#1d3558] bg-[#020617]/70 p-3 text-xs leading-5 text-slate-400">
               {FINANCIAL_DISCLAIMER}
             </p>
@@ -1222,58 +1385,64 @@ function BriefingCardsPanel({
   personalizationProfile,
   sourceStatusText,
   scheduleData,
+  reportListData,
+  reportsLoading,
   suggestionsData,
   suggestionsLoading,
   suggestionsError,
-  askFromShell,
+  generateDailyBriefing,
+  generateHousingReport,
+  generateMarketStrategy,
+  generateCompanyReport,
+  generateMacroReport,
+  applySuggestion,
   openSettings,
 }: {
   personalizationProfile: PersonalizationProfile;
   sourceStatusText: string;
   scheduleData: DailyScheduleConfig | null;
+  reportListData: ReportListResponse | null;
+  reportsLoading: boolean;
   suggestionsData: ProactiveSuggestionsResponse | null;
   suggestionsLoading: boolean;
   suggestionsError: string | null;
-  askFromShell: (question?: string) => void;
+  generateDailyBriefing: () => void;
+  generateHousingReport: () => void;
+  generateMarketStrategy: () => void;
+  generateCompanyReport: () => void;
+  generateMacroReport: () => void;
+  applySuggestion: (suggestion: ProactiveSuggestion) => void;
   openSettings: () => void;
 }) {
-  const cards = buildBriefingCards(personalizationProfile);
+  const panels = buildDailyTopicPanels({
+    profile: personalizationProfile,
+    reports: reportListData?.reports ?? [],
+    generateDailyBriefing,
+    generateHousingReport,
+    generateMarketStrategy,
+    generateCompanyReport,
+    generateMacroReport,
+  });
 
   return (
     <aside className="grid content-start gap-4 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-white">Quick Briefings</h2>
-          <p className="mt-1 font-mono text-xs font-black uppercase text-slate-500">Auto routed</p>
+          <h2 className="text-lg font-bold text-white">Today&apos;s Panels</h2>
+          <p className="mt-1 font-mono text-xs font-black uppercase text-slate-500">Saved daily intelligence</p>
         </div>
         <button type="button" onClick={openSettings} className="text-sm font-bold text-cyan-300">
           Tune
         </button>
       </div>
 
-      <button
-        type="button"
-        onClick={() => askFromShell(buildDailyBriefingPrompt(personalizationProfile))}
-        className="min-h-28 rounded-xl border border-lime-300/35 bg-[linear-gradient(135deg,rgba(163,230,53,0.12),transparent_44%),#020617] p-4 text-left transition hover:border-lime-300/70"
-      >
-        <p className="text-lg font-bold text-white">Daily Briefing</p>
-        <p className="mt-2 text-sm leading-5 text-slate-400">Generate today&apos;s personalized market, housing, company, and world-risk brief.</p>
-      </button>
-
-      {cards.map((card) => (
-        <button
-          key={card.title}
-          type="button"
-          onClick={() => askFromShell(card.prompt)}
-          className={`min-h-28 rounded-xl border bg-[#020617] p-4 text-left transition hover:border-cyan-300/70 ${card.borderClass}`}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-lg font-bold text-white">{card.title}</p>
-            <span className={`mt-1 h-2 w-2 rounded-full ${card.dotClass}`} />
-          </div>
-          <p className="mt-2 text-sm leading-5 text-slate-400">{card.description}</p>
-        </button>
-      ))}
+      {reportsLoading ? (
+        <div className="rounded-xl border border-[#1d3558] bg-[#020617]/80 p-4 text-sm text-slate-400">
+          Loading saved daily panels.
+        </div>
+      ) : (
+        panels.map((panel) => <DailyTopicPanelCard key={panel.title} panel={panel} />)
+      )}
 
       <div className="rounded-xl border border-[#1d3558] bg-[#020617]/80 p-4">
         <p className="font-mono text-xs font-black uppercase text-cyan-300">System</p>
@@ -1295,7 +1464,7 @@ function BriefingCardsPanel({
               <button
                 key={suggestion.id}
                 type="button"
-                onClick={() => askFromShell(suggestion.prompt)}
+                onClick={() => applySuggestion(suggestion)}
                 className="rounded-lg border border-[#1d3558] px-3 py-2 text-left text-sm leading-5 text-slate-300 hover:border-cyan-300/50"
               >
                 {suggestion.title}
@@ -1309,6 +1478,72 @@ function BriefingCardsPanel({
       </details>
     </aside>
   );
+}
+
+type DailyTopicPanel = {
+  title: string;
+  description: string;
+  report: ReportResponse | null;
+  borderClass: string;
+  dotClass: string;
+  onRefresh: () => void;
+};
+
+function DailyTopicPanelCard({ panel }: { panel: DailyTopicPanel }) {
+  const body = cleanAnswerText(panel.report?.summary ?? panel.report?.body);
+  const signalLabel = reportMetadataText(panel.report, "signal_label") ?? (panel.report ? "Developing" : "No panel yet");
+  const changeLabel = reportMetadataText(panel.report, "change_label") ?? "Waiting";
+
+  return (
+    <section className={`rounded-xl border bg-[#020617] p-4 ${panel.borderClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-lg font-bold text-white">{panel.title}</p>
+          <p className="mt-1 text-xs font-semibold uppercase text-slate-500">
+            {panel.report ? `Updated ${formatDateTime(panel.report.as_of ?? panel.report.created_at)}` : "Waiting for daily refresh"}
+          </p>
+        </div>
+        <span className={`mt-2 h-2 w-2 rounded-full ${panel.dotClass}`} />
+      </div>
+      <p className="mt-3 text-sm leading-5 text-slate-400">
+        {body ? compactText(body, 210) : panel.description}
+      </p>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          <NeonChip variant={signalChipVariant(signalLabel)}>{signalLabel}</NeonChip>
+          <NeonChip>{`Change: ${changeLabel}`}</NeonChip>
+          {panel.report && <NeonChip>{panel.report.citations.length} sources</NeonChip>}
+        </div>
+        <button
+          type="button"
+          onClick={panel.onRefresh}
+          className="min-h-9 rounded-lg border border-cyan-300/30 px-3 text-xs font-black text-cyan-200 transition hover:border-cyan-300/70"
+        >
+          Refresh
+        </button>
+      </div>
+      {panel.report && (
+        <div className="mt-3">
+          <ReportEvidenceDrawer report={panel.report} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function reportMetadataText(report: ReportResponse | null | undefined, key: string) {
+  const value = report?.metadata?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function signalChipVariant(signalLabel: string): "live" | "search" | undefined {
+  if (signalLabel === "High Signal") {
+    return "live";
+  }
+  if (signalLabel === "Developing") {
+    return "search";
+  }
+  return undefined;
 }
 
 function ConsoleMetric({ label, value }: { label: string; value: string }) {
@@ -1340,6 +1575,207 @@ function SourceStripRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between gap-3">
       <span className="text-sm font-semibold text-slate-400">{label}</span>
       <span className="text-right font-mono text-xs font-black text-lime-300">{value}</span>
+    </div>
+  );
+}
+
+function SetupProfileFlow({
+  profile,
+  sourceStatusText,
+  scheduleData,
+  onSave,
+  onSkip,
+}: {
+  profile: PersonalizationProfile;
+  sourceStatusText: string;
+  scheduleData: DailyScheduleConfig | null;
+  onSave: (profile: PersonalizationProfile) => void;
+  onSkip: () => void;
+}) {
+  const [draft, setDraft] = useState<PersonalizationProfile>(profile);
+
+  useEffect(() => {
+    setDraft(profile);
+  }, [profile]);
+
+  function updateDraft(patch: Partial<PersonalizationProfile>) {
+    setDraft((current) => ({ ...current, ...patch }));
+  }
+
+  function toggleDraftOption(field: "priorityTopics" | "housingInterests" | "macroInterests", value: string) {
+    setDraft((current) => {
+      const currentValues = current[field];
+      const nextValues = currentValues.includes(value)
+        ? currentValues.filter((item) => item !== value)
+        : [...currentValues, value];
+      return { ...current, [field]: nextValues };
+    });
+  }
+
+  function submitSetup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSave(normalizePersonalizationProfile(draft));
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#020617]/92 px-4 py-6 backdrop-blur-md">
+      <form
+        onSubmit={submitSetup}
+        className="mx-auto grid max-w-5xl gap-5 rounded-2xl border border-cyan-300/25 bg-[#07111f] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.55)] md:p-7"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="font-mono text-sm font-black uppercase text-lime-300">VerityDesk setup</p>
+            <h1 className="mt-3 max-w-3xl text-4xl font-black leading-none text-white md:text-5xl">
+              Tell it once. Let it brief you daily.
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">
+              Create a local profile so VerityDesk can personalize daily panels, chatbot answers, sources, and watch items without asking for the same context every time.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onSkip}
+            className="min-h-10 rounded-lg border border-[#1d3558] px-4 text-sm font-black text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-200"
+          >
+            Skip For Now
+          </button>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
+          <section className="rounded-xl border border-cyan-300/20 bg-[#020617]/70 p-4">
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Profile</p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <SettingsTextInput
+                id="setup-profile-name"
+                label="Profile name"
+                value={draft.profileName}
+                placeholder="Adith's briefing"
+                onChange={(value) => updateDraft({ profileName: value })}
+              />
+              <SettingsTextInput
+                id="setup-location"
+                label="Primary location"
+                value={draft.location}
+                placeholder="Phoenix, AZ"
+                onChange={(value) => updateDraft({ location: value })}
+              />
+              <SettingsTextInput
+                id="setup-housing"
+                label="Housing markets"
+                value={draft.housingMarkets}
+                placeholder="Phoenix, Scottsdale, Tucson"
+                onChange={(value) => updateDraft({ housingMarkets: value })}
+              />
+              <SettingsTextInput
+                id="setup-watchlist"
+                label="Watchlist"
+                value={draft.watchlist}
+                placeholder="SPY, QQQ, TLT"
+                onChange={(value) => updateDraft({ watchlist: value.toUpperCase() })}
+              />
+              <SettingsTextInput
+                id="setup-companies"
+                label="Companies"
+                value={draft.companies}
+                placeholder="Apple, Nvidia, Tesla"
+                onChange={(value) => updateDraft({ companies: value })}
+              />
+              <SettingsTextInput
+                id="setup-sectors"
+                label="Sectors"
+                value={draft.sectors}
+                placeholder="AI, homebuilders, banks"
+                onChange={(value) => updateDraft({ sectors: value })}
+              />
+            </div>
+            <label className="mt-4 block text-sm font-bold text-slate-200" htmlFor="setup-note">
+              What should VerityDesk know?
+              <textarea
+                id="setup-note"
+                value={draft.personalNote}
+                onChange={(event) => updateDraft({ personalNote: event.target.value })}
+                placeholder="Example: Keep answers practical. I care about Arizona housing, mortgage rates, broad market risk, and long-term tech."
+                className="mt-2 min-h-28 w-full resize-y rounded-xl border border-[#1d3558] bg-[#020617] px-4 py-3 text-sm leading-6 text-slate-300 outline-none focus:border-cyan-300"
+              />
+            </label>
+          </section>
+
+          <section className="grid gap-4">
+            <div className="rounded-xl border border-lime-300/25 bg-[linear-gradient(135deg,rgba(163,230,53,0.12),transparent_42%),#020617] p-4">
+              <p className="font-mono text-xs font-black uppercase text-lime-300">Local access</p>
+              <h2 className="mt-2 text-xl font-bold text-white">Saved on this Mac</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                This setup creates a local profile for personalization. A simple local passcode or full account login can be added when cloud sync becomes necessary.
+              </p>
+            </div>
+            <div className="rounded-xl border border-cyan-300/20 bg-[#020617]/70 p-4">
+              <p className="font-mono text-xs font-black uppercase text-cyan-300">System check</p>
+              <div className="mt-4 grid gap-2">
+                <SourceStripRow label="Sources" value={sourceStatusText} />
+                <SourceStripRow label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
+                <SourceStripRow label="Briefing time" value={formatScheduleTime(scheduleData)} />
+              </div>
+            </div>
+            <div className="rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
+              <p className="font-mono text-xs font-black uppercase text-slate-500">Output style</p>
+              <div className="mt-3 grid gap-3">
+                <SettingsSelect
+                  id="setup-briefing-style"
+                  label="Briefing detail"
+                  value={draft.briefingStyle}
+                  onChange={(value) => updateDraft({ briefingStyle: value as PersonalizationProfile["briefingStyle"] })}
+                  options={[
+                    ["quick", "Quick"],
+                    ["balanced", "Balanced"],
+                    ["detailed", "Detailed"],
+                  ]}
+                />
+                <SettingsTextInput
+                  id="setup-briefing-time"
+                  label="Preferred briefing time"
+                  type="time"
+                  value={draft.briefingTime}
+                  onChange={(value) => updateDraft({ briefingTime: value })}
+                />
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section className="grid gap-4 lg:grid-cols-3">
+          <CheckboxGroup
+            title="Topics"
+            options={topicOptions}
+            values={draft.priorityTopics}
+            onToggle={(value) => toggleDraftOption("priorityTopics", value)}
+          />
+          <CheckboxGroup
+            title="Housing"
+            options={housingInterestOptions}
+            values={draft.housingInterests}
+            onToggle={(value) => toggleDraftOption("housingInterests", value)}
+          />
+          <CheckboxGroup
+            title="Macro"
+            options={macroInterestOptions}
+            values={draft.macroInterests}
+            onToggle={(value) => toggleDraftOption("macroInterests", value)}
+          />
+        </section>
+
+        <div className="flex flex-col gap-3 border-t border-[#1d3558] pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm leading-6 text-slate-400">
+            You can change all of this later in Settings.
+          </p>
+          <button
+            type="submit"
+            className="min-h-11 rounded-lg bg-lime-300 px-5 text-sm font-black text-[#102000]"
+          >
+            Save And Start
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -1413,6 +1849,81 @@ function buildBriefingCards(profile: PersonalizationProfile) {
   ];
 }
 
+function buildDailyTopicPanels({
+  profile,
+  reports,
+  generateDailyBriefing,
+  generateHousingReport,
+  generateMarketStrategy,
+  generateCompanyReport,
+  generateMacroReport,
+}: {
+  profile: PersonalizationProfile;
+  reports: ReportResponse[];
+  generateDailyBriefing: () => void;
+  generateHousingReport: () => void;
+  generateMarketStrategy: () => void;
+  generateCompanyReport: () => void;
+  generateMacroReport: () => void;
+}): DailyTopicPanel[] {
+  const latestByType = latestReportByType(reports);
+  const location = profile.location || compactListLabel(splitList(profile.housingMarkets));
+  const watchlist = compactListLabel(splitList(profile.watchlist));
+
+  return [
+    {
+      title: "Daily Briefing",
+      description: "Today's personal intelligence summary will appear here after the daily refresh runs.",
+      report: latestByType.get("daily_briefing") ?? null,
+      borderClass: "border-lime-300/35",
+      dotClass: "bg-lime-300 shadow-[0_0_24px_rgba(163,230,53,0.8)]",
+      onRefresh: generateDailyBriefing,
+    },
+    {
+      title: "Local Housing Pulse",
+      description: `Rates, affordability, inventory, and local housing signals for ${location === "Not set" ? "your saved area" : location}.`,
+      report: latestByType.get("housing") ?? null,
+      borderClass: "border-cyan-300/30",
+      dotClass: "bg-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.8)]",
+      onRefresh: generateHousingReport,
+    },
+    {
+      title: "Market Setup",
+      description: "Indexes, rates, sector tone, volatility, commodities, and macro risk.",
+      report: latestByType.get("market_strategy") ?? null,
+      borderClass: "border-pink-300/30",
+      dotClass: "bg-pink-300 shadow-[0_0_24px_rgba(249,168,212,0.75)]",
+      onRefresh: generateMarketStrategy,
+    },
+    {
+      title: "Watchlist Moves",
+      description: `Catalysts, filings, news, and risk signals for ${watchlist === "Not set" ? "your saved watchlist" : watchlist}.`,
+      report: latestByType.get("company_research") ?? null,
+      borderClass: "border-orange-300/30",
+      dotClass: "bg-orange-300 shadow-[0_0_24px_rgba(253,186,116,0.75)]",
+      onRefresh: generateCompanyReport,
+    },
+    {
+      title: "Rates And Credit",
+      description: "Rates, yields, inflation pressure, credit conditions, Fed policy, and consumer stress.",
+      report: latestByType.get("macro") ?? null,
+      borderClass: "border-violet-300/30",
+      dotClass: "bg-violet-300 shadow-[0_0_24px_rgba(196,181,253,0.75)]",
+      onRefresh: generateMacroReport,
+    },
+  ];
+}
+
+function latestReportByType(reports: ReportResponse[]) {
+  const map = new Map<ReportResponse["report_type"], ReportResponse>();
+  for (const report of reports) {
+    if (!map.has(report.report_type)) {
+      map.set(report.report_type, report);
+    }
+  }
+  return map;
+}
+
 function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
   const promptContext = cardPromptContext(profile);
 
@@ -1431,6 +1942,7 @@ function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
 
 function cardPromptContext(profile: PersonalizationProfile) {
   const sections = [
+    profile.profileName ? `Profile: ${profile.profileName}` : null,
     profile.personalNote ? `Personal note: ${profile.personalNote}` : null,
     profile.location ? `Primary location: ${profile.location}` : null,
     profile.housingMarkets ? `Housing markets to track: ${profile.housingMarkets}` : null,
@@ -1451,6 +1963,14 @@ function cardPromptContext(profile: PersonalizationProfile) {
 
 function formatProfileChoice(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function titleCase(value: string) {
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 }
 
 function DashboardView({
@@ -1605,9 +2125,7 @@ function DashboardView({
             <div className="mt-4">
               <p className="text-sm font-semibold">{dailyReport.title}</p>
               <p className="mt-1 text-xs text-[#5b6573]">Retrieved At {formatDateTime(dailyReport.as_of ?? dailyReport.created_at)}</p>
-              <p className="mt-3 line-clamp-5 text-sm leading-6 text-[#374151]">
-                {cleanAnswerText(dailyReport.summary ?? dailyReport.body)}
-              </p>
+              <MarkdownAnswer text={cleanAnswerText(dailyReport.summary ?? dailyReport.body)} tone="light" compact />
               <div className="mt-4 flex flex-wrap gap-2">
                 <StatusBadge status={dailyReport.confidence} />
                 <span className="rounded-md border border-[#e5eaf0] px-2 py-1 text-xs font-semibold text-[#5b6573]">
@@ -1825,9 +2343,9 @@ function CompactReportPreview({ report }: { report: ReportResponse }) {
       <div>
         <p className="text-sm font-semibold">{report.title}</p>
         <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(report.as_of)}</p>
-        <p className="mt-3 max-h-72 overflow-auto whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
-          {cleanAnswerText(report.body)}
-        </p>
+        <div className="mt-3 max-h-72 overflow-auto rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
+          <MarkdownAnswer text={cleanAnswerText(report.body)} tone="light" />
+        </div>
       </div>
       <ReportEvidenceDrawer report={report} />
     </div>
@@ -1876,9 +2394,9 @@ function MarketStrategyCard({
           <div>
             <p className="text-sm font-semibold">{marketReport.title}</p>
             <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(marketReport.as_of)}</p>
-            <p className="mt-3 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
-              {marketReport.body}
-            </p>
+            <div className="mt-3 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
+              <MarkdownAnswer text={cleanAnswerText(marketReport.body)} tone="light" />
+            </div>
           </div>
           <ReportEvidenceDrawer report={marketReport} />
         </div>
@@ -2198,12 +2716,12 @@ function ReportReadingPanel({ report, variant }: { report: ReportResponse; varia
       {variant === "briefing" && (
         <div>
           <p className="text-sm font-semibold">{report.title}</p>
-          {report.summary && <p className="mt-2 text-sm leading-6 text-[#5b6573]">{cleanAnswerText(report.summary)}</p>}
+          {report.summary && <MarkdownAnswer text={cleanAnswerText(report.summary)} tone="light" compact />}
         </div>
       )}
 
-      <article className="whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-4 text-sm leading-7 text-[#374151]">
-        {cleanAnswerText(report.body)}
+      <article className="rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-4">
+        <MarkdownAnswer text={cleanAnswerText(report.body)} tone="light" />
       </article>
 
       <p className="rounded-md border border-[#e5eaf0] bg-white p-3 text-xs leading-5 text-[#5b6573]">
@@ -2372,54 +2890,187 @@ function SourcesView({
 }
 
 function WatchlistView({
+  watchItemsData,
+  watchItemsLoading,
+  watchItemsError,
+  watchEvaluationLoading,
+  newWatchTitle,
+  newWatchQuery,
+  newWatchCategory,
   companyTicker,
   companyName,
   companyReport,
   companyReportLoading,
   companyReportError,
+  setNewWatchTitle,
+  setNewWatchQuery,
+  setNewWatchCategory,
   setCompanyTicker,
   setCompanyName,
+  createWatchItem,
+  deleteWatchItem,
+  evaluateWatchItems,
   generateCompanyReport,
 }: {
+  watchItemsData: WatchItemListResponse | null;
+  watchItemsLoading: boolean;
+  watchItemsError: string | null;
+  watchEvaluationLoading: boolean;
+  newWatchTitle: string;
+  newWatchQuery: string;
+  newWatchCategory: string;
   companyTicker: string;
   companyName: string;
   companyReport: ReportResponse | null;
   companyReportLoading: boolean;
   companyReportError: string | null;
+  setNewWatchTitle: (value: string) => void;
+  setNewWatchQuery: (value: string) => void;
+  setNewWatchCategory: (value: string) => void;
   setCompanyTicker: (value: string) => void;
   setCompanyName: (value: string) => void;
+  createWatchItem: (event: FormEvent<HTMLFormElement>) => void;
+  deleteWatchItem: (watchItemId: number) => void;
+  evaluateWatchItems: () => void;
   generateCompanyReport: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-        <h3 className="text-lg font-semibold">Watchlist</h3>
-        <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-1">
-          {watchlistRows.map((row) => (
-            <div key={row.symbol} className="rounded-md border border-[#e5eaf0] p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-lg font-semibold">{row.symbol}</p>
-                <span className="rounded-md bg-[#eef3f5] px-2 py-1 text-xs font-medium text-[#25636b]">
-                  {row.state}
-                </span>
+    <div className="grid gap-4">
+      <section className="rounded-xl border border-cyan-300/20 bg-[#020617] p-4 text-slate-100">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Watch Items</p>
+            <h3 className="mt-1 text-xl font-bold text-white">Things VerityDesk should keep an eye on</h3>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+              Save plain-English signals. Daily refresh checks them against saved reports and flags anything that looks meaningful.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={evaluateWatchItems}
+            disabled={watchEvaluationLoading}
+            className="min-h-10 rounded-lg border border-lime-300/40 px-4 text-sm font-black text-lime-300 transition hover:border-lime-300 disabled:cursor-not-allowed disabled:text-slate-500"
+          >
+            {watchEvaluationLoading ? "Checking" : "Check Watch Items"}
+          </button>
+        </div>
+
+        <form onSubmit={createWatchItem} className="mt-5 grid gap-3 rounded-xl border border-[#1d3558] bg-[#07111f] p-4 lg:grid-cols-[0.8fr_1.3fr_0.6fr_auto]">
+          <label className="block text-sm font-bold text-slate-300" htmlFor="watch-title">
+            Name
+            <input
+              id="watch-title"
+              value={newWatchTitle}
+              onChange={(event) => setNewWatchTitle(event.target.value)}
+              placeholder="Mortgage rates below 6.5"
+              className="mt-2 h-10 w-full rounded-lg border border-[#1d3558] bg-[#020617] px-3 text-sm text-white outline-none focus:border-cyan-300"
+            />
+          </label>
+          <label className="block text-sm font-bold text-slate-300" htmlFor="watch-query">
+            What To Watch
+            <input
+              id="watch-query"
+              value={newWatchQuery}
+              onChange={(event) => setNewWatchQuery(event.target.value)}
+              placeholder="Tell me when Arizona affordability or mortgage rates meaningfully change"
+              className="mt-2 h-10 w-full rounded-lg border border-[#1d3558] bg-[#020617] px-3 text-sm text-white outline-none focus:border-cyan-300"
+            />
+          </label>
+          <label className="block text-sm font-bold text-slate-300" htmlFor="watch-category">
+            Category
+            <select
+              id="watch-category"
+              value={newWatchCategory}
+              onChange={(event) => setNewWatchCategory(event.target.value)}
+              className="mt-2 h-10 w-full rounded-lg border border-[#1d3558] bg-[#020617] px-3 text-sm text-white outline-none focus:border-cyan-300"
+            >
+              {["custom", "market", "company", "housing", "macro", "world"].map((category) => (
+                <option key={category} value={category}>
+                  {titleCase(category)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="submit"
+            disabled={!newWatchTitle.trim() || !newWatchQuery.trim()}
+            className="min-h-10 self-end rounded-lg bg-cyan-300 px-4 text-sm font-black text-[#04111f] disabled:cursor-not-allowed disabled:bg-slate-500"
+          >
+            Add
+          </button>
+        </form>
+
+        {watchItemsError && <p className="mt-4 rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-100">{watchItemsError}</p>}
+
+        <div className="mt-5 grid gap-3">
+          {watchItemsLoading && <div className="rounded-xl border border-[#1d3558] bg-[#07111f] p-4 text-sm text-slate-400">Loading watch items.</div>}
+          {!watchItemsLoading && (watchItemsData?.items ?? []).length === 0 && (
+            <div className="rounded-xl border border-dashed border-[#1d3558] bg-[#07111f] p-5 text-sm leading-6 text-slate-400">
+              No watch items yet. Add one like "Phoenix inventory rising" or "Fed cut odds changing" and VerityDesk will check it during daily refresh.
+            </div>
+          )}
+          {(watchItemsData?.items ?? []).map((item) => (
+            <div key={item.id} className="rounded-xl border border-[#1d3558] bg-[#07111f] p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-lg font-bold text-white">{item.title}</p>
+                    <NeonChip variant={item.status === "alert" ? "live" : item.status === "quiet" ? undefined : "search"}>
+                      {titleCase(item.status)}
+                    </NeonChip>
+                    <NeonChip>{titleCase(item.category)}</NeonChip>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">{item.query}</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-300">
+                    {item.last_summary ?? "Waiting for the first check against saved daily reports."}
+                  </p>
+                  <p className="mt-2 font-mono text-xs font-bold uppercase text-slate-500">
+                    Last checked {formatDateTime(item.last_checked_at)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => deleteWatchItem(item.id)}
+                  className="min-h-9 rounded-lg border border-[#1d3558] px-3 text-xs font-black text-slate-400 transition hover:border-red-300/50 hover:text-red-200"
+                >
+                  Remove
+                </button>
               </div>
-              <p className="mt-3 text-sm text-[#5b6573]">{row.focus}</p>
+              {item.alerts.length > 0 && (
+                <details className="mt-3 rounded-lg border border-cyan-300/20 bg-[#020617] p-3">
+                  <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">
+                    Alerts ({item.alerts.length})
+                  </summary>
+                  <div className="mt-3 grid gap-2">
+                    {item.alerts.slice(0, 3).map((alert) => (
+                      <div key={alert.id} className="rounded-lg border border-[#1d3558] p-3 text-sm text-slate-300">
+                        <p className="font-bold text-white">{alert.title}</p>
+                        <p className="mt-1 leading-5">{alert.message}</p>
+                        <p className="mt-2 font-mono text-xs font-bold uppercase text-slate-500">
+                          {formatDateTime(alert.triggered_at)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
           ))}
         </div>
       </section>
 
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+      <section className="rounded-xl border border-cyan-300/20 bg-[#020617] p-4 text-slate-100">
         <form onSubmit={generateCompanyReport}>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <h3 className="text-lg font-semibold">Company Research</h3>
-              <p className="mt-1 text-sm text-[#5b6573]">Generate a saved company report from filings, news, and market context.</p>
+              <p className="font-mono text-xs font-black uppercase text-cyan-300">Company Deep Dive</p>
+              <h3 className="mt-1 text-xl font-bold text-white">Generate a saved company report</h3>
+              <p className="mt-2 text-sm text-slate-400">Use filings, news, market context, and live research for a company-specific read.</p>
             </div>
             <button
               type="submit"
               disabled={companyReportLoading || (!companyTicker.trim() && !companyName.trim())}
-              className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
+              className="min-h-10 rounded-lg bg-lime-300 px-4 py-2 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-500"
             >
               {companyReportLoading ? "Generating" : "Generate Company Report"}
             </button>
@@ -2431,7 +3082,7 @@ function WatchlistView({
                 id="company-ticker"
                 value={companyTicker}
                 onChange={(event) => setCompanyTicker(event.target.value.toUpperCase())}
-                className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+                className="mt-2 h-10 w-full rounded-lg border border-[#1d3558] bg-[#07111f] px-3 text-sm text-white outline-none focus:border-cyan-300"
               />
             </label>
             <label className="block text-sm font-medium" htmlFor="company-name">
@@ -2440,17 +3091,17 @@ function WatchlistView({
                 id="company-name"
                 value={companyName}
                 onChange={(event) => setCompanyName(event.target.value)}
-                className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
+                className="mt-2 h-10 w-full rounded-lg border border-[#1d3558] bg-[#07111f] px-3 text-sm text-white outline-none focus:border-cyan-300"
               />
             </label>
           </div>
         </form>
 
         {companyReportError && (
-          <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{companyReportError}</p>
+          <p className="mt-4 rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-100">{companyReportError}</p>
         )}
         {!companyReport && !companyReportError && (
-          <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
+          <div className="mt-4 rounded-xl border border-dashed border-[#1d3558] bg-[#07111f] p-6 text-sm text-slate-400">
             No company report generated in this session yet.
           </div>
         )}
@@ -2463,10 +3114,10 @@ function WatchlistView({
             </div>
             <div>
               <p className="text-sm font-semibold">{companyReport.title}</p>
-              <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(companyReport.as_of)}</p>
-              <p className="mt-3 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
-                {companyReport.body}
-              </p>
+              <p className="mt-1 text-xs text-slate-500">Generated At {formatDateTime(companyReport.as_of)}</p>
+              <div className="mt-3 rounded-xl border border-[#1d3558] bg-[#07111f] p-3">
+                <MarkdownAnswer text={cleanAnswerText(companyReport.body)} tone="dark" />
+              </div>
             </div>
             <ReportEvidenceDrawer report={companyReport} />
           </div>
@@ -2648,9 +3299,9 @@ function AgentChatView({
             </div>
             <div>
               <p className="text-sm font-semibold">Natural Language Response</p>
-              <p className="mt-2 whitespace-pre-line rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3 text-sm leading-6 text-[#374151]">
-                {agentResponse.summary}
-              </p>
+              <div className="mt-2 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
+                <MarkdownAnswer text={agentResponse.summary} tone="light" />
+              </div>
             </div>
             <EvidenceDrawer response={agentResponse} />
           </div>
@@ -2721,6 +3372,83 @@ function InferredContextPanel({
       </div>
     </section>
   );
+}
+
+function MarkdownAnswer({ text, tone = "dark", compact = false }: { text: string | null | undefined; tone?: "dark" | "light"; compact?: boolean }) {
+  const lines = (text || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const textClass = tone === "dark" ? "text-slate-300" : "text-[#374151]";
+  const mutedClass = tone === "dark" ? "text-slate-400" : "text-[#5b6573]";
+  const headingClass = tone === "dark" ? "text-cyan-200" : "text-[#143642]";
+
+  if (lines.length === 0) {
+    return <p className={`text-sm leading-7 ${mutedClass}`}>No response available yet.</p>;
+  }
+
+  return (
+    <div className={`${compact ? "space-y-2" : "space-y-3"} text-sm leading-7 ${textClass}`}>
+      {lines.map((line, index) => {
+        const heading = markdownHeadingText(line);
+        if (heading) {
+          return (
+            <h3 key={`${line}-${index}`} className={`font-mono text-xs font-black uppercase tracking-normal ${headingClass}`}>
+              {renderInlineMarkdown(heading)}
+            </h3>
+          );
+        }
+
+        const bullet = markdownBulletText(line);
+        if (bullet) {
+          return (
+            <div key={`${line}-${index}`} className="flex gap-2">
+              <span className={tone === "dark" ? "text-lime-300" : "text-[#25636b]"}>-</span>
+              <p>{renderInlineMarkdown(bullet)}</p>
+            </div>
+          );
+        }
+
+        return <p key={`${line}-${index}`}>{renderInlineMarkdown(line)}</p>;
+      })}
+    </div>
+  );
+}
+
+function markdownHeadingText(line: string) {
+  if (line.startsWith("### ")) {
+    return line.slice(4).trim();
+  }
+  if (line.startsWith("## ")) {
+    return line.slice(3).trim();
+  }
+
+  const normalized = line.replace(/\*\*/g, "").trim();
+  if (/^(bottom line|what changed|major trends|why it matters|why it matters to you|what to watch|what to watch next|confidence and gaps|uncertainty\/data gaps|uncertainty and data gaps):?$/i.test(normalized)) {
+    return normalized.replace(/:$/, "");
+  }
+
+  return null;
+}
+
+function markdownBulletText(line: string) {
+  if (line.startsWith("- ")) {
+    return line.slice(2).trim();
+  }
+  if (line.startsWith("* ")) {
+    return line.slice(2).trim();
+  }
+  return null;
+}
+
+function renderInlineMarkdown(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={`${part}-${index}`} className="font-black text-inherit">{part.slice(2, -2)}</strong>;
+    }
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
 }
 
 function InlineList({ title, values }: { title: string; values: string[] }) {
@@ -2946,6 +3674,7 @@ function SettingsView({
   triggerIngestionRun,
   saveSchedule,
   savePersonalizationProfile,
+  openSetup,
 }: {
   sourceData: SourceCatalogResponse | null;
   sourceError: string | null;
@@ -2964,6 +3693,7 @@ function SettingsView({
   triggerIngestionRun: () => void;
   saveSchedule: (nextSchedule: DailyScheduleConfig) => Promise<void>;
   savePersonalizationProfile: (nextProfile: PersonalizationProfile) => void;
+  openSetup: () => void;
 }) {
   const schedule = scheduleData ?? defaultScheduleConfig();
   const [profileDraft, setProfileDraft] = useState<PersonalizationProfile>(personalizationProfile);
@@ -3044,6 +3774,13 @@ function SettingsView({
           >
             Save Profile
           </button>
+          <button
+            type="button"
+            onClick={openSetup}
+            className="min-h-10 rounded-lg border border-cyan-300/30 px-4 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
+          >
+            Run Setup
+          </button>
         </div>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
@@ -3059,6 +3796,13 @@ function SettingsView({
           </label>
 
           <div className="grid gap-3">
+            <SettingsTextInput
+              id="profile-name"
+              label="Profile name"
+              value={profileDraft.profileName}
+              placeholder="My VerityDesk"
+              onChange={(value) => updateProfile({ profileName: value })}
+            />
             <SettingsTextInput
               id="profile-location"
               label="Preferred location"
@@ -3756,6 +4500,15 @@ function cleanAnswerText(value: string | null | undefined) {
   return cleaned || null;
 }
 
+function compactText(value: string, maxLength: number) {
+  const singleLine = value.replace(/\s+/g, " ").trim();
+  if (singleLine.length <= maxLength) {
+    return singleLine;
+  }
+
+  return `${singleLine.slice(0, maxLength).trim()}...`;
+}
+
 function latestCitationTimestamp(citations: AgentResponse["citations"]) {
   const timestamps = citations
     .map((citation) => citation.retrieved_at ?? citation.published_at)
@@ -3851,6 +4604,7 @@ function defaultScheduleConfig(): DailyScheduleConfig {
 
 function defaultPersonalizationProfile(): PersonalizationProfile {
   return {
+    profileName: "",
     personalNote: "",
     location: "",
     housingMarkets: "",
@@ -3889,9 +4643,18 @@ function loadPersonalizationProfile() {
   }
 }
 
+function isSetupComplete(profile: PersonalizationProfile) {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  return window.localStorage.getItem(SETUP_COMPLETE_STORAGE_KEY) === "true" || Boolean(profile.profileName || profile.location || profile.personalNote);
+}
+
 function normalizePersonalizationProfile(profile: PersonalizationProfile): PersonalizationProfile {
   return {
     ...profile,
+    profileName: profile.profileName.trim(),
     personalNote: profile.personalNote.trim(),
     location: profile.location.trim(),
     housingMarkets: normalizeListText(profile.housingMarkets),
@@ -4170,6 +4933,7 @@ function containsAny(value: string, terms: string[]) {
 }
 
 function profileSummary(profile: PersonalizationProfile) {
+  const profileName = profile.profileName || "local profile";
   const location = profile.location || "no location yet";
   const housingMarkets = compactListLabel(splitList(profile.housingMarkets));
   const watchlist = compactListLabel(splitList(profile.watchlist));
@@ -4178,7 +4942,7 @@ function profileSummary(profile: PersonalizationProfile) {
   const ignoredTopics = compactListLabel(splitList(profile.ignoredTopics));
 
   const note = profile.personalNote ? `Note: ${profile.personalNote}. ` : "";
-  return `${note}Location: ${location}. Housing markets: ${housingMarkets}. Watchlist: ${watchlist}. Sectors: ${sectors}. Priority topics: ${topics}. Risk: ${formatProfileChoice(profile.riskPreference)}. Investing style: ${formatProfileChoice(profile.investingStyle)}. Answer format: ${formatProfileChoice(profile.answerFormat)}. Ignored topics: ${ignoredTopics}. Briefing style: ${profile.briefingStyle}.`;
+  return `${profileName}. ${note}Location: ${location}. Housing markets: ${housingMarkets}. Watchlist: ${watchlist}. Sectors: ${sectors}. Priority topics: ${topics}. Risk: ${formatProfileChoice(profile.riskPreference)}. Investing style: ${formatProfileChoice(profile.investingStyle)}. Answer format: ${formatProfileChoice(profile.answerFormat)}. Ignored topics: ${ignoredTopics}. Briefing style: ${profile.briefingStyle}.`;
 }
 
 function formatAgentIntent(intent: AgentIntent) {

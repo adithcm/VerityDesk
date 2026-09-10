@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -250,6 +251,122 @@ def test_generate_daily_briefing_saves_agent_response_and_citations(monkeypatch)
         assert response.summary == "Markets are focused on rates and labor data today."
         assert len(response.citations) == 1
         assert response.citations[0].title == "Markets watch rates"
+
+
+def test_generated_report_adds_signal_metadata(monkeypatch) -> None:
+    def fake_run_agent_query(request, session):
+        return AgentQueryResponse(
+            request_id="signal-request-1",
+            summary="## Bottom Line\n\n**Markets** have several current source-backed signals today.",
+            agents_ran=["CoordinatorAgent", "NewsDigestAgent", "SynthesisAgent"],
+            claims=[],
+            citations=[
+                AgentCitation(
+                    source_id="Source One",
+                    title="Signal one",
+                    url="https://example.test/one",
+                    publisher="Source One",
+                    supports_claim="Signal one.",
+                ),
+                AgentCitation(
+                    source_id="Source One",
+                    title="Signal two",
+                    url="https://example.test/two",
+                    publisher="Source One",
+                    supports_claim="Signal two.",
+                ),
+                AgentCitation(
+                    source_id="Source One",
+                    title="Signal three",
+                    url="https://example.test/three",
+                    publisher="Source One",
+                    supports_claim="Signal three.",
+                ),
+            ],
+            confidence="high",
+            risks=[],
+            follow_up_questions=[],
+            guardrail=GuardrailCheck(
+                status="passed",
+                disclaimer="This is not financial advice.",
+                issues=[],
+                banned_phrases_found=[],
+                required_sections=[],
+            ),
+            requires_guardrail_review=False,
+        )
+
+    monkeypatch.setattr(reports, "run_agent_query", fake_run_agent_query)
+
+    with build_session() as session:
+        session.add(
+            Source(
+                name="Source One",
+                base_url="https://example.test",
+                source_type="official_api",
+                domains=["Markets and Rates"],
+                access_method="api",
+            )
+        )
+        session.commit()
+
+        response = generate_daily_briefing(session, reports.DailyBriefingRequest())
+
+        assert response.metadata["signal_label"] == "High Signal"
+        assert response.metadata["change_label"] == "New"
+        assert response.metadata["citation_count"] == 3
+        assert response.metadata["source_quality"].startswith("Strong")
+
+
+def test_generated_report_detects_no_meaningful_change(monkeypatch) -> None:
+    unchanged_body = "## Bottom Line\n\nMortgage rates and housing affordability remain the core housing signal today."
+
+    def fake_run_agent_query(request, session):
+        return AgentQueryResponse(
+            request_id="unchanged-request-1",
+            summary=unchanged_body,
+            agents_ran=["CoordinatorAgent", "HousingAgent", "SynthesisAgent"],
+            claims=[],
+            citations=[],
+            confidence="medium",
+            risks=[],
+            follow_up_questions=[],
+            guardrail=GuardrailCheck(
+                status="passed",
+                disclaimer="This is not financial advice.",
+                issues=[],
+                banned_phrases_found=[],
+                required_sections=[],
+            ),
+            requires_guardrail_review=False,
+        )
+
+    monkeypatch.setattr(reports, "run_agent_query", fake_run_agent_query)
+
+    with build_session() as session:
+        session.add(
+            Report(
+                report_type="housing",
+                status="generated",
+                title="Prior Housing",
+                summary=unchanged_body,
+                body=unchanged_body,
+                domains=["Housing and Real Estate"],
+                tickers=[],
+                companies=[],
+                as_of=datetime.now(UTC) - timedelta(days=1),
+                confidence="medium",
+                disclaimer_version="v1",
+                guardrail_status="passed",
+                report_metadata={},
+            )
+        )
+        session.commit()
+
+        response = generate_housing_report(session, reports.HousingReportRequest())
+
+        assert response.metadata["change_label"] == "No Meaningful Change"
+        assert response.metadata["previous_report_id"] is not None
 
 
 def test_generate_daily_briefing_uses_saved_preferences(monkeypatch) -> None:

@@ -121,11 +121,16 @@ def build_template_synthesis_summary(lines: list[str]) -> str:
 
     details = " ".join(evidence_lines[:3])
     return (
-        "Bottom Line: Here is the clearest source-backed read from the available evidence.\n\n"
-        f"Major Trends: {details}\n\n"
-        "What Changed Recently: Recent evidence should be treated as directional unless multiple current sources confirm it.\n\n"
-        "Why It Matters: The main practical value is understanding what is moving, what is still uncertain, and what deserves attention next.\n\n"
-        "Uncertainty/Data Gaps: Confidence depends on the freshness, specificity, and agreement of the available sources."
+        "## Bottom Line\n"
+        "Here is the clearest **source-backed** read from the available evidence.\n\n"
+        "## Major Trends\n"
+        f"- {details}\n\n"
+        "## What Changed\n"
+        "- Recent evidence should be treated as directional unless multiple current sources confirm it.\n\n"
+        "## Why It Matters\n"
+        "- The main practical value is understanding what is moving, what is still uncertain, and what deserves attention next.\n\n"
+        "## Confidence And Gaps\n"
+        "- Confidence depends on the freshness, specificity, and agreement of the available sources."
     )
 
 
@@ -141,9 +146,10 @@ def build_prompt(agent_name: str, instructions: str, evidence: str) -> str:
     return (
         f"You are {agent_name}, a careful research agent for a local market intelligence app.\n"
         "Use only the provided evidence. Do not invent facts. Do not give direct buy, sell, or hold instructions. "
-        "Keep the answer concise and include uncertainty when evidence is thin. For final synthesis, prefer these "
-        "sections when helpful: Bottom Line, Major Trends, What Changed Recently, Why It Matters, What To Watch Next, "
-        "and Uncertainty/Data Gaps. Do not dump citations into the main answer; citations are handled separately.\n\n"
+        "Keep the answer concise and include uncertainty when evidence is thin. For final synthesis, write clean Markdown "
+        "with short sections such as ## Bottom Line, ## What Changed, ## Major Trends, ## Why It Matters To You, "
+        "## What To Watch, and ## Confidence And Gaps. Use **bold** for the most important terms, keep bullets short, "
+        "and do not dump citations into the main answer; citations are handled separately.\n\n"
         f"Agent instructions:\n{instructions}\n\n"
         f"Evidence:\n{evidence}"
     )

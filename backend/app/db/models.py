@@ -260,3 +260,38 @@ class UserSettings(TimestampMixin, Base):
     llm_provider: Mapped[str] = mapped_column(String(80), default="openai")
     api_key_status: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     disclaimer_acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class WatchItem(TimestampMixin, Base):
+    __tablename__ = "watch_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(255), index=True)
+    category: Mapped[str] = mapped_column(String(80), default="custom", index=True)
+    query: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(80), default="watching", index=True)
+    priority: Mapped[str] = mapped_column(String(40), default="normal")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_summary: Mapped[str | None] = mapped_column(Text)
+    trigger_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+
+    alerts: Mapped[list["WatchAlert"]] = relationship(back_populates="watch_item", cascade="all, delete-orphan")
+
+
+class WatchAlert(TimestampMixin, Base):
+    __tablename__ = "watch_alerts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    watch_item_id: Mapped[int] = mapped_column(ForeignKey("watch_items.id"), index=True)
+    report_id: Mapped[int | None] = mapped_column(ForeignKey("reports.id"), index=True)
+    title: Mapped[str] = mapped_column(String(255), index=True)
+    message: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(80), default="new", index=True)
+    triggered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    alert_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+
+    watch_item: Mapped[WatchItem] = relationship(back_populates="alerts")
+    report: Mapped[Report | None] = relationship()

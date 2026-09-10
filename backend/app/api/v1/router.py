@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import agents, ingestion, preferences, reports, sources, suggestions, system
+from app.api.v1.endpoints import agents, ingestion, preferences, reports, sources, suggestions, system, watchlist
 
 
 api_router = APIRouter()
@@ -11,3 +11,4 @@ api_router.include_router(reports.router)
 api_router.include_router(sources.router)
 api_router.include_router(suggestions.router)
 api_router.include_router(preferences.router)
+api_router.include_router(watchlist.router)

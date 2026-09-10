@@ -396,11 +396,44 @@ Not in scope:
 
 Detailed plan: [Phase 9](../phases/phase-9/README.md).
 
+## Phase 9.5: Product Differentiation Cleanup
+
+Status: In Progress
+
+Purpose: bridge the gap between a working research app and an everyday-use personal intelligence product before desktop deployment.
+
+User feedback driving this phase:
+
+- The app should feel less like manually asking Codex or a generic chatbot.
+- Preset topics should already show daily generated responses instead of acting like prompt buttons.
+- The user should open the app and immediately see useful personalized intelligence.
+- The app needs a simple setup/login/profile flow so user details and settings are captured cleanly.
+- Responses should be easier to scan with Markdown-style headers, bold key terms, short bullets, and fewer walls of text.
+- The product should become more unique through daily change tracking, signal/noise filtering, watch items, alerts, and future widgets.
+
+Deliverables:
+
+- Document the product differentiation north star and cleanup milestones.
+- Create a simple first-time setup/profile flow.
+- Turn preset cards into stored daily topic panels.
+- Render cleaner Markdown answers with hidden evidence drawers.
+- Add "what changed since yesterday/last week" and signal/noise labels.
+- Add saved watch items and an alerts foundation.
+- Document future add-ons such as menu bar status, desktop widgets, weekly exports, and monitor-style notifications.
+
+Not in scope:
+
+- Final macOS `.app` packaging.
+- Portable Docker deployment.
+- Multi-user cloud sync.
+
+Detailed plan: [Phase 9.5](../phases/phase-9-5/README.md).
+
 ## Phase 10: Local Desktop App
 
 Status: Planned
 
-Purpose: package the local web app as a native-feeling macOS desktop app after the UI, source coverage, agent workflows, and final polish pass are reliable.
+Purpose: package the local web app as a native-feeling macOS desktop app after the UI, source coverage, agent workflows, product differentiation pass, and final polish pass are reliable.
 
 Deliverables:
 
@@ -409,6 +442,7 @@ Deliverables:
 - macOS `.dmg` build.
 - App icon.
 - Local backend startup behavior.
+- Background refresh behavior so daily jobs can run when the UI window is not open, as long as the installed app/background service is active.
 - Desktop menu basics.
 - Local storage path handling.
 
