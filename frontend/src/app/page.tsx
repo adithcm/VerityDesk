@@ -372,7 +372,7 @@ const shellNavigation: ShellNavItem[] = [
   { label: "Day", title: "Daily Briefing", view: "Daily Briefing" },
   { label: "Rpt", title: "Reports", view: "Reports" },
   { label: "Src", title: "Sources", view: "Sources" },
-  { label: "Co", title: "Watchlist", view: "Watchlist" },
+  { label: "Wch", title: "Watchlist", view: "Watchlist" },
   { label: "Set", title: "Settings", view: "Settings" },
 ];
 
@@ -1208,6 +1208,7 @@ export default function Home() {
           generateMarketStrategy={generateMarketStrategy}
           generateCompanyReport={generateCompanyReport}
           generateMacroReport={generateMacroReport}
+          applySuggestion={applySuggestion}
           openSettings={() => setActiveView("Settings")}
         />
       </div>
@@ -1394,6 +1395,7 @@ function BriefingCardsPanel({
   generateMarketStrategy,
   generateCompanyReport,
   generateMacroReport,
+  applySuggestion,
   openSettings,
 }: {
   personalizationProfile: PersonalizationProfile;
@@ -1409,6 +1411,7 @@ function BriefingCardsPanel({
   generateMarketStrategy: () => void;
   generateCompanyReport: () => void;
   generateMacroReport: () => void;
+  applySuggestion: (suggestion: ProactiveSuggestion) => void;
   openSettings: () => void;
 }) {
   const panels = buildDailyTopicPanels({
@@ -1461,7 +1464,7 @@ function BriefingCardsPanel({
               <button
                 key={suggestion.id}
                 type="button"
-                onClick={openSettings}
+                onClick={() => applySuggestion(suggestion)}
                 className="rounded-lg border border-[#1d3558] px-3 py-2 text-left text-sm leading-5 text-slate-300 hover:border-cyan-300/50"
               >
                 {suggestion.title}
@@ -3095,7 +3098,7 @@ function WatchlistView({
         </form>
 
         {companyReportError && (
-          <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{companyReportError}</p>
+          <p className="mt-4 rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-100">{companyReportError}</p>
         )}
         {!companyReport && !companyReportError && (
           <div className="mt-4 rounded-xl border border-dashed border-[#1d3558] bg-[#07111f] p-6 text-sm text-slate-400">
@@ -3111,9 +3114,9 @@ function WatchlistView({
             </div>
             <div>
               <p className="text-sm font-semibold">{companyReport.title}</p>
-              <p className="mt-1 text-xs text-[#5b6573]">Generated At {formatDateTime(companyReport.as_of)}</p>
-              <div className="mt-3 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
-                <MarkdownAnswer text={cleanAnswerText(companyReport.body)} tone="light" />
+              <p className="mt-1 text-xs text-slate-500">Generated At {formatDateTime(companyReport.as_of)}</p>
+              <div className="mt-3 rounded-xl border border-[#1d3558] bg-[#07111f] p-3">
+                <MarkdownAnswer text={cleanAnswerText(companyReport.body)} tone="dark" />
               </div>
             </div>
             <ReportEvidenceDrawer report={companyReport} />

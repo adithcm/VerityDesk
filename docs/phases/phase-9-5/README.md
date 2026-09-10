@@ -201,12 +201,14 @@ Milestone doc: [milestones/9.5.6-watch-items-and-alerts-foundation.md](milestone
 
 ### 9.5.7 Final Simplification And Local Testing
 
-Status: Planned
+Status: Complete
 
 - Remove leftover visual clutter.
 - Test the full daily-use flow locally.
 - Tune answer length, panel text, empty states, and setup wording.
 - Prepare handoff into Phase 10 desktop deployment.
+
+Milestone doc: [milestones/9.5.7-final-simplification-and-local-testing.md](milestones/9.5.7-final-simplification-and-local-testing.md)
 
 ## Definition Of Done
 
