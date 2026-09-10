@@ -157,12 +157,14 @@ Milestone doc: [milestones/9.5.2-setup-and-profile-flow.md](milestones/9.5.2-set
 
 ### 9.5.3 Daily Topic Panel Model
 
-Status: Planned
+Status: Complete
 
 - Add stored daily panel records.
 - Generate and persist panel responses during daily refresh.
 - Show current panel answers on home without requiring a card click.
 - Keep manual refresh optional.
+
+Milestone doc: [milestones/9.5.3-daily-topic-panel-model.md](milestones/9.5.3-daily-topic-panel-model.md)
 
 ### 9.5.4 Markdown Answer Rendering
 

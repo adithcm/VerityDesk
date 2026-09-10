@@ -744,8 +744,8 @@ export default function Home() {
     }
   }
 
-  async function generateCompanyReport(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function generateCompanyReport(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     setCompanyReportLoading(true);
     setCompanyReportError(null);
 
@@ -1064,10 +1064,16 @@ export default function Home() {
           personalizationProfile={personalizationProfile}
           sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
           scheduleData={scheduleData}
+          reportListData={reportListData}
+          reportsLoading={reportsLoading}
           suggestionsData={suggestionsData}
           suggestionsLoading={suggestionsLoading}
           suggestionsError={suggestionsError}
-          askFromShell={askFromShell}
+          generateDailyBriefing={generateDailyBriefing}
+          generateHousingReport={generateHousingReport}
+          generateMarketStrategy={generateMarketStrategy}
+          generateCompanyReport={generateCompanyReport}
+          generateMacroReport={generateMacroReport}
           openSettings={() => setActiveView("Settings")}
         />
       </div>
@@ -1244,58 +1250,62 @@ function BriefingCardsPanel({
   personalizationProfile,
   sourceStatusText,
   scheduleData,
+  reportListData,
+  reportsLoading,
   suggestionsData,
   suggestionsLoading,
   suggestionsError,
-  askFromShell,
+  generateDailyBriefing,
+  generateHousingReport,
+  generateMarketStrategy,
+  generateCompanyReport,
+  generateMacroReport,
   openSettings,
 }: {
   personalizationProfile: PersonalizationProfile;
   sourceStatusText: string;
   scheduleData: DailyScheduleConfig | null;
+  reportListData: ReportListResponse | null;
+  reportsLoading: boolean;
   suggestionsData: ProactiveSuggestionsResponse | null;
   suggestionsLoading: boolean;
   suggestionsError: string | null;
-  askFromShell: (question?: string) => void;
+  generateDailyBriefing: () => void;
+  generateHousingReport: () => void;
+  generateMarketStrategy: () => void;
+  generateCompanyReport: () => void;
+  generateMacroReport: () => void;
   openSettings: () => void;
 }) {
-  const cards = buildBriefingCards(personalizationProfile);
+  const panels = buildDailyTopicPanels({
+    profile: personalizationProfile,
+    reports: reportListData?.reports ?? [],
+    generateDailyBriefing,
+    generateHousingReport,
+    generateMarketStrategy,
+    generateCompanyReport,
+    generateMacroReport,
+  });
 
   return (
     <aside className="grid content-start gap-4 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-white">Quick Briefings</h2>
-          <p className="mt-1 font-mono text-xs font-black uppercase text-slate-500">Auto routed</p>
+          <h2 className="text-lg font-bold text-white">Today&apos;s Panels</h2>
+          <p className="mt-1 font-mono text-xs font-black uppercase text-slate-500">Saved daily intelligence</p>
         </div>
         <button type="button" onClick={openSettings} className="text-sm font-bold text-cyan-300">
           Tune
         </button>
       </div>
 
-      <button
-        type="button"
-        onClick={() => askFromShell(buildDailyBriefingPrompt(personalizationProfile))}
-        className="min-h-28 rounded-xl border border-lime-300/35 bg-[linear-gradient(135deg,rgba(163,230,53,0.12),transparent_44%),#020617] p-4 text-left transition hover:border-lime-300/70"
-      >
-        <p className="text-lg font-bold text-white">Daily Briefing</p>
-        <p className="mt-2 text-sm leading-5 text-slate-400">Generate today&apos;s personalized market, housing, company, and world-risk brief.</p>
-      </button>
-
-      {cards.map((card) => (
-        <button
-          key={card.title}
-          type="button"
-          onClick={() => askFromShell(card.prompt)}
-          className={`min-h-28 rounded-xl border bg-[#020617] p-4 text-left transition hover:border-cyan-300/70 ${card.borderClass}`}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-lg font-bold text-white">{card.title}</p>
-            <span className={`mt-1 h-2 w-2 rounded-full ${card.dotClass}`} />
-          </div>
-          <p className="mt-2 text-sm leading-5 text-slate-400">{card.description}</p>
-        </button>
-      ))}
+      {reportsLoading ? (
+        <div className="rounded-xl border border-[#1d3558] bg-[#020617]/80 p-4 text-sm text-slate-400">
+          Loading saved daily panels.
+        </div>
+      ) : (
+        panels.map((panel) => <DailyTopicPanelCard key={panel.title} panel={panel} />)
+      )}
 
       <div className="rounded-xl border border-[#1d3558] bg-[#020617]/80 p-4">
         <p className="font-mono text-xs font-black uppercase text-cyan-300">System</p>
@@ -1317,7 +1327,7 @@ function BriefingCardsPanel({
               <button
                 key={suggestion.id}
                 type="button"
-                onClick={() => askFromShell(suggestion.prompt)}
+                onClick={openSettings}
                 className="rounded-lg border border-[#1d3558] px-3 py-2 text-left text-sm leading-5 text-slate-300 hover:border-cyan-300/50"
               >
                 {suggestion.title}
@@ -1330,6 +1340,54 @@ function BriefingCardsPanel({
         )}
       </details>
     </aside>
+  );
+}
+
+type DailyTopicPanel = {
+  title: string;
+  description: string;
+  report: ReportResponse | null;
+  borderClass: string;
+  dotClass: string;
+  onRefresh: () => void;
+};
+
+function DailyTopicPanelCard({ panel }: { panel: DailyTopicPanel }) {
+  const body = cleanAnswerText(panel.report?.summary ?? panel.report?.body);
+
+  return (
+    <section className={`rounded-xl border bg-[#020617] p-4 ${panel.borderClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-lg font-bold text-white">{panel.title}</p>
+          <p className="mt-1 text-xs font-semibold uppercase text-slate-500">
+            {panel.report ? `Updated ${formatDateTime(panel.report.as_of ?? panel.report.created_at)}` : "Waiting for daily refresh"}
+          </p>
+        </div>
+        <span className={`mt-2 h-2 w-2 rounded-full ${panel.dotClass}`} />
+      </div>
+      <p className="mt-3 text-sm leading-5 text-slate-400">
+        {body ? compactText(body, 210) : panel.description}
+      </p>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          <NeonChip>{panel.report ? `Confidence: ${panel.report.confidence}` : "No panel yet"}</NeonChip>
+          {panel.report && <NeonChip>{panel.report.citations.length} sources</NeonChip>}
+        </div>
+        <button
+          type="button"
+          onClick={panel.onRefresh}
+          className="min-h-9 rounded-lg border border-cyan-300/30 px-3 text-xs font-black text-cyan-200 transition hover:border-cyan-300/70"
+        >
+          Refresh
+        </button>
+      </div>
+      {panel.report && (
+        <div className="mt-3">
+          <ReportEvidenceDrawer report={panel.report} />
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1634,6 +1692,81 @@ function buildBriefingCards(profile: PersonalizationProfile) {
       dotClass: "bg-orange-300 shadow-[0_0_24px_rgba(251,146,60,0.8)]",
     },
   ];
+}
+
+function buildDailyTopicPanels({
+  profile,
+  reports,
+  generateDailyBriefing,
+  generateHousingReport,
+  generateMarketStrategy,
+  generateCompanyReport,
+  generateMacroReport,
+}: {
+  profile: PersonalizationProfile;
+  reports: ReportResponse[];
+  generateDailyBriefing: () => void;
+  generateHousingReport: () => void;
+  generateMarketStrategy: () => void;
+  generateCompanyReport: () => void;
+  generateMacroReport: () => void;
+}): DailyTopicPanel[] {
+  const latestByType = latestReportByType(reports);
+  const location = profile.location || compactListLabel(splitList(profile.housingMarkets));
+  const watchlist = compactListLabel(splitList(profile.watchlist));
+
+  return [
+    {
+      title: "Daily Briefing",
+      description: "Today's personal intelligence summary will appear here after the daily refresh runs.",
+      report: latestByType.get("daily_briefing") ?? null,
+      borderClass: "border-lime-300/35",
+      dotClass: "bg-lime-300 shadow-[0_0_24px_rgba(163,230,53,0.8)]",
+      onRefresh: generateDailyBriefing,
+    },
+    {
+      title: "Local Housing Pulse",
+      description: `Rates, affordability, inventory, and local housing signals for ${location === "Not set" ? "your saved area" : location}.`,
+      report: latestByType.get("housing") ?? null,
+      borderClass: "border-cyan-300/30",
+      dotClass: "bg-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.8)]",
+      onRefresh: generateHousingReport,
+    },
+    {
+      title: "Market Setup",
+      description: "Indexes, rates, sector tone, volatility, commodities, and macro risk.",
+      report: latestByType.get("market_strategy") ?? null,
+      borderClass: "border-pink-300/30",
+      dotClass: "bg-pink-300 shadow-[0_0_24px_rgba(249,168,212,0.75)]",
+      onRefresh: generateMarketStrategy,
+    },
+    {
+      title: "Watchlist Moves",
+      description: `Catalysts, filings, news, and risk signals for ${watchlist === "Not set" ? "your saved watchlist" : watchlist}.`,
+      report: latestByType.get("company_research") ?? null,
+      borderClass: "border-orange-300/30",
+      dotClass: "bg-orange-300 shadow-[0_0_24px_rgba(253,186,116,0.75)]",
+      onRefresh: generateCompanyReport,
+    },
+    {
+      title: "Rates And Credit",
+      description: "Rates, yields, inflation pressure, credit conditions, Fed policy, and consumer stress.",
+      report: latestByType.get("macro") ?? null,
+      borderClass: "border-violet-300/30",
+      dotClass: "bg-violet-300 shadow-[0_0_24px_rgba(196,181,253,0.75)]",
+      onRefresh: generateMacroReport,
+    },
+  ];
+}
+
+function latestReportByType(reports: ReportResponse[]) {
+  const map = new Map<ReportResponse["report_type"], ReportResponse>();
+  for (const report of reports) {
+    if (!map.has(report.report_type)) {
+      map.set(report.report_type, report);
+    }
+  }
+  return map;
 }
 
 function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
@@ -3994,6 +4127,15 @@ function cleanAnswerText(value: string | null | undefined) {
     .trim();
 
   return cleaned || null;
+}
+
+function compactText(value: string, maxLength: number) {
+  const singleLine = value.replace(/\s+/g, " ").trim();
+  if (singleLine.length <= maxLength) {
+    return singleLine;
+  }
+
+  return `${singleLine.slice(0, maxLength).trim()}...`;
 }
 
 function latestCitationTimestamp(citations: AgentResponse["citations"]) {

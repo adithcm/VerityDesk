@@ -321,5 +321,5 @@ def test_run_due_daily_workflow_runs_ingestion_and_report(monkeypatch) -> None:
 
         assert status.last_status == "success"
         assert status.last_report_id is not None
-        assert "Generated daily briefing" in (status.last_message or "")
+        assert "Generated 4 daily topic panel reports" in (status.last_message or "")
         assert status.next_run_at is not None
