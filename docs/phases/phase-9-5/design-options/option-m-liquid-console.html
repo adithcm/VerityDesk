@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Option M - Liquid Console</title>
+    <style>
+      :root {
+        --bg: #071013;
+        --panel: #0c181b;
+        --panel-2: #102328;
+        --line: rgba(145, 255, 221, 0.18);
+        --text: #effff9;
+        --muted: #88a39e;
+        --acid: #d9ff5f;
+        --sea: #6af7d8;
+        --blue: #75a7ff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at 75% -10%, rgba(217, 255, 95, 0.22), transparent 22rem),
+          radial-gradient(circle at 0% 100%, rgba(106, 247, 216, 0.16), transparent 28rem),
+          linear-gradient(135deg, #071013, #03070a 70%);
+      }
+      .wrap {
+        width: min(1400px, calc(100vw - 2rem));
+        min-height: 100vh;
+        margin: 0 auto;
+        padding: 1rem 0;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 1rem;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+      }
+      .wordmark { font-weight: 950; letter-spacing: 0; font-size: 1.1rem; }
+      .sub { color: var(--muted); font-size: 0.78rem; margin-top: 0.16rem; }
+      .nav { display: flex; gap: 0.45rem; }
+      .nav button, .send {
+        min-height: 38px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: rgba(12, 24, 27, 0.82);
+        color: #d6eee9;
+        padding: 0 0.9rem;
+        font-weight: 850;
+      }
+      .send { background: var(--acid); color: #172000; border-color: var(--acid); }
+      .grid {
+        display: grid;
+        grid-template-columns: 300px minmax(0, 1fr);
+        gap: 1rem;
+      }
+      .rail, .main {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: rgba(12, 24, 27, 0.84);
+        overflow: hidden;
+      }
+      .rail { display: grid; align-content: start; padding: 1rem; gap: 0.8rem; }
+      .profile {
+        min-height: 160px;
+        border-radius: 20px;
+        padding: 1rem;
+        background: linear-gradient(145deg, rgba(217, 255, 95, 0.18), rgba(106, 247, 216, 0.06));
+        border: 1px solid rgba(217, 255, 95, 0.22);
+      }
+      .profile h2 { margin: 0; font-size: 1.25rem; }
+      .profile p { margin: 0.7rem 0 0; color: #d6eee9; line-height: 1.45; }
+      .stack { display: grid; gap: 0.6rem; }
+      .tile {
+        min-height: 72px;
+        border: 1px solid var(--line);
+        border-radius: 17px;
+        background: rgba(3, 7, 10, 0.34);
+        padding: 0.8rem;
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: center;
+      }
+      .tile strong { display: block; font-size: 0.92rem; }
+      .tile span { display: block; color: var(--muted); font-size: 0.75rem; margin-top: 0.25rem; }
+      .spark {
+        width: 54px;
+        height: 38px;
+        border-radius: 12px;
+        background:
+          linear-gradient(135deg, transparent 42%, rgba(217, 255, 95, 0.7) 43% 49%, transparent 50%),
+          linear-gradient(45deg, transparent 42%, rgba(106, 247, 216, 0.7) 43% 49%, transparent 50%),
+          rgba(255, 255, 255, 0.04);
+      }
+      .main { display: grid; grid-template-rows: auto auto 1fr; }
+      .main-head {
+        padding: 1.2rem;
+        border-bottom: 1px solid var(--line);
+      }
+      .main-head h1 { margin: 0; font-size: clamp(2.5rem, 6vw, 6.7rem); line-height: 0.88; letter-spacing: 0; }
+      .main-head p { margin: 1rem 0 0; color: var(--muted); max-width: 660px; line-height: 1.55; }
+      .askbar {
+        padding: 1rem 1.2rem;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.65rem;
+        border-bottom: 1px solid var(--line);
+      }
+      .askbar input {
+        min-height: 50px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: #03070a;
+        color: var(--text);
+        padding: 0 1rem;
+        font-size: 1rem;
+      }
+      .visuals {
+        padding: 1rem;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.8rem;
+        align-content: start;
+      }
+      .module {
+        min-height: 220px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(3, 7, 10, 0.32);
+        padding: 1rem;
+        display: grid;
+        align-content: space-between;
+      }
+      .module.large { grid-column: span 2; }
+      .gauge {
+        height: 88px;
+        border-radius: 999px 999px 22px 22px;
+        border: 1px solid var(--line);
+        background: conic-gradient(from 220deg, var(--sea), var(--acid), rgba(255,255,255,0.06) 62%);
+        mask: linear-gradient(#000, #000) top / 100% 68% no-repeat;
+      }
+      .bars { height: 90px; display: flex; gap: 0.4rem; align-items: end; }
+      .bars i { flex: 1; display: block; border-radius: 9px 9px 3px 3px; background: linear-gradient(var(--sea), var(--blue)); }
+      .module h3 { margin: 0; font-size: 1rem; }
+      .module p { margin: 0.65rem 0 0; color: var(--muted); line-height: 1.45; font-size: 0.88rem; }
+
+      @media (max-width: 980px) {
+        .grid, .visuals { grid-template-columns: 1fr; }
+        .module.large { grid-column: auto; }
+        .nav { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div><div class="wordmark">VerityDesk</div><div class="sub">A calm feed for noisy markets</div></div>
+        <div class="nav"><button>Home</button><button>Watch</button><button>Settings</button><button class="send">Refresh</button></div>
+      </header>
+
+      <div class="grid">
+        <aside class="rail">
+          <div class="profile">
+            <h2>For Adith</h2>
+            <p>Prioritize Arizona housing, mortgage rates, broad market risk, and long-term tech.</p>
+          </div>
+          <div class="stack">
+            <div class="tile"><div><strong>Morning brief</strong><span>Ready at 8:00 AM</span></div><div class="spark"></div></div>
+            <div class="tile"><div><strong>2 watch items</strong><span>1 needs a fresh check</span></div><div class="spark"></div></div>
+            <div class="tile"><div><strong>Sources</strong><span>Hidden until opened</span></div><div class="spark"></div></div>
+          </div>
+        </aside>
+
+        <section class="main">
+          <div class="main-head">
+            <h1>Ask less. Know sooner.</h1>
+            <p>The home screen opens with the current read. The user can ask a custom question, but the default experience is automatic.</p>
+          </div>
+          <div class="askbar">
+            <input placeholder="Ask about a market, company, housing area, or world event..." />
+            <button class="send">Ask</button>
+          </div>
+          <div class="visuals">
+            <article class="module large">
+              <div>
+                <h3>Today&apos;s Read</h3>
+                <p><strong>Rates and affordability</strong> are the main user-specific signal. Full answer opens only when tapped.</p>
+              </div>
+              <div class="gauge"></div>
+            </article>
+            <article class="module">
+              <div><h3>Housing</h3><p>Local area card with one-line interpretation.</p></div>
+              <div class="bars"><i style="height:35%"></i><i style="height:48%"></i><i style="height:74%"></i><i style="height:58%"></i></div>
+            </article>
+            <article class="module">
+              <div><h3>Markets</h3><p>Visual risk meter instead of a paragraph-heavy card.</p></div>
+              <div class="gauge"></div>
+            </article>
+            <article class="module">
+              <div><h3>Companies</h3><p>Watchlist catalysts only when meaningful.</p></div>
+              <div class="bars"><i style="height:60%"></i><i style="height:42%"></i><i style="height:52%"></i><i style="height:78%"></i></div>
+            </article>
+            <article class="module">
+              <div><h3>Macro</h3><p>Rates, credit, inflation, labor.</p></div>
+              <div class="bars"><i style="height:45%"></i><i style="height:66%"></i><i style="height:38%"></i><i style="height:70%"></i></div>
+            </article>
+          </div>
+        </section>
+      </div>
+    </div>
+  </body>
+</html>
