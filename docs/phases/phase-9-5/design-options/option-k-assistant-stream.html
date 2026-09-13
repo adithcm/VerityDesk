@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Option K - Assistant Stream</title>
+    <style>
+      :root {
+        --bg: #03050a;
+        --panel: #080f18;
+        --soft: #0e1b2a;
+        --line: #20364b;
+        --text: #f2fbff;
+        --muted: #8393a8;
+        --blue: #62a8ff;
+        --cyan: #39f4ff;
+        --mint: #9effa5;
+        --amber: #ffd36a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(57, 244, 255, 0.18), transparent 24rem),
+          radial-gradient(circle at 90% 72%, rgba(98, 168, 255, 0.16), transparent 25rem),
+          linear-gradient(180deg, #06101b, var(--bg));
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .shell {
+        width: min(1380px, calc(100vw - 2rem));
+        margin: 0 auto;
+        padding: 1rem 0;
+        display: grid;
+        gap: 1rem;
+      }
+      header {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 1rem;
+        min-height: 58px;
+      }
+      .brand { display: flex; align-items: center; gap: .8rem; }
+      .orb {
+        width: 38px; height: 38px; border-radius: 12px;
+        border: 1px solid rgba(57, 244, 255, .55);
+        background: linear-gradient(135deg, rgba(57, 244, 255, .22), rgba(158, 255, 165, .12));
+        display: grid; place-items: center; font-weight: 950; color: var(--cyan);
+      }
+      .brand h1 { margin: 0; font-size: 1rem; }
+      .brand p { margin: .15rem 0 0; color: var(--muted); font-size: .78rem; }
+      .tabs {
+        display: flex;
+        gap: .45rem;
+        border: 1px solid var(--line);
+        background: rgba(8, 15, 24, .75);
+        border-radius: 14px;
+        padding: .35rem;
+      }
+      .tabs button {
+        border: 0;
+        min-height: 34px;
+        border-radius: 10px;
+        padding: 0 .8rem;
+        color: #aebdd0;
+        background: transparent;
+        font-weight: 850;
+      }
+      .tabs .active { background: rgba(57, 244, 255, .13); color: var(--cyan); }
+      .layout { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.25fr); gap: 1rem; }
+      .left, .right {
+        border: 1px solid rgba(57, 244, 255, .18);
+        background: rgba(8, 15, 24, .82);
+        border-radius: 18px;
+        min-height: calc(100vh - 6rem);
+        overflow: hidden;
+      }
+      .left { display: grid; grid-template-rows: auto 1fr auto; }
+      .section-head {
+        padding: 1rem;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+      .section-head h2 { margin: 0; font-size: 1rem; }
+      .section-head span { color: var(--muted); font-size: .75rem; font-weight: 800; }
+      .messages { padding: 1rem; display: grid; align-content: start; gap: .85rem; }
+      .bubble { border-radius: 15px; padding: 1rem; line-height: 1.55; }
+      .bot { background: var(--soft); border: 1px solid var(--line); }
+      .user { justify-self: end; max-width: 78%; background: rgba(57, 244, 255, .12); border: 1px solid rgba(57, 244, 255, .32); }
+      .bubble h3 { margin: 0 0 .5rem; color: var(--mint); font-size: .9rem; }
+      .bubble p { margin: 0; color: #d4e2ee; }
+      .askbar { border-top: 1px solid var(--line); padding: 1rem; display: grid; grid-template-columns: 1fr auto; gap: .65rem; }
+      .askbar input { min-height: 48px; border-radius: 14px; border: 1px solid var(--line); background: #03050a; color: var(--text); padding: 0 1rem; font-size: 1rem; }
+      .send { border: 0; border-radius: 14px; min-height: 48px; padding: 0 1rem; background: var(--cyan); color: #03121a; font-weight: 950; }
+      .right { display: grid; grid-template-rows: auto 1fr; }
+      .cards { padding: 1rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; align-content: start; }
+      .card {
+        min-height: 164px;
+        border: 1px solid var(--line);
+        background: linear-gradient(160deg, rgba(98, 168, 255, .1), rgba(8, 15, 24, .94));
+        border-radius: 16px;
+        padding: 1rem;
+        display: grid;
+        align-content: space-between;
+      }
+      .card h3 { margin: 0; font-size: 1.02rem; }
+      .card p { margin: .7rem 0 0; color: var(--muted); font-size: .9rem; line-height: 1.45; }
+      .label-row { display: flex; gap: .45rem; flex-wrap: wrap; margin-top: .9rem; }
+      .label { border: 1px solid var(--line); border-radius: 999px; padding: .35rem .55rem; color: #a8bad0; font-size: .72rem; font-weight: 850; }
+      .label.hot { border-color: rgba(158,255,165,.48); color: var(--mint); }
+      .spotlight { grid-column: 1 / -1; min-height: 190px; border-color: rgba(57,244,255,.4); }
+      .settings-strip {
+        margin-top: .6rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: .45rem;
+        color: var(--muted);
+        font-size: .75rem;
+      }
+      @media (max-width: 980px) {
+        .layout, .cards { grid-template-columns: 1fr; }
+        .left, .right { min-height: auto; }
+        .tabs button:nth-child(2) { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <div class="brand">
+          <div class="orb">V</div>
+          <div><h1>VerityDesk</h1><p>Personal research assistant</p></div>
+        </div>
+        <div class="tabs">
+          <button class="active">Home</button>
+          <button>Saved</button>
+          <button>Watch</button>
+          <button>Settings</button>
+        </div>
+      </header>
+
+      <div class="layout">
+        <section class="left">
+          <div class="section-head">
+            <div><h2>Ask</h2><span>No dropdowns. No setup every time.</span></div>
+          </div>
+          <div class="messages">
+            <div class="bubble bot">
+              <h3>Daily Read</h3>
+              <p><strong>Arizona housing is your top local watch item.</strong> I&apos;ll lead with rates, affordability, and inventory when the question is broad.</p>
+            </div>
+            <div class="bubble user">Where are mortgage rates now and what does it mean for Phoenix?</div>
+            <div class="bubble bot">
+              <h3>Answer Preview</h3>
+              <p><strong>Mortgage rates remain the main affordability constraint.</strong> I would compare live web results first, then verify with FRED/Freddie data, and show sources only when opened.</p>
+              <div class="settings-strip"><span>Sources hidden</span><span>Live web primary</span><span>Not financial advice</span></div>
+            </div>
+          </div>
+          <div class="askbar">
+            <input placeholder="Ask anything about markets, housing, companies, or world news..." />
+            <button class="send">Ask</button>
+          </div>
+        </section>
+
+        <section class="right">
+          <div class="section-head">
+            <div><h2>Today&apos;s Intelligence</h2><span>Tap a card for the full brief</span></div>
+            <button class="send">Refresh</button>
+          </div>
+          <div class="cards">
+            <article class="card spotlight">
+              <div>
+                <h3>Morning Briefing</h3>
+                <p>The app opens with the answer already prepared. The user only asks when they want a follow-up.</p>
+              </div>
+              <div class="label-row"><span class="label hot">High Signal</span><span class="label">Changed today</span><span class="label">6 sources</span></div>
+            </article>
+            <article class="card">
+              <div><h3>Local Housing</h3><p>Uses saved location unless the user asks for another area.</p></div>
+              <div class="label-row"><span class="label hot">Local Signal</span><span class="label">Open</span></div>
+            </article>
+            <article class="card">
+              <div><h3>Market Setup</h3><p>Indexes, rates, sectors, volatility, and macro pressure.</p></div>
+              <div class="label-row"><span class="label">Watch Closely</span><span class="label">Open</span></div>
+            </article>
+            <article class="card">
+              <div><h3>Companies</h3><p>Watchlist news, filings, earnings, and catalysts.</p></div>
+              <div class="label-row"><span class="label">Quiet</span><span class="label">Open</span></div>
+            </article>
+            <article class="card">
+              <div><h3>Rates + Credit</h3><p>Fed, inflation, credit stress, and consumer signals.</p></div>
+              <div class="label-row"><span class="label">Mixed</span><span class="label">Open</span></div>
+            </article>
+          </div>
+        </section>
+      </div>
+    </div>
+  </body>
+</html>

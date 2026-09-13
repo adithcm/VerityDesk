@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Option J - Minimal Cockpit</title>
+    <style>
+      :root {
+        --bg: #04070f;
+        --panel: #07111d;
+        --panel-2: #0a1726;
+        --line: #12324a;
+        --text: #edf7ff;
+        --muted: #7d8da2;
+        --cyan: #47e6ff;
+        --green: #b7ff55;
+        --pink: #ff5fb7;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(rgba(71, 230, 255, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(71, 230, 255, 0.035) 1px, transparent 1px),
+          radial-gradient(circle at 80% 12%, rgba(255, 95, 183, 0.18), transparent 28rem),
+          radial-gradient(circle at 6% 78%, rgba(183, 255, 85, 0.12), transparent 30rem),
+          var(--bg);
+        background-size: 36px 36px, 36px 36px, auto, auto, auto;
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .app { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid rgba(71, 230, 255, 0.18);
+        background: rgba(4, 7, 15, 0.74);
+        backdrop-filter: blur(18px);
+      }
+      .brand { display: flex; align-items: center; gap: 0.75rem; }
+      .mark {
+        width: 38px; height: 38px; display: grid; place-items: center;
+        border: 1px solid rgba(183, 255, 85, 0.65);
+        border-radius: 10px;
+        color: var(--green);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-weight: 900;
+      }
+      .brand strong { display: block; font-size: 0.95rem; }
+      .brand span { display: block; margin-top: 0.15rem; color: var(--muted); font-size: 0.76rem; }
+      nav { display: flex; gap: 0.5rem; }
+      nav button, .ghost, .primary {
+        min-height: 38px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: rgba(7, 17, 29, 0.9);
+        color: #c9d8e7;
+        padding: 0 0.9rem;
+        font-weight: 800;
+      }
+      nav button.active { border-color: rgba(71, 230, 255, 0.7); color: var(--cyan); }
+      .primary { background: var(--green); border-color: var(--green); color: #142000; }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(340px, 0.78fr);
+        gap: 1rem;
+        width: min(1420px, calc(100vw - 2rem));
+        margin: 1rem auto;
+      }
+      section {
+        border: 1px solid rgba(71, 230, 255, 0.18);
+        background: rgba(7, 17, 29, 0.88);
+        border-radius: 16px;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+      }
+      .ask { min-height: calc(100vh - 7.2rem); display: grid; grid-template-rows: auto 1fr auto; }
+      .hero { padding: 1.4rem; border-bottom: 1px solid var(--line); }
+      .eyebrow { color: var(--cyan); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; }
+      h1 { margin: 0.45rem 0 0; font-size: clamp(2rem, 4vw, 4.4rem); line-height: 0.96; letter-spacing: 0; max-width: 860px; }
+      .answer { padding: 1.4rem; display: grid; align-content: start; gap: 1rem; }
+      .answer-card { border-left: 3px solid var(--green); background: rgba(4, 7, 15, 0.58); border-radius: 12px; padding: 1rem; }
+      .answer-card h2 { margin: 0 0 0.65rem; font-size: 1rem; color: var(--green); }
+      .answer-card p { margin: 0; color: #c5d2e4; line-height: 1.6; }
+      .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+      .chip { border: 1px solid var(--line); border-radius: 999px; color: #91a7bd; padding: 0.45rem 0.7rem; font-size: 0.75rem; font-weight: 850; }
+      .composer { padding: 1rem; border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; }
+      .composer input { min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: #04070f; color: var(--text); padding: 0 1rem; font-size: 0.98rem; }
+
+      .rail { display: grid; align-content: start; gap: 0.75rem; }
+      .rail-head { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1rem 0; }
+      .rail h2 { margin: 0; font-size: 1rem; }
+      .panel-list { display: grid; gap: 0.7rem; padding: 1rem; }
+      .topic {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: linear-gradient(145deg, rgba(71, 230, 255, 0.07), rgba(4, 7, 15, 0.8));
+        padding: 0.9rem;
+      }
+      .topic-top { display: flex; justify-content: space-between; gap: 1rem; }
+      .topic h3 { margin: 0; font-size: 0.98rem; }
+      .topic p { margin: 0.65rem 0 0; color: var(--muted); line-height: 1.45; font-size: 0.88rem; }
+      .status { color: var(--green); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; }
+      .mini { display: flex; gap: 0.45rem; flex-wrap: wrap; margin-top: 0.8rem; }
+      .mini span { border: 1px solid var(--line); border-radius: 999px; padding: 0.34rem 0.55rem; color: #9db1c5; font-size: 0.72rem; font-weight: 800; }
+      .watch { padding: 1rem; }
+      .watch-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.8rem 0; border-top: 1px solid var(--line); }
+      .watch-row:first-of-type { border-top: 0; }
+      .watch-row strong { display: block; font-size: 0.9rem; }
+      .watch-row span { color: var(--muted); font-size: 0.8rem; }
+
+      @media (max-width: 960px) {
+        main { grid-template-columns: 1fr; }
+        nav { display: none; }
+        .ask { min-height: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <div class="brand">
+          <div class="mark">V</div>
+          <div><strong>VerityDesk</strong><span>Daily intelligence, already prepared</span></div>
+        </div>
+        <nav>
+          <button class="active">Ask</button>
+          <button>Reports</button>
+          <button>Watch</button>
+          <button>Settings</button>
+        </nav>
+        <button class="primary">Refresh</button>
+      </header>
+
+      <main>
+        <section class="ask">
+          <div class="hero">
+            <div class="eyebrow">Live web + verified data</div>
+            <h1>What do you need to know today?</h1>
+          </div>
+          <div class="answer">
+            <div class="answer-card">
+              <h2>Bottom Line</h2>
+              <p><strong>Rates, housing affordability, and AI-led market concentration</strong> are the main signals to watch today. Nothing here is a buy or sell call; this is a research briefing.</p>
+            </div>
+            <div class="answer-card">
+              <h2>Why It Matters To You</h2>
+              <p>Your profile prioritizes Arizona housing, mortgage rates, and broad market risk, so the assistant leads with those and hides source detail until requested.</p>
+            </div>
+            <div class="chips">
+              <span class="chip">5 sources</span>
+              <span class="chip">Retrieved 8:00 AM</span>
+              <span class="chip">Sources hidden</span>
+            </div>
+          </div>
+          <div class="composer">
+            <input value="What is changing in Arizona housing right now?" />
+            <button class="primary">Ask</button>
+          </div>
+        </section>
+
+        <aside class="rail">
+          <section>
+            <div class="rail-head">
+              <h2>Today</h2>
+              <button class="ghost">Tune</button>
+            </div>
+            <div class="panel-list">
+              <div class="topic">
+                <div class="topic-top"><h3>Housing Pulse</h3><span class="status">Watch Closely</span></div>
+                <p>Affordability remains the key pressure point. Refresh needed for a fresh local read.</p>
+                <div class="mini"><span>Local</span><span>Not compared</span><span>Sources</span></div>
+              </div>
+              <div class="topic">
+                <div class="topic-top"><h3>Market Setup</h3><span class="status">High Signal</span></div>
+                <p>Rates and megacap leadership are carrying most of today&apos;s risk discussion.</p>
+                <div class="mini"><span>Changed</span><span>7 sources</span><span>Open</span></div>
+              </div>
+              <div class="topic">
+                <div class="topic-top"><h3>Watchlist Moves</h3><span class="status">Quiet</span></div>
+                <p>No major catalyst crossed the saved threshold this morning.</p>
+                <div class="mini"><span>Stable</span><span>3 sources</span><span>Open</span></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="watch">
+            <div class="rail-head" style="padding:0 0 .4rem">
+              <h2>Watch Items</h2>
+              <button class="ghost">Add</button>
+            </div>
+            <div class="watch-row"><div><strong>Mortgage rates below 6.5</strong><span>Checked today</span></div><span class="status">Quiet</span></div>
+            <div class="watch-row"><div><strong>Phoenix inventory rising</strong><span>Matched housing panel</span></div><span class="status">Alert</span></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+  </body>
+</html>
