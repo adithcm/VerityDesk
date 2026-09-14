@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerityDesk Option M - Interactive Product Flow</title>
+    <style>
+      :root {
+        --bg: #071013;
+        --panel: #0c181b;
+        --panel-2: #102328;
+        --line: rgba(145, 255, 221, 0.18);
+        --text: #effff9;
+        --muted: #88a39e;
+        --acid: #d9ff5f;
+        --sea: #6af7d8;
+        --blue: #75a7ff;
+        --warn: #ffcf70;
+        --danger: #ff7b8a;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at 75% -10%, rgba(217, 255, 95, 0.22), transparent 22rem),
+          radial-gradient(circle at 0% 100%, rgba(106, 247, 216, 0.16), transparent 28rem),
+          linear-gradient(135deg, #071013, #03070a 70%);
+      }
+
+      button, input, textarea, select { font: inherit; }
+      button { cursor: pointer; }
+
+      .wrap {
+        width: min(1420px, calc(100vw - 2rem));
+        min-height: 100vh;
+        margin: 0 auto;
+        padding: 1rem 0;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 1rem;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .wordmark { font-weight: 950; letter-spacing: 0; font-size: 1.1rem; }
+      .sub { color: var(--muted); font-size: 0.78rem; margin-top: 0.16rem; }
+      .nav { display: flex; gap: 0.45rem; flex-wrap: wrap; justify-content: flex-end; }
+      .nav button,
+      .send,
+      .ghost {
+        min-height: 38px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: rgba(12, 24, 27, 0.82);
+        color: #d6eee9;
+        padding: 0 0.9rem;
+        font-weight: 850;
+      }
+      .nav button.active { border-color: rgba(217, 255, 95, 0.7); color: var(--acid); }
+      .send { background: var(--acid); color: #172000; border-color: var(--acid); }
+      .ghost:hover, .nav button:hover { border-color: rgba(106, 247, 216, 0.45); }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 300px minmax(0, 1fr);
+        gap: 1rem;
+      }
+
+      .rail, .main, .auth {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: rgba(12, 24, 27, 0.84);
+        overflow: hidden;
+      }
+
+      .rail { display: grid; align-content: start; padding: 1rem; gap: 0.8rem; }
+      .profile {
+        min-height: 160px;
+        border-radius: 20px;
+        padding: 1rem;
+        background: linear-gradient(145deg, rgba(217, 255, 95, 0.18), rgba(106, 247, 216, 0.06));
+        border: 1px solid rgba(217, 255, 95, 0.22);
+      }
+      .profile h2 { margin: 0; font-size: 1.25rem; }
+      .profile p { margin: 0.7rem 0 0; color: #d6eee9; line-height: 1.45; }
+      .stack { display: grid; gap: 0.6rem; }
+      .tile {
+        min-height: 72px;
+        border: 1px solid var(--line);
+        border-radius: 17px;
+        background: rgba(3, 7, 10, 0.34);
+        padding: 0.8rem;
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: center;
+      }
+      .tile button {
+        border: 0;
+        background: transparent;
+        color: inherit;
+        padding: 0;
+        text-align: left;
+      }
+      .tile strong { display: block; font-size: 0.92rem; }
+      .tile span { display: block; color: var(--muted); font-size: 0.75rem; margin-top: 0.25rem; }
+      .spark {
+        width: 54px;
+        height: 38px;
+        border-radius: 12px;
+        background:
+          linear-gradient(135deg, transparent 42%, rgba(217, 255, 95, 0.7) 43% 49%, transparent 50%),
+          linear-gradient(45deg, transparent 42%, rgba(106, 247, 216, 0.7) 43% 49%, transparent 50%),
+          rgba(255, 255, 255, 0.04);
+      }
+
+      .main { min-height: calc(100vh - 6.4rem); display: grid; grid-template-rows: auto auto 1fr; }
+      .main-head {
+        padding: 1.2rem;
+        border-bottom: 1px solid var(--line);
+      }
+      .kicker { color: var(--sea); font-size: 0.72rem; font-weight: 950; text-transform: uppercase; letter-spacing: 0.04em; }
+      .main-head h1 { margin: 0.35rem 0 0; font-size: clamp(2.5rem, 6vw, 6.7rem); line-height: 0.88; letter-spacing: 0; }
+      .main-head p { margin: 1rem 0 0; color: var(--muted); max-width: 720px; line-height: 1.55; }
+
+      .askbar {
+        padding: 1rem 1.2rem;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.65rem;
+        border-bottom: 1px solid var(--line);
+      }
+      .askbar input {
+        min-height: 50px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: #03070a;
+        color: var(--text);
+        padding: 0 1rem;
+        font-size: 1rem;
+      }
+
+      .visuals, .brief, .settings, .chat, .drilldown {
+        padding: 1rem;
+        display: grid;
+        gap: 0.8rem;
+        align-content: start;
+      }
+      .visuals { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .module {
+        min-height: 220px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(3, 7, 10, 0.32);
+        padding: 1rem;
+        display: grid;
+        align-content: space-between;
+        transition: border-color 160ms ease, transform 160ms ease;
+      }
+      .module:hover { border-color: rgba(106, 247, 216, 0.46); transform: translateY(-1px); }
+      .module.large { grid-column: span 2; }
+      .module { cursor: pointer; }
+      .gauge {
+        height: 88px;
+        border-radius: 999px 999px 22px 22px;
+        border: 1px solid var(--line);
+        background: conic-gradient(from 220deg, var(--sea), var(--acid), rgba(255,255,255,0.06) 62%);
+        mask: linear-gradient(#000, #000) top / 100% 68% no-repeat;
+      }
+      .bars { height: 90px; display: flex; gap: 0.4rem; align-items: end; }
+      .bars i { flex: 1; display: block; border-radius: 9px 9px 3px 3px; background: linear-gradient(var(--sea), var(--blue)); }
+      .module h3 { margin: 0; font-size: 1rem; }
+      .module p { margin: 0.65rem 0 0; color: var(--muted); line-height: 1.45; font-size: 0.88rem; }
+      .metric {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 0.8rem;
+        margin-top: 0.8rem;
+      }
+      .metric strong { font-size: 2.4rem; line-height: 1; color: var(--acid); }
+      .metric span { color: var(--muted); font-size: 0.78rem; }
+
+      .drilldown { grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr); }
+      .drill-card, .stat-card {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(3, 7, 10, 0.32);
+        padding: 1rem;
+      }
+      .drill-card h2, .stat-card h3 { margin: 0; }
+      .drill-card p, .stat-card p { color: var(--muted); line-height: 1.5; }
+      .chart {
+        height: 260px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background:
+          linear-gradient(rgba(145,255,221,0.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(145,255,221,0.06) 1px, transparent 1px),
+          rgba(3, 7, 10, 0.44);
+        background-size: 42px 42px;
+        display: flex;
+        align-items: end;
+        gap: 0.5rem;
+        padding: 1rem;
+      }
+      .chart i {
+        flex: 1;
+        border-radius: 12px 12px 4px 4px;
+        background: linear-gradient(var(--acid), var(--sea));
+        min-height: 16%;
+      }
+      .stats-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; margin-top: 1rem; }
+      .stat-card strong { display: block; color: var(--acid); font-size: 1.6rem; line-height: 1; }
+      .stat-card span { display: block; margin-top: 0.35rem; color: var(--muted); font-size: 0.76rem; }
+      .source-list { display: grid; gap: 0.55rem; }
+      .source-row {
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        padding: 0.75rem;
+        background: rgba(12, 24, 27, 0.68);
+      }
+      .source-row strong { display: block; font-size: 0.88rem; }
+      .source-row span { display: block; margin-top: 0.25rem; color: var(--muted); font-size: 0.74rem; }
+
+      .brief-card, .setting-card, .chat-panel, .history-card, .chat-sidebar {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(3, 7, 10, 0.32);
+        padding: 1rem;
+      }
+      .brief-card h2, .brief-card h3 { margin: 0; }
+      .brief-card h2 { color: var(--acid); font-size: 1.1rem; }
+      .brief-card h3 { color: var(--sea); font-size: 0.95rem; margin-top: 1rem; }
+      .brief-card p, .brief-card li { color: #d6eee9; line-height: 1.6; }
+      .brief-card ul { padding-left: 1.2rem; margin-bottom: 0; }
+      .brief-meta { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+      .pill { border: 1px solid var(--line); border-radius: 999px; padding: 0.42rem 0.62rem; color: var(--muted); font-size: 0.75rem; font-weight: 850; }
+
+      .chat {
+        grid-template-columns: 260px minmax(0, 1fr);
+        min-height: 560px;
+        align-content: stretch;
+      }
+      .chat-sidebar { display: grid; align-content: start; gap: 0.65rem; }
+      .chat-sidebar h3 { margin: 0; font-size: 0.95rem; }
+      .session-list { display: grid; gap: 0.55rem; }
+      .session {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        background: rgba(12, 24, 27, 0.72);
+        color: var(--text);
+        padding: 0.75rem;
+        text-align: left;
+      }
+      .session.active-session { border-color: rgba(217, 255, 95, 0.65); background: rgba(217, 255, 95, 0.1); }
+      .session strong { display: block; font-size: 0.88rem; }
+      .session span { display: block; margin-top: 0.25rem; color: var(--muted); font-size: 0.74rem; line-height: 1.3; }
+      .chat-workspace { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 0.8rem; min-width: 0; }
+      .messages { display: grid; gap: 0.75rem; align-content: start; }
+      .bubble {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 0.9rem;
+        max-width: 78%;
+        color: #e8fff8;
+        line-height: 1.55;
+      }
+      .bubble.agent { background: rgba(3, 7, 10, 0.36); }
+      .bubble.user { justify-self: end; background: rgba(217, 255, 95, 0.12); border-color: rgba(217, 255, 95, 0.25); }
+      .chat-input { display: grid; grid-template-columns: 1fr auto; gap: 0.65rem; }
+      .chat-input input {
+        min-height: 48px;
+        border-radius: 15px;
+        border: 1px solid var(--line);
+        background: #03070a;
+        color: var(--text);
+        padding: 0 1rem;
+      }
+
+      .history-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.8rem;
+      }
+      .history-card button {
+        border: 0;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        padding: 0;
+      }
+      .history-card h3 { margin: 0; font-size: 1rem; }
+      .history-card p { color: var(--muted); line-height: 1.45; margin-bottom: 0; }
+
+      .settings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .setting-card label { display: block; color: var(--muted); font-size: 0.8rem; font-weight: 850; margin-top: 0.8rem; }
+      .setting-card input, .setting-card textarea, .setting-card select {
+        margin-top: 0.4rem;
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #03070a;
+        color: var(--text);
+        padding: 0.8rem;
+      }
+      .setting-card textarea { min-height: 118px; resize: vertical; }
+
+      .auth {
+        width: min(980px, calc(100vw - 2rem));
+        margin: 4rem auto 0;
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+      }
+      .auth-art {
+        padding: 1.4rem;
+        background: linear-gradient(145deg, rgba(217, 255, 95, 0.18), rgba(106, 247, 216, 0.06));
+        display: grid;
+        align-content: space-between;
+      }
+      .auth-art h1 { margin: 0; font-size: clamp(2.2rem, 5vw, 4.8rem); line-height: 0.9; }
+      .auth-form { padding: 1.4rem; display: grid; gap: 1rem; align-content: start; }
+      .auth-form input {
+        width: 100%;
+        min-height: 48px;
+        border-radius: 15px;
+        border: 1px solid var(--line);
+        background: #03070a;
+        color: var(--text);
+        padding: 0 1rem;
+      }
+      .setup-steps { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+      .setup-steps span { border: 1px solid var(--line); border-radius: 999px; padding: 0.4rem 0.6rem; color: var(--muted); font-size: 0.75rem; font-weight: 850; }
+      .setup-steps .active-step { color: #172000; background: var(--acid); border-color: var(--acid); }
+
+      .hidden { display: none !important; }
+
+      @media (max-width: 980px) {
+        .grid, .visuals, .settings, .auth, .chat { grid-template-columns: 1fr; }
+        .module.large { grid-column: auto; }
+        .nav { display: none; }
+        .main { min-height: auto; }
+        .bubble { max-width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="auth-screen" class="auth">
+      <section class="auth-art">
+        <div>
+          <div class="kicker">VerityDesk</div>
+          <h1>Your daily signal layer.</h1>
+        </div>
+        <p class="sub">Login unlocks saved profile, session memory, daily briefings, watch items, and previous chats.</p>
+      </section>
+      <section class="auth-form" id="login-form">
+        <div>
+          <div class="kicker">Official Login</div>
+          <h2>Welcome back</h2>
+        </div>
+        <input value="adith@example.com" aria-label="Email" />
+        <input value="••••••••••" aria-label="Password" />
+        <button class="send" data-action="login">Login</button>
+        <button class="ghost" data-action="show-setup">Create Local Profile</button>
+      </section>
+      <section class="auth-form hidden" id="setup-form">
+        <div>
+          <div class="kicker">Setup</div>
+          <h2>Personalize the assistant</h2>
+          <div class="setup-steps"><span class="active-step">Profile</span><span>Sources</span><span>Daily Brief</span></div>
+        </div>
+        <input value="Adith's briefing" aria-label="Profile name" />
+        <input value="Phoenix, AZ" aria-label="Primary location" />
+        <input value="Arizona housing, mortgage rates, broad market risk, long-term tech" aria-label="Interests" />
+        <textarea aria-label="Personal note">Keep answers simple. Prioritize what changed, why it matters, and what to watch next.</textarea>
+        <button class="send" data-action="finish-setup">Finish Setup</button>
+      </section>
+    </div>
+
+    <div id="app-shell" class="wrap hidden">
+      <header>
+        <div><div class="wordmark">VerityDesk</div><div class="sub">A calm feed for noisy markets</div></div>
+        <div class="nav">
+          <button class="active" data-view="home">Home</button>
+          <button data-view="brief">Daily Brief</button>
+          <button data-view="chat">Agent Chat</button>
+          <button data-view="settings">Settings</button>
+          <button class="send" data-action="refresh">Refresh</button>
+        </div>
+      </header>
+
+      <div class="grid">
+        <aside class="rail">
+          <div class="profile">
+            <h2>For Adith</h2>
+            <p>Prioritize Arizona housing, mortgage rates, broad market risk, geopolitical events, and long-term tech.</p>
+          </div>
+          <div class="stack">
+            <div class="tile"><button data-view="brief"><strong>Daily brief</strong><span>Autogenerated at 8:00 AM</span></button><div class="spark"></div></div>
+            <div class="tile"><button data-view="chat"><strong>Agent chat</strong><span>Active + previous chats together</span></button><div class="spark"></div></div>
+            <div class="tile"><button data-view="settings"><strong>Settings</strong><span>Profile, sources, schedule</span></button><div class="spark"></div></div>
+          </div>
+        </aside>
+
+        <section class="main" id="main-panel">
+          <div class="main-head" id="view-head">
+            <div class="kicker">Home</div>
+            <h1>Ask less. Know sooner.</h1>
+            <p>The home screen opens with source-driven visuals. When you ask a question, the page shifts into agent chat and keeps the session memory.</p>
+          </div>
+          <div class="askbar" id="home-ask">
+            <input id="home-question" value="What should I know about Arizona housing today?" />
+            <button class="send" data-action="ask-from-home">Ask</button>
+          </div>
+
+          <div class="visuals view" data-view-panel="home">
+            <article class="module large" data-view="brief">
+              <div>
+                <h3>Daily Read</h3>
+                <p><strong>Source visuals first.</strong> The agent explains the charts only when you ask or open the brief.</p>
+                <div class="metric"><strong>8:00</strong><span>auto brief ready</span></div>
+              </div>
+              <div class="gauge"></div>
+            </article>
+            <article class="module" data-action="open-drilldown" data-topic="housing">
+              <div><h3>Housing</h3><p>Mortgage rate, FHFA trend, affordability pulse.</p><div class="metric"><strong>6.7%</strong><span>30Y fixed</span></div></div>
+              <div class="bars"><i style="height:35%"></i><i style="height:48%"></i><i style="height:74%"></i><i style="height:58%"></i></div>
+            </article>
+            <article class="module" data-action="open-drilldown" data-topic="markets">
+              <div><h3>Markets</h3><p>Index tone, yields, volatility, sector concentration.</p><div class="metric"><strong>72</strong><span>risk score</span></div></div>
+              <div class="gauge"></div>
+            </article>
+            <article class="module" data-action="open-drilldown" data-topic="companies">
+              <div><h3>Companies</h3><p>Watchlist catalyst and filing activity.</p><div class="metric"><strong>4</strong><span>new items</span></div></div>
+              <div class="bars"><i style="height:60%"></i><i style="height:42%"></i><i style="height:52%"></i><i style="height:78%"></i></div>
+            </article>
+            <article class="module" data-action="open-drilldown" data-topic="macro">
+              <div><h3>Macro</h3><p>Rates, credit, inflation, labor.</p><div class="metric"><strong>Mixed</strong><span>signal</span></div></div>
+              <div class="bars"><i style="height:45%"></i><i style="height:66%"></i><i style="height:38%"></i><i style="height:70%"></i></div>
+            </article>
+          </div>
+
+          <div class="drilldown view hidden" data-view-panel="drilldown">
+            <section class="drill-card">
+              <button class="ghost" data-view="home">Back to Home</button>
+              <div class="kicker" id="drill-kicker">Housing</div>
+              <h2 id="drill-title">Housing Detail</h2>
+              <p id="drill-copy">A focused view using connected API/source stats with an agent explanation layer available on demand.</p>
+              <div class="chart" id="drill-chart">
+                <i style="height:35%"></i><i style="height:48%"></i><i style="height:74%"></i><i style="height:58%"></i><i style="height:66%"></i><i style="height:52%"></i>
+              </div>
+              <div class="stats-grid" id="drill-stats"></div>
+            </section>
+            <aside class="drill-card">
+              <h2>Sources + Actions</h2>
+              <p>Source timestamps stay visible here so the user knows when the numbers were retrieved without cluttering the home page.</p>
+              <div class="source-list" id="drill-sources"></div>
+              <div class="brief-meta">
+                <button class="send" data-action="ask-about-drilldown">Ask About This</button>
+                <button class="ghost" data-view="brief">Add To Daily Brief</button>
+              </div>
+            </aside>
+          </div>
+
+          <div class="brief view hidden" data-view-panel="brief">
+            <article class="brief-card">
+              <h2>## Daily Brief</h2>
+              <p><strong>Autogenerated from live web plus connected APIs.</strong> This is the markdown-style AI brief for what matters today based on your saved profile.</p>
+              <h3>## World + Geopolitics</h3>
+              <ul><li>Energy and policy risk remain the highest cross-market news channels.</li><li>Geopolitical items are shown only when they have market or personal relevance.</li></ul>
+              <h3>## Markets + Macro</h3>
+              <ul><li>Rates remain the main input for equities, housing, and credit.</li><li>Market concentration is elevated, so watchlist context matters.</li></ul>
+              <h3>## Housing</h3>
+              <ul><li>Mortgage rates are still the pressure point for Arizona affordability.</li><li>Local inventory needs a fresh source check before making a strong claim.</li></ul>
+              <h3>## What To Watch</h3>
+              <ul><li>Rates moving lower would matter more than one isolated housing headline.</li><li>Any watchlist company catalyst should be checked against filings and live news.</li></ul>
+              <div class="brief-meta"><span class="pill">Sources hidden</span><span class="pill">Markdown brief</span><span class="pill">Auto-generated daily</span><span class="pill">Not financial advice</span></div>
+            </article>
+          </div>
+
+          <div class="chat view hidden" data-view-panel="chat">
+            <aside class="chat-sidebar">
+              <button class="send" data-action="new-chat">New Chat</button>
+              <h3>Active Chat</h3>
+              <div class="session-list">
+                <button class="session active-session" data-action="open-chat" data-chat="Current Session"><strong>Current Session</strong><span>Arizona housing and broad market risk</span></button>
+              </div>
+              <h3>Previous Chats</h3>
+              <div class="session-list">
+                <button class="session" data-action="open-chat" data-chat="Arizona Housing"><strong>Arizona Housing</strong><span>Rates, affordability, inventory</span></button>
+                <button class="session" data-action="open-chat" data-chat="Market Risk"><strong>Market Risk</strong><span>Rates, sectors, volatility</span></button>
+                <button class="session" data-action="open-chat" data-chat="Tech Watchlist"><strong>Tech Watchlist</strong><span>AI names and filings</span></button>
+                <button class="session" data-action="open-chat" data-chat="World News"><strong>World News</strong><span>Geopolitics and energy</span></button>
+              </div>
+            </aside>
+            <section class="chat-workspace">
+              <div class="chat-panel messages" id="messages">
+                <div class="bubble agent"><strong>VerityDesk:</strong> I remember this session. You asked about Arizona housing and broad market risk. What do you want to dig into next?</div>
+                <div class="bubble user">What should I know about Arizona housing today?</div>
+                <div class="bubble agent"><strong>VerityDesk:</strong> I would combine Tavily live search with FRED/FHFA/Freddie metrics, then answer with the latest sources and explain what changed.</div>
+              </div>
+              <div class="chat-input">
+                <input id="chat-question" value="Compare Phoenix housing risk with national mortgage-rate pressure." />
+                <button class="send" data-action="send-chat">Send</button>
+              </div>
+            </section>
+          </div>
+
+          <div class="settings view hidden" data-view-panel="settings">
+            <section class="setting-card">
+              <h3>Profile</h3>
+              <label>Name<input value="Adith's briefing" /></label>
+              <label>Location<input value="Phoenix, AZ" /></label>
+              <label>Important topics<textarea>Arizona housing, mortgage rates, market risk, geopolitical events, long-term tech.</textarea></label>
+            </section>
+            <section class="setting-card">
+              <h3>Daily Brief</h3>
+              <label>Schedule<input type="time" value="08:00" /></label>
+              <label>Style<select><option>Balanced</option><option>Quick</option><option>Detailed</option></select></label>
+              <label>Sources<select><option>Tavily primary + APIs visualized</option></select></label>
+              <button class="send" data-view="brief">Preview Daily Brief</button>
+            </section>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      const auth = document.querySelector("#auth-screen");
+      const app = document.querySelector("#app-shell");
+      const loginForm = document.querySelector("#login-form");
+      const setupForm = document.querySelector("#setup-form");
+      const viewHead = document.querySelector("#view-head");
+      const homeAsk = document.querySelector("#home-ask");
+      const navButtons = Array.from(document.querySelectorAll("[data-view]"));
+      const viewPanels = Array.from(document.querySelectorAll("[data-view-panel]"));
+      const messages = document.querySelector("#messages");
+      let activeDrilldown = "housing";
+
+      const headings = {
+        home: ["Home", "Ask less. Know sooner.", "The home screen opens with source-driven visuals. When you ask a question, the page shifts into agent chat and keeps the session memory."],
+        brief: ["Daily Brief", "Your AI briefing.", "A markdown-style daily brief generated automatically from live web, connected APIs, and your saved priorities."],
+        chat: ["Agent Chat", "Ask anything.", "This view keeps session memory and lets you continue the conversation from prior questions."],
+        drilldown: ["Source Detail", "The data behind the card.", "Charts and metrics come from direct APIs and stored sources. The agent explains what the movement means when you ask."],
+        settings: ["Settings", "Make it yours.", "Profile, source behavior, schedule, and briefing preferences live here so the home page stays simple."]
+      };
+
+      const drilldowns = {
+        housing: {
+          kicker: "Housing",
+          title: "Arizona Housing Detail",
+          copy: "Mortgage rates, home-price trend, affordability pressure, and source freshness for the user's saved housing market.",
+          stats: [["6.7%", "30Y fixed mortgage"], ["+3.1%", "FHFA YoY index"], ["Thin", "local inventory data"]],
+          sources: [["Freddie/FRED", "Mortgage data retrieved Sep 14, 8:00 AM"], ["FHFA", "House price index, latest release"], ["Tavily", "Live local context and recent housing news"]],
+          bars: [35, 48, 74, 58, 66, 52]
+        },
+        markets: {
+          kicker: "Markets",
+          title: "Market Setup Detail",
+          copy: "Index tone, yields, volatility proxy, sector concentration, and headline risk that matter for the user's watchlist.",
+          stats: [["72", "risk score"], ["Mixed", "sector tone"], ["High", "rate sensitivity"]],
+          sources: [["Finnhub", "Market quote/news context"], ["Alpha Vantage", "Daily price and indicator data"], ["Tavily", "Live market headlines"]],
+          bars: [52, 60, 44, 70, 78, 64]
+        },
+        companies: {
+          kicker: "Companies",
+          title: "Watchlist Detail",
+          copy: "Catalyst count, filings, company news, and source-backed watchlist movement without turning the home page into a feed.",
+          stats: [["4", "new watchlist items"], ["2", "filings/news catalysts"], ["Quiet", "alert level"]],
+          sources: [["SEC", "Filing activity and metadata"], ["NewsAPI/Finnhub", "Company news retrieved today"], ["Tavily", "Live company context"]],
+          bars: [60, 42, 52, 78, 47, 68]
+        },
+        macro: {
+          kicker: "Macro",
+          title: "Macro + Credit Detail",
+          copy: "Rates, labor, inflation pressure, credit, and consumer indicators from structured economic APIs plus live context.",
+          stats: [["Mixed", "macro signal"], ["Stable", "labor trend"], ["Watch", "credit stress"]],
+          sources: [["FRED", "Rates and labor series"], ["Census", "Economic indicator feeds"], ["Tavily", "Policy and Fed commentary"]],
+          bars: [45, 66, 38, 70, 51, 62]
+        }
+      };
+
+      function enterApp() {
+        auth.classList.add("hidden");
+        app.classList.remove("hidden");
+        showView("home");
+      }
+
+      function showView(view) {
+        const [kicker, title, copy] = headings[view] || headings.home;
+        viewHead.innerHTML = `<div class="kicker">${kicker}</div><h1>${title}</h1><p>${copy}</p>`;
+        homeAsk.classList.toggle("hidden", view !== "home");
+        viewPanels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.viewPanel !== view));
+        document.querySelectorAll(".nav [data-view]").forEach((button) => {
+          button.classList.toggle("active", button.dataset.view === view);
+        });
+      }
+
+      function askFromHome() {
+        const question = document.querySelector("#home-question").value || "What should I know today?";
+        showView("chat");
+        addMessage("user", question);
+        addMessage("agent", "I moved you into Agent Chat and kept the home context. I would answer using Tavily for the live web plus API metrics for visuals, then cite sources in a collapsed drawer.");
+      }
+
+      function sendChat() {
+        const input = document.querySelector("#chat-question");
+        addMessage("user", input.value);
+        addMessage("agent", "Continuing from this session: I remember your earlier Arizona housing question and will compare it with national rate pressure before giving a concise answer.");
+      }
+
+      function openDrilldown(topic) {
+        activeDrilldown = topic;
+        const detail = drilldowns[topic] || drilldowns.housing;
+        document.querySelector("#drill-kicker").textContent = detail.kicker;
+        document.querySelector("#drill-title").textContent = detail.title;
+        document.querySelector("#drill-copy").textContent = detail.copy;
+        document.querySelector("#drill-chart").innerHTML = detail.bars.map((height) => `<i style="height:${height}%"></i>`).join("");
+        document.querySelector("#drill-stats").innerHTML = detail.stats.map(([value, label]) => `<div class="stat-card"><strong>${value}</strong><span>${label}</span></div>`).join("");
+        document.querySelector("#drill-sources").innerHTML = detail.sources.map(([name, info]) => `<div class="source-row"><strong>${name}</strong><span>${info}</span></div>`).join("");
+        showView("drilldown");
+      }
+
+      function addMessage(type, text) {
+        const bubble = document.createElement("div");
+        bubble.className = `bubble ${type === "user" ? "user" : "agent"}`;
+        bubble.innerHTML = type === "agent" ? `<strong>VerityDesk:</strong> ${text}` : text;
+        messages.appendChild(bubble);
+        messages.scrollTop = messages.scrollHeight;
+      }
+
+      document.addEventListener("click", (event) => {
+        const target = event.target.closest("button, article.module, .tile button");
+        if (!target) return;
+        if (target.dataset.action === "login" || target.dataset.action === "finish-setup") enterApp();
+        if (target.dataset.action === "show-setup") {
+          loginForm.classList.add("hidden");
+          setupForm.classList.remove("hidden");
+        }
+        if (target.dataset.action === "ask-from-home") askFromHome();
+        if (target.dataset.action === "send-chat") sendChat();
+        if (target.dataset.action === "open-drilldown") openDrilldown(target.dataset.topic);
+        if (target.dataset.action === "ask-about-drilldown") {
+          showView("chat");
+          addMessage("user", `Explain the ${drilldowns[activeDrilldown].title} in plain English.`);
+          addMessage("agent", "I opened Agent Chat with this visual context attached. I would explain the chart, cite the underlying API/source timestamps, and connect it to your saved profile.");
+        }
+        if (target.dataset.action === "new-chat") {
+          showView("chat");
+          messages.innerHTML = '<div class="bubble agent"><strong>VerityDesk:</strong> New chat started. I still have your saved profile, but this thread is clean.</div>';
+          document.querySelectorAll(".session").forEach((button) => button.classList.remove("active-session"));
+        }
+        if (target.dataset.action === "refresh") showView("home");
+        if (target.dataset.action === "open-chat") {
+          showView("chat");
+          document.querySelectorAll(".session").forEach((button) => button.classList.toggle("active-session", button === target));
+          addMessage("agent", `Loaded previous chat: ${target.dataset.chat}. I can continue from the saved session summary.`);
+        }
+        if (target.dataset.view) showView(target.dataset.view);
+      });
+    </script>
+  </body>
+</html>
