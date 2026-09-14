@@ -234,7 +234,7 @@ Milestone doc: [milestones/9.6.4-visual-module-data-api.md](milestones/9.6.4-vis
 
 ### 9.6.5 Drill-Down Views
 
-Status: Planned
+Status: Complete
 
 - Clicking a visual opens a focused drill-down.
 - Show larger chart, stats, sources, and explanation prompt.

@@ -340,6 +340,11 @@ type HomeVisualModule = {
   status: string;
   accent: "lime" | "cyan" | "pink" | "orange" | "violet";
   points: number[];
+  updatedAt: string | null;
+  stats: Array<{ label: string; value: string; detail: string | null }>;
+  sources: Array<{ name: string; status: string; retrievedAt: string | null; description: string | null }>;
+  relatedReportId: number | null;
+  suggestedPrompt: string;
 };
 
 type VisualModulesApiResponse = {
@@ -1497,6 +1502,24 @@ function OptionMHomeView({
     scheduleData,
   });
   const modules = visualModulesData?.modules.length ? visualModulesData.modules.map(mapVisualModuleFromApi) : fallbackModules;
+  const [selectedModule, setSelectedModule] = useState<HomeVisualModule | null>(null);
+
+  function askAboutModule(module: HomeVisualModule) {
+    const contextLines = [
+      module.suggestedPrompt,
+      "",
+      `Visual: ${module.title}`,
+      `Status: ${module.status}`,
+      `Primary signal: ${module.value} (${module.label})`,
+      `Summary: ${module.summary}`,
+      module.stats.length > 0 ? `Stats: ${module.stats.map((stat) => `${stat.label} ${stat.value}`).join("; ")}` : null,
+      module.sources.length > 0 ? `Sources: ${module.sources.map((source) => `${source.name} (${source.status})`).join("; ")}` : null,
+    ].filter(Boolean);
+
+    setAgentQuery(contextLines.join("\n"));
+    setManualAgentContext(false);
+    openAgentChat();
+  }
 
   return (
     <div className="grid gap-5">
@@ -1582,9 +1605,17 @@ function OptionMHomeView({
           </div>
         )}
         {modules.map((module) => (
-          <HomeVisualModuleCard key={module.id} module={module} />
+          <HomeVisualModuleCard key={module.id} module={module} onOpen={setSelectedModule} />
         ))}
       </section>
+
+      {selectedModule && (
+        <VisualDrillDownView
+          module={selectedModule}
+          onClose={() => setSelectedModule(null)}
+          onAsk={() => askAboutModule(selectedModule)}
+        />
+      )}
 
       <section className="rounded-xl border border-[#1d3558] bg-[#0a1628]/75 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1631,7 +1662,7 @@ function OptionMHomeView({
   );
 }
 
-function HomeVisualModuleCard({ module }: { module: HomeVisualModule }) {
+function HomeVisualModuleCard({ module, onOpen }: { module: HomeVisualModule; onOpen: (module: HomeVisualModule) => void }) {
   const accentClass = {
     lime: "border-lime-300/35 text-lime-300",
     cyan: "border-cyan-300/35 text-cyan-300",
@@ -1650,6 +1681,7 @@ function HomeVisualModuleCard({ module }: { module: HomeVisualModule }) {
   return (
     <button
       type="button"
+      onClick={() => onOpen(module)}
       className={`group min-h-[250px] rounded-[20px] border bg-[#061320]/88 p-4 text-left transition hover:-translate-y-0.5 hover:bg-[#08182a] ${accentClass}`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -1665,7 +1697,133 @@ function HomeVisualModuleCard({ module }: { module: HomeVisualModule }) {
       </div>
       <MiniBarChart points={module.points} accent={module.accent} />
       <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-400">{module.summary}</p>
+      <p className="mt-4 font-mono text-[11px] font-black uppercase text-slate-500 group-hover:text-cyan-200">Open detail</p>
     </button>
+  );
+}
+
+function VisualDrillDownView({
+  module,
+  onClose,
+  onAsk,
+}: {
+  module: HomeVisualModule;
+  onClose: () => void;
+  onAsk: () => void;
+}) {
+  const accentClass = {
+    lime: "border-lime-300/40 text-lime-300",
+    cyan: "border-cyan-300/40 text-cyan-300",
+    pink: "border-pink-300/40 text-pink-300",
+    orange: "border-orange-300/40 text-orange-300",
+    violet: "border-violet-300/40 text-violet-300",
+  }[module.accent];
+
+  return (
+    <section className={`rounded-[24px] border bg-[#061320]/95 p-5 shadow-[0_28px_90px_rgba(0,0,0,0.38)] ${accentClass}`}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="font-mono text-xs font-black uppercase text-slate-500">Visual detail / {module.status}</p>
+          <h2 className="mt-2 text-4xl font-black leading-none text-white">{module.title}</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">{module.summary}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onAsk}
+            className="min-h-10 rounded-lg bg-lime-300 px-4 text-sm font-black text-[#102000]"
+          >
+            Ask About This
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-10 rounded-lg border border-[#1d3558] px-4 text-sm font-black text-slate-300 transition hover:border-cyan-300/60 hover:text-cyan-200"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+        <div className="rounded-[18px] border border-[#1d3558] bg-[#020617]/80 p-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-5xl font-black text-white">{module.value}</p>
+              <p className="mt-1 text-xs font-black uppercase text-slate-500">{module.label}</p>
+            </div>
+            <NeonChip>Updated {formatDateTime(module.updatedAt)}</NeonChip>
+          </div>
+          <LargeBarChart module={module} />
+        </div>
+
+        <div className="grid gap-4">
+          <div className="rounded-[18px] border border-[#1d3558] bg-[#020617]/76 p-4">
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Key stats</p>
+            <div className="mt-4 grid gap-3">
+              {module.stats.length === 0 ? (
+                <p className="text-sm text-slate-500">No structured stats yet.</p>
+              ) : (
+                module.stats.map((stat) => (
+                  <div key={`${stat.label}-${stat.value}`} className="rounded-xl border border-[#1d3558] bg-[#061320]/70 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-bold text-slate-300">{stat.label}</span>
+                      <span className="font-mono text-sm font-black text-white">{stat.value}</span>
+                    </div>
+                    {stat.detail && <p className="mt-1 text-xs leading-5 text-slate-500">{stat.detail}</p>}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <details className="mt-4 rounded-[18px] border border-[#1d3558] bg-[#020617]/72 p-4">
+        <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">View sources</summary>
+        <div className="mt-4 grid gap-3">
+          {module.sources.length === 0 ? (
+            <p className="text-sm text-slate-500">No connected sources are attached to this visual yet.</p>
+          ) : (
+            module.sources.map((source) => (
+              <div key={`${source.name}-${source.retrievedAt}`} className="rounded-xl border border-[#1d3558] bg-[#061320]/70 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-white">{source.name}</p>
+                  <NeonChip>{titleCase(source.status.replaceAll("_", " "))}</NeonChip>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">Retrieved {formatDateTime(source.retrievedAt)}</p>
+                {source.description && <p className="mt-2 text-sm leading-5 text-slate-400">{source.description}</p>}
+              </div>
+            ))
+          )}
+        </div>
+      </details>
+    </section>
+  );
+}
+
+function LargeBarChart({ module }: { module: HomeVisualModule }) {
+  const maxPoint = Math.max(...module.points, 1);
+  const barClass = {
+    lime: "bg-lime-300",
+    cyan: "bg-cyan-300",
+    pink: "bg-pink-300",
+    orange: "bg-orange-300",
+    violet: "bg-violet-300",
+  }[module.accent];
+
+  return (
+    <div className="mt-6 flex h-64 items-end gap-2 rounded-[18px] border border-[#1d3558] bg-[#061320]/70 px-4 py-4">
+      {module.points.map((point, index) => (
+        <div key={`${point}-${index}`} className="flex h-full flex-1 flex-col justify-end gap-2">
+          <span
+            className={`min-h-3 rounded-t-md opacity-90 ${barClass}`}
+            style={{ height: `${Math.max(5, (point / maxPoint) * 100)}%` }}
+          />
+          <span className="text-center font-mono text-[10px] font-black text-slate-600">{index + 1}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -2311,6 +2469,14 @@ function buildHomeVisualModules({
       status: latestByType.has("daily_briefing") ? "Ready" : "Needs brief",
       accent: "lime",
       points: normalizeSparkPoints([freshCount, totalSources, reports.length, scheduleData?.enabled ? 8 : 3, needsCheck]),
+      updatedAt: latestByType.get("daily_briefing")?.as_of ?? latestByType.get("daily_briefing")?.created_at ?? scheduleData?.last_run_at ?? null,
+      stats: [
+        { label: "Fresh sources", value: String(freshCount), detail: "Current source health" },
+        { label: "Needs check", value: String(needsCheck), detail: "Sources stale, failed, or missing" },
+      ],
+      sources: [],
+      relatedReportId: latestByType.get("daily_briefing")?.id ?? null,
+      suggestedPrompt: "Explain today's daily read and what changed most since the last refresh.",
     },
     {
       id: "housing",
@@ -2321,6 +2487,14 @@ function buildHomeVisualModules({
       status: latestByType.has("housing") ? "Ready" : "No local data",
       accent: "cyan",
       points: normalizeSparkPoints([2, profile.housingMarkets ? 7 : 3, freshCount, 5, needsCheck + 2]),
+      updatedAt: latestByType.get("housing")?.as_of ?? latestByType.get("housing")?.created_at ?? null,
+      stats: [
+        { label: "Location", value: location === "Not set" ? "Not set" : location, detail: "Saved housing focus" },
+        { label: "Fresh sources", value: String(freshCount), detail: "All connected source health" },
+      ],
+      sources: [],
+      relatedReportId: latestByType.get("housing")?.id ?? null,
+      suggestedPrompt: "Explain the housing visual using my saved location and call out affordability, rates, inventory, and data gaps.",
     },
     {
       id: "markets",
@@ -2331,6 +2505,14 @@ function buildHomeVisualModules({
       status: latestByType.has("market_strategy") ? "Ready" : "Needs refresh",
       accent: "pink",
       points: normalizeSparkPoints([freshCount, needsCheck + 1, totalSources, reports.length + 2, 6]),
+      updatedAt: latestByType.get("market_strategy")?.as_of ?? latestByType.get("market_strategy")?.created_at ?? null,
+      stats: [
+        { label: "Fresh sources", value: String(freshCount), detail: "Current source health" },
+        { label: "Reports", value: String(reports.length), detail: "Saved reports available" },
+      ],
+      sources: [],
+      relatedReportId: latestByType.get("market_strategy")?.id ?? null,
+      suggestedPrompt: "Explain the market setup using live web first and corroborate it with connected market APIs.",
     },
     {
       id: "companies",
@@ -2341,6 +2523,14 @@ function buildHomeVisualModules({
       status: watchlist === "Not set" ? "Needs setup" : latestByType.has("company_research") ? "Ready" : "Watching",
       accent: "orange",
       points: normalizeSparkPoints([splitList(profile.watchlist).length + 1, reports.length, freshCount, 3, needsCheck + 1]),
+      updatedAt: latestByType.get("company_research")?.as_of ?? latestByType.get("company_research")?.created_at ?? null,
+      stats: [
+        { label: "Tickers", value: watchlist === "Not set" ? "0" : String(splitList(profile.watchlist).length), detail: "Saved watchlist" },
+        { label: "Companies", value: String(splitList(profile.companies).length), detail: "Saved company names" },
+      ],
+      sources: [],
+      relatedReportId: latestByType.get("company_research")?.id ?? null,
+      suggestedPrompt: "Explain what changed for my saved companies and watchlist without giving buy or sell instructions.",
     },
     {
       id: "macro",
@@ -2351,6 +2541,14 @@ function buildHomeVisualModules({
       status: latestByType.has("macro") ? "Ready" : "Quiet",
       accent: "violet",
       points: normalizeSparkPoints([totalSources, freshCount, needsCheck, profile.macroInterests.length + 2, reports.length + 1]),
+      updatedAt: latestByType.get("macro")?.as_of ?? latestByType.get("macro")?.created_at ?? null,
+      stats: [
+        { label: "Macro interests", value: String(profile.macroInterests.length), detail: "Saved setup preferences" },
+        { label: "Fresh sources", value: String(freshCount), detail: "Current source health" },
+      ],
+      sources: [],
+      relatedReportId: latestByType.get("macro")?.id ?? null,
+      suggestedPrompt: "Explain the macro visual and the main trends in rates, inflation, jobs, credit, and consumer conditions.",
     },
   ];
 }
@@ -2373,6 +2571,16 @@ function mapVisualModuleFromApi(module: VisualModulesApiResponse["modules"][numb
     status: titleCase(module.status.replaceAll("_", " ")),
     accent: accentById[module.id],
     points: normalizeSparkPoints(module.chart.points.map((point) => point.value)),
+    updatedAt: module.updated_at,
+    stats: module.stats,
+    sources: module.sources.map((source) => ({
+      name: source.name,
+      status: source.status,
+      retrievedAt: source.retrieved_at,
+      description: source.description,
+    })),
+    relatedReportId: module.related_report_id,
+    suggestedPrompt: module.suggested_prompt,
   };
 }
 
