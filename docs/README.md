@@ -18,6 +18,7 @@ InvestorAgent documentation is organized by roadmap and implementation phase.
 - [Phase 8](phases/phase-8/README.md)
 - [Phase 9](phases/phase-9/README.md)
 - [Phase 9.5](phases/phase-9-5/README.md)
+- [Phase 9.6](phases/phase-9-6/README.md)
 
 ## Convention
 
