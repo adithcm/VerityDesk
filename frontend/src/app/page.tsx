@@ -336,6 +336,7 @@ type InferredAgentContext = {
 
 const PERSONALIZATION_STORAGE_KEY = "investoragent.personalization.v1";
 const SETUP_COMPLETE_STORAGE_KEY = "investoragent.setupComplete.v1";
+const LOCAL_SESSION_STORAGE_KEY = "investoragent.localSession.v1";
 
 const topicOptions = [
   "World news",
@@ -437,6 +438,8 @@ export default function Home() {
   const [personalizationProfile, setPersonalizationProfile] = useState<PersonalizationProfile>(defaultPersonalizationProfile());
   const [profileSavedAt, setProfileSavedAt] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [localSessionReady, setLocalSessionReady] = useState(false);
+  const [entryLoaded, setEntryLoaded] = useState(false);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -493,8 +496,10 @@ export default function Home() {
 
   useEffect(() => {
     const savedProfile = loadPersonalizationProfile();
+    const setupComplete = isSetupComplete(savedProfile);
     setPersonalizationProfile(savedProfile);
-    setSetupOpen(!isSetupComplete(savedProfile));
+    setLocalSessionReady(hasLocalSession());
+    setSetupOpen(hasLocalSession() && !setupComplete);
     setAgentTicker(savedProfile.watchlist);
     if (savedProfile.companies.trim()) {
       setCompanyName(firstListItem(savedProfile.companies));
@@ -502,6 +507,7 @@ export default function Home() {
     if (savedProfile.watchlist.trim()) {
       setCompanyTicker(firstListItem(savedProfile.watchlist).toUpperCase());
     }
+    setEntryLoaded(true);
   }, []);
 
   function savePersonalizationProfile(nextProfile: PersonalizationProfile) {
@@ -516,6 +522,13 @@ export default function Home() {
     if (nextProfile.companies.trim()) {
       setCompanyName(firstListItem(nextProfile.companies));
     }
+  }
+
+  function startLocalSession() {
+    localStorage.setItem(LOCAL_SESSION_STORAGE_KEY, new Date().toISOString());
+    setLocalSessionReady(true);
+    setSetupOpen(!isSetupComplete(personalizationProfile));
+    setActiveView("Dashboard");
   }
 
   async function loadAgentRuns() {
@@ -985,6 +998,29 @@ export default function Home() {
     setActiveView("Dashboard");
   }
 
+  if (!entryLoaded) {
+    return (
+      <main className="min-h-screen bg-[#020617] text-[#f8fafc]">
+        <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_72%_18%,rgba(34,211,238,0.18),transparent_30rem),radial-gradient(circle_at_18%_78%,rgba(163,230,53,0.12),transparent_30rem),#020617]" />
+      </main>
+    );
+  }
+
+  if (!localSessionReady) {
+    return (
+      <LoginEntryFlow
+        profile={personalizationProfile}
+        sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
+        scheduleData={scheduleData}
+        onContinue={startLocalSession}
+        onSetup={() => {
+          startLocalSession();
+          setSetupOpen(true);
+        }}
+      />
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#020617] text-[#f8fafc]">
       <div className="fixed inset-0 -z-10 bg-[linear-gradient(rgba(34,211,238,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.035)_1px,transparent_1px),radial-gradient(circle_at_76%_10%,rgba(244,114,182,0.16),transparent_28rem),radial-gradient(circle_at_8%_68%,rgba(163,230,53,0.11),transparent_30rem),#020617] bg-[length:38px_38px,38px_38px,auto,auto,auto]" />
@@ -1213,6 +1249,95 @@ export default function Home() {
         />
       </div>
     </main>
+  );
+}
+
+function LoginEntryFlow({
+  profile,
+  sourceStatusText,
+  scheduleData,
+  onContinue,
+  onSetup,
+}: {
+  profile: PersonalizationProfile;
+  sourceStatusText: string;
+  scheduleData: DailyScheduleConfig | null;
+  onContinue: () => void;
+  onSetup: () => void;
+}) {
+  const hasProfile = Boolean(profile.profileName || profile.location || profile.personalNote);
+
+  return (
+    <main className="min-h-screen overflow-hidden bg-[#020617] px-4 py-6 text-[#f8fafc] md:px-8">
+      <div className="fixed inset-0 -z-10 bg-[linear-gradient(rgba(34,211,238,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.04)_1px,transparent_1px),radial-gradient(circle_at_78%_16%,rgba(34,211,238,0.22),transparent_30rem),radial-gradient(circle_at_18%_76%,rgba(163,230,53,0.13),transparent_28rem),#020617] bg-[length:42px_42px,42px_42px,auto,auto,auto]" />
+      <section className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl items-center gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
+        <div>
+          <div className="inline-flex items-center gap-3 rounded-full border border-cyan-300/25 bg-[#07111f]/80 px-4 py-2">
+            <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(163,230,53,0.8)]" />
+            <span className="font-mono text-xs font-black uppercase text-cyan-200">Local Intelligence Workspace</span>
+          </div>
+          <h1 className="mt-7 max-w-3xl text-5xl font-black leading-[0.95] text-white md:text-7xl">
+            VerityDesk
+          </h1>
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
+            Daily intelligence shaped around your location, watchlist, sources, and questions.
+          </p>
+          <div className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-3">
+            <LoginSignalCard label="Sources" value={sourceStatusText} />
+            <LoginSignalCard label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
+            <LoginSignalCard label="Profile" value={hasProfile ? "Ready" : "Setup needed"} />
+          </div>
+        </div>
+
+        <div className="rounded-[24px] border border-cyan-300/25 bg-[#07111f]/92 p-5 shadow-[0_30px_110px_rgba(0,0,0,0.45)] backdrop-blur">
+          <div className="rounded-[18px] border border-[#1d3558] bg-[#020617]/82 p-5">
+            <p className="font-mono text-xs font-black uppercase text-lime-300">Secure local entry</p>
+            <h2 className="mt-3 text-3xl font-black text-white">
+              {hasProfile ? `Welcome back${profile.profileName ? `, ${profile.profileName}` : ""}.` : "Set up your command center."}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              This desktop build stores your profile on this Mac. Cloud login, database-backed profiles, and sync can plug into this same entry point during deployment.
+            </p>
+
+            <div className="mt-5 grid gap-3 rounded-xl border border-cyan-300/15 bg-[#07111f]/60 p-4">
+              <SourceStripRow label="Location" value={profile.location || "Not set"} />
+              <SourceStripRow label="Watchlist" value={compactListLabel(splitList(profile.watchlist))} />
+              <SourceStripRow label="Briefing time" value={profile.briefingTime || "08:00"} />
+            </div>
+
+            <div className="mt-6 grid gap-3">
+              <button
+                type="button"
+                onClick={hasProfile ? onContinue : onSetup}
+                className="min-h-12 rounded-xl bg-lime-300 px-5 text-sm font-black text-[#102000] transition hover:bg-lime-200"
+              >
+                {hasProfile ? "Open VerityDesk" : "Start Setup"}
+              </button>
+              <button
+                type="button"
+                onClick={onSetup}
+                className="min-h-12 rounded-xl border border-cyan-300/30 px-5 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
+              >
+                {hasProfile ? "Review Setup" : "Continue Without Account"}
+              </button>
+            </div>
+
+            <p className="mt-5 text-xs leading-5 text-slate-500">
+              No investment advice. Research and educational use only.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function LoginSignalCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-cyan-300/20 bg-[#07111f]/76 p-4">
+      <p className="font-mono text-[11px] font-black uppercase text-slate-500">{label}</p>
+      <p className="mt-2 truncate text-sm font-black text-cyan-100">{value}</p>
+    </div>
   );
 }
 
@@ -4649,6 +4774,14 @@ function isSetupComplete(profile: PersonalizationProfile) {
   }
 
   return window.localStorage.getItem(SETUP_COMPLETE_STORAGE_KEY) === "true" || Boolean(profile.profileName || profile.location || profile.personalNote);
+}
+
+function hasLocalSession() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.localStorage.getItem(LOCAL_SESSION_STORAGE_KEY) === "ready" || Boolean(window.localStorage.getItem(LOCAL_SESSION_STORAGE_KEY));
 }
 
 function normalizePersonalizationProfile(profile: PersonalizationProfile): PersonalizationProfile {

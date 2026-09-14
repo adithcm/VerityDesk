@@ -199,7 +199,7 @@ Milestone doc: [milestones/9.6.1-design-contracts.md](milestones/9.6.1-design-co
 
 ### 9.6.2 Login And Setup Flow
 
-Status: Planned
+Status: Complete
 
 - Add login/setup screens in the app.
 - Keep local-first storage for now.
