@@ -342,6 +342,30 @@ type HomeVisualModule = {
   points: number[];
 };
 
+type VisualModulesApiResponse = {
+  modules: Array<{
+    id: HomeVisualModule["id"];
+    title: string;
+    summary: string;
+    primary_value: string;
+    primary_label: string;
+    status: string;
+    trend: string;
+    updated_at: string | null;
+    chart: {
+      kind: "bar" | "line" | "spark";
+      points: Array<{ label: string; value: number }>;
+    };
+    stats: Array<{ label: string; value: string; detail: string | null }>;
+    sources: Array<{ name: string; status: string; retrieved_at: string | null; description: string | null }>;
+    related_report_id: number | null;
+    related_watch_item_ids: number[];
+    suggested_prompt: string;
+  }>;
+  total: number;
+  generated_at: string;
+};
+
 const PERSONALIZATION_STORAGE_KEY = "investoragent.personalization.v1";
 const SETUP_COMPLETE_STORAGE_KEY = "investoragent.setupComplete.v1";
 const LOCAL_SESSION_STORAGE_KEY = "investoragent.localSession.v1";
@@ -434,6 +458,9 @@ export default function Home() {
   const [suggestionsData, setSuggestionsData] = useState<ProactiveSuggestionsResponse | null>(null);
   const [suggestionsLoading, setSuggestionsLoading] = useState(true);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [visualModulesData, setVisualModulesData] = useState<VisualModulesApiResponse | null>(null);
+  const [visualModulesLoading, setVisualModulesLoading] = useState(true);
+  const [visualModulesError, setVisualModulesError] = useState<string | null>(null);
   const [watchItemsData, setWatchItemsData] = useState<WatchItemListResponse | null>(null);
   const [watchItemsLoading, setWatchItemsLoading] = useState(true);
   const [watchItemsError, setWatchItemsError] = useState<string | null>(null);
@@ -497,6 +524,7 @@ export default function Home() {
     loadAgentRuns();
     loadReports();
     loadSuggestions();
+    loadVisualModules();
     loadWatchItems();
   }, []);
 
@@ -550,6 +578,23 @@ export default function Home() {
       setAgentRunsData(null);
     } finally {
       setAgentRunsLoading(false);
+    }
+  }
+
+  async function loadVisualModules() {
+    setVisualModulesLoading(true);
+    setVisualModulesError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/visuals/modules`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Visual module request failed with status ${response.status}`);
+      }
+      setVisualModulesData((await response.json()) as VisualModulesApiResponse);
+    } catch (error) {
+      setVisualModulesError(error instanceof Error ? error.message : "Could not load visual modules");
+    } finally {
+      setVisualModulesLoading(false);
     }
   }
 
@@ -772,6 +817,7 @@ export default function Home() {
       setLastRunResponse((await response.json()) as IngestionRunResponse);
       await loadIngestionStatus();
       await loadSuggestions();
+      await loadVisualModules();
     } catch (error) {
       setIngestionError(error instanceof Error ? error.message : "Could not run ingestion");
     } finally {
@@ -877,6 +923,7 @@ export default function Home() {
       await loadAgentRuns();
       await loadReports();
       await loadSuggestions();
+      await loadVisualModules();
     } catch (error) {
       setDailyBriefingError(error instanceof Error ? error.message : "Could not generate daily briefing");
     } finally {
@@ -908,6 +955,7 @@ export default function Home() {
       await loadAgentRuns();
       await loadReports();
       await loadSuggestions();
+      await loadVisualModules();
     } catch (error) {
       setCompanyReportError(error instanceof Error ? error.message : "Could not generate company report");
     } finally {
@@ -934,6 +982,7 @@ export default function Home() {
       await loadAgentRuns();
       await loadReports();
       await loadSuggestions();
+      await loadVisualModules();
     } catch (error) {
       setMarketReportError(error instanceof Error ? error.message : "Could not generate market strategy report");
     } finally {
@@ -960,6 +1009,7 @@ export default function Home() {
       await loadAgentRuns();
       await loadReports();
       await loadSuggestions();
+      await loadVisualModules();
     } catch (error) {
       setHousingReportError(error instanceof Error ? error.message : "Could not generate housing report");
     } finally {
@@ -986,6 +1036,7 @@ export default function Home() {
       await loadAgentRuns();
       await loadReports();
       await loadSuggestions();
+      await loadVisualModules();
     } catch (error) {
       setMacroReportError(error instanceof Error ? error.message : "Could not generate macro report");
     } finally {
@@ -1115,6 +1166,9 @@ export default function Home() {
                 reportListData={reportListData}
                 reportsLoading={reportsLoading}
                 reportsError={reportsError}
+                visualModulesData={visualModulesData}
+                visualModulesLoading={visualModulesLoading}
+                visualModulesError={visualModulesError}
                 agentQuery={agentQuery}
                 agentLoading={agentLoading}
                 agentResponse={agentResponse}
@@ -1398,6 +1452,9 @@ function OptionMHomeView({
   reportListData,
   reportsLoading,
   reportsError,
+  visualModulesData,
+  visualModulesLoading,
+  visualModulesError,
   agentQuery,
   agentLoading,
   agentResponse,
@@ -1416,6 +1473,9 @@ function OptionMHomeView({
   reportListData: ReportListResponse | null;
   reportsLoading: boolean;
   reportsError: string | null;
+  visualModulesData: VisualModulesApiResponse | null;
+  visualModulesLoading: boolean;
+  visualModulesError: string | null;
   agentQuery: string;
   agentLoading: boolean;
   agentResponse: AgentResponse | null;
@@ -1430,12 +1490,13 @@ function OptionMHomeView({
   const latestReport = reportListData?.reports[0] ?? null;
   const sourceStatusText = summarizeSourceStatus(healthData, ingestionLoading, ingestionError);
   const inferredContext = inferAgentContext(agentQuery, personalizationProfile);
-  const modules = buildHomeVisualModules({
+  const fallbackModules = buildHomeVisualModules({
     profile: personalizationProfile,
     reports: reportListData?.reports ?? [],
     healthData,
     scheduleData,
   });
+  const modules = visualModulesData?.modules.length ? visualModulesData.modules.map(mapVisualModuleFromApi) : fallbackModules;
 
   return (
     <div className="grid gap-5">
@@ -1510,6 +1571,16 @@ function OptionMHomeView({
       </form>
 
       <section className="grid gap-4 xl:grid-cols-5">
+        {visualModulesLoading && !visualModulesData && (
+          <div className="rounded-[20px] border border-[#1d3558] bg-[#061320]/88 p-4 text-sm text-slate-400 xl:col-span-5">
+            Loading visual modules.
+          </div>
+        )}
+        {visualModulesError && (
+          <div className="rounded-[20px] border border-orange-300/30 bg-orange-950/20 p-4 text-sm text-orange-100 xl:col-span-5">
+            Using local fallback visuals. {visualModulesError}
+          </div>
+        )}
         {modules.map((module) => (
           <HomeVisualModuleCard key={module.id} module={module} />
         ))}
@@ -2282,6 +2353,27 @@ function buildHomeVisualModules({
       points: normalizeSparkPoints([totalSources, freshCount, needsCheck, profile.macroInterests.length + 2, reports.length + 1]),
     },
   ];
+}
+
+function mapVisualModuleFromApi(module: VisualModulesApiResponse["modules"][number]): HomeVisualModule {
+  const accentById: Record<HomeVisualModule["id"], HomeVisualModule["accent"]> = {
+    daily_read: "lime",
+    housing: "cyan",
+    markets: "pink",
+    companies: "orange",
+    macro: "violet",
+  };
+
+  return {
+    id: module.id,
+    title: module.title,
+    value: module.primary_value,
+    label: module.primary_label,
+    summary: module.summary,
+    status: titleCase(module.status.replaceAll("_", " ")),
+    accent: accentById[module.id],
+    points: normalizeSparkPoints(module.chart.points.map((point) => point.value)),
+  };
 }
 
 function normalizeSparkPoints(points: number[]) {

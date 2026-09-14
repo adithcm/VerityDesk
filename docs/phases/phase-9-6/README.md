@@ -223,7 +223,7 @@ Milestone doc: [milestones/9.6.3-option-m-home-layout.md](milestones/9.6.3-optio
 
 ### 9.6.4 Visual Module Data API
 
-Status: Planned
+Status: Complete
 
 - Add backend endpoint(s) for visual modules.
 - Build Housing, Markets, Companies, and Macro module summaries from existing API/source data.
