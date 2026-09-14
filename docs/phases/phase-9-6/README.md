@@ -211,7 +211,7 @@ Milestone doc: [milestones/9.6.2-login-setup-flow.md](milestones/9.6.2-login-set
 
 ### 9.6.3 Option M Home Layout
 
-Status: Planned
+Status: Complete
 
 - Replace the current dashboard with the Option M visual Home.
 - Reduce visible navigation to the approved tabs.

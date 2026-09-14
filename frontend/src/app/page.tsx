@@ -21,16 +21,13 @@ const domains = [
 ];
 
 const navigation = [
-  "Dashboard",
-  "Daily Briefing",
-  "Reports",
-  "Sources",
-  "Watchlist",
+  "Home",
+  "Daily Brief",
   "Agent Chat",
   "Settings",
 ] as const;
 
-type View = (typeof navigation)[number];
+type View = (typeof navigation)[number] | "Reports" | "Sources" | "Watchlist";
 type ShellNavItem = {
   label: string;
   title: string;
@@ -334,6 +331,17 @@ type InferredAgentContext = {
   explanation: string;
 };
 
+type HomeVisualModule = {
+  id: "daily_read" | "housing" | "markets" | "companies" | "macro";
+  title: string;
+  value: string;
+  label: string;
+  summary: string;
+  status: string;
+  accent: "lime" | "cyan" | "pink" | "orange" | "violet";
+  points: number[];
+};
+
 const PERSONALIZATION_STORAGE_KEY = "investoragent.personalization.v1";
 const SETUP_COMPLETE_STORAGE_KEY = "investoragent.setupComplete.v1";
 const LOCAL_SESSION_STORAGE_KEY = "investoragent.localSession.v1";
@@ -369,16 +377,14 @@ const macroInterestOptions = [
 ];
 
 const shellNavigation: ShellNavItem[] = [
-  { label: "Ask", title: "Ask VerityDesk", view: "Dashboard" },
-  { label: "Day", title: "Daily Briefing", view: "Daily Briefing" },
-  { label: "Rpt", title: "Reports", view: "Reports" },
-  { label: "Src", title: "Sources", view: "Sources" },
-  { label: "Wch", title: "Watchlist", view: "Watchlist" },
+  { label: "Home", title: "Home", view: "Home" },
+  { label: "Brief", title: "Daily Brief", view: "Daily Brief" },
+  { label: "Chat", title: "Agent Chat", view: "Agent Chat" },
   { label: "Set", title: "Settings", view: "Settings" },
 ];
 
 export default function Home() {
-  const [activeView, setActiveView] = useState<View>("Dashboard");
+  const [activeView, setActiveView] = useState<View>("Home");
   const [sourceData, setSourceData] = useState<SourceCatalogResponse | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [sourcesLoading, setSourcesLoading] = useState(true);
@@ -528,7 +534,7 @@ export default function Home() {
     localStorage.setItem(LOCAL_SESSION_STORAGE_KEY, new Date().toISOString());
     setLocalSessionReady(true);
     setSetupOpen(!isSetupComplete(personalizationProfile));
-    setActiveView("Dashboard");
+    setActiveView("Home");
   }
 
   async function loadAgentRuns() {
@@ -682,22 +688,22 @@ export default function Home() {
     }
     if (suggestion.action === "generate_daily_briefing") {
       generateDailyBriefing();
-      setActiveView("Daily Briefing");
+      setActiveView("Daily Brief");
       return;
     }
     if (suggestion.action === "generate_market_strategy") {
       generateMarketStrategy();
-      setActiveView("Dashboard");
+      setActiveView("Home");
       return;
     }
     if (suggestion.action === "generate_housing_report") {
       generateHousingReport();
-      setActiveView("Dashboard");
+      setActiveView("Home");
       return;
     }
     if (suggestion.action === "generate_macro_report") {
       generateMacroReport();
-      setActiveView("Dashboard");
+      setActiveView("Home");
       return;
     }
     if (suggestion.action === "review_sources") {
@@ -822,7 +828,7 @@ export default function Home() {
     setAgentDomain(requestContext.domain);
     setAgentTicker(requestContext.tickers.join(", "));
     setAgentQuery(trimmedQuery);
-    setActiveView("Dashboard");
+    setActiveView("Agent Chat");
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/agents/query`, {
@@ -995,7 +1001,7 @@ export default function Home() {
       return;
     }
     setManualAgentContext(false);
-    setActiveView("Dashboard");
+    setActiveView("Home");
   }
 
   if (!entryLoaded) {
@@ -1032,7 +1038,7 @@ export default function Home() {
           onSave={(nextProfile) => {
             savePersonalizationProfile(nextProfile);
             setSetupOpen(false);
-            setActiveView("Dashboard");
+            setActiveView("Home");
           }}
           onSkip={() => {
             localStorage.setItem(SETUP_COMPLETE_STORAGE_KEY, "true");
@@ -1095,13 +1101,13 @@ export default function Home() {
             <span className="h-2.5 w-2.5 rounded-full bg-orange-400" />
             <span className="h-2.5 w-2.5 rounded-full bg-lime-300" />
             <span className="ml-2 font-mono text-xs font-bold text-slate-400">
-              {activeView === "Dashboard" ? "veritydesk run --mode=answer --citations=hidden" : `veritydesk open --view=${activeView.toLowerCase().replaceAll(" ", "-")}`}
+              {activeView === "Home" ? "veritydesk home --visuals=api --ask=ready" : `veritydesk open --view=${activeView.toLowerCase().replaceAll(" ", "-")}`}
             </span>
           </div>
 
           <div className="p-5 md:p-7">
-            {activeView === "Dashboard" && (
-              <ConsoleAskView
+            {activeView === "Home" && (
+              <OptionMHomeView
                 healthData={healthData}
                 scheduleData={scheduleData}
                 ingestionError={ingestionError}
@@ -1117,9 +1123,11 @@ export default function Home() {
                 setAgentQuery={setAgentQuery}
                 setManualAgentContext={setManualAgentContext}
                 submitAgentQuery={submitAgentQuery}
+                openDailyBrief={() => setActiveView("Daily Brief")}
+                openAgentChat={() => setActiveView("Agent Chat")}
               />
             )}
-            {activeView === "Daily Briefing" && (
+            {activeView === "Daily Brief" && (
               <DailyBriefingView
                 latestItemsData={latestItemsData}
                 ingestionLoading={ingestionLoading}
@@ -1230,23 +1238,34 @@ export default function Home() {
           </div>
         </section>
 
-        <BriefingCardsPanel
-          personalizationProfile={personalizationProfile}
-          sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
-          scheduleData={scheduleData}
-          reportListData={reportListData}
-          reportsLoading={reportsLoading}
-          suggestionsData={suggestionsData}
-          suggestionsLoading={suggestionsLoading}
-          suggestionsError={suggestionsError}
-          generateDailyBriefing={generateDailyBriefing}
-          generateHousingReport={generateHousingReport}
-          generateMarketStrategy={generateMarketStrategy}
-          generateCompanyReport={generateCompanyReport}
-          generateMacroReport={generateMacroReport}
-          applySuggestion={applySuggestion}
-          openSettings={() => setActiveView("Settings")}
-        />
+        {activeView === "Home" ? (
+          <HomeProfileRail
+            personalizationProfile={personalizationProfile}
+            sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
+            scheduleData={scheduleData}
+            reportListData={reportListData}
+            reportsLoading={reportsLoading}
+            openSettings={() => setActiveView("Settings")}
+          />
+        ) : (
+          <BriefingCardsPanel
+            personalizationProfile={personalizationProfile}
+            sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
+            scheduleData={scheduleData}
+            reportListData={reportListData}
+            reportsLoading={reportsLoading}
+            suggestionsData={suggestionsData}
+            suggestionsLoading={suggestionsLoading}
+            suggestionsError={suggestionsError}
+            generateDailyBriefing={generateDailyBriefing}
+            generateHousingReport={generateHousingReport}
+            generateMarketStrategy={generateMarketStrategy}
+            generateCompanyReport={generateCompanyReport}
+            generateMacroReport={generateMacroReport}
+            applySuggestion={applySuggestion}
+            openSettings={() => setActiveView("Settings")}
+          />
+        )}
       </div>
     </main>
   );
@@ -1371,7 +1390,7 @@ function AppHeader({
   );
 }
 
-function ConsoleAskView({
+function OptionMHomeView({
   healthData,
   scheduleData,
   ingestionError,
@@ -1387,6 +1406,8 @@ function ConsoleAskView({
   setAgentQuery,
   setManualAgentContext,
   submitAgentQuery,
+  openDailyBrief,
+  openAgentChat,
 }: {
   healthData: SourceHealthResponse | null;
   scheduleData: DailyScheduleConfig | null;
@@ -1403,27 +1424,60 @@ function ConsoleAskView({
   setAgentQuery: (value: string) => void;
   setManualAgentContext: (value: boolean) => void;
   submitAgentQuery: (event: FormEvent<HTMLFormElement>) => void;
+  openDailyBrief: () => void;
+  openAgentChat: () => void;
 }) {
   const latestReport = reportListData?.reports[0] ?? null;
   const sourceStatusText = summarizeSourceStatus(healthData, ingestionLoading, ingestionError);
   const inferredContext = inferAgentContext(agentQuery, personalizationProfile);
+  const modules = buildHomeVisualModules({
+    profile: personalizationProfile,
+    reports: reportListData?.reports ?? [],
+    healthData,
+    scheduleData,
+  });
 
   return (
-    <div className="grid gap-6">
-      <section className="grid gap-4">
-        <div className="font-mono text-sm font-bold text-lime-300">veritydesk / ask / profile loaded</div>
-        <div>
-          <h1 className="max-w-4xl text-[clamp(2.6rem,6vw,4.8rem)] font-black leading-[0.94] tracking-normal text-white">
-            Ask once. Get the brief.
+    <div className="grid gap-5">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(340px,0.55fr)]">
+        <div className="rounded-[22px] border border-cyan-300/20 bg-[radial-gradient(circle_at_82%_18%,rgba(34,211,238,0.18),transparent_18rem),#020617]/90 p-5 md:p-6">
+          <p className="font-mono text-xs font-black uppercase text-lime-300">Home / visual intelligence</p>
+          <h1 className="mt-4 max-w-4xl text-[clamp(2.7rem,6vw,5rem)] font-black leading-[0.92] text-white">
+            Read the signal. Ask the rest.
           </h1>
-          <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400">
-            Type one question. VerityDesk handles live web search, API checks, source ranking, and agent routing behind the scenes.
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">
+            A cleaner daily surface powered by source refreshes, saved reports, and live web answers.
           </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <NeonChip variant="live">{sourceStatusText}</NeonChip>
+            <NeonChip>{scheduleData?.enabled ? "Daily run on" : "Daily run off"}</NeonChip>
+            <NeonChip variant="search">{formatAgentIntent(inferredContext.intent)}</NeonChip>
+          </div>
+        </div>
+
+        <div className="rounded-[22px] border border-lime-300/20 bg-[#061320]/90 p-5">
+          <p className="font-mono text-xs font-black uppercase text-cyan-300">Today&apos;s brief</p>
+          <h2 className="mt-3 text-2xl font-black text-white">
+            {latestReport ? latestReport.title : "No saved brief yet"}
+          </h2>
+          <p className="mt-3 line-clamp-4 text-sm leading-6 text-slate-400">
+            {cleanAnswerText(latestReport?.summary ?? latestReport?.body) ?? "Generate a daily brief or ask a question to start building today&apos;s intelligence layer."}
+          </p>
+          <button
+            type="button"
+            onClick={openDailyBrief}
+            className="mt-5 min-h-10 rounded-lg border border-cyan-300/30 px-4 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
+          >
+            Open Daily Brief
+          </button>
         </div>
       </section>
 
       <form
-        onSubmit={submitAgentQuery}
+        onSubmit={(event) => {
+          openAgentChat();
+          submitAgentQuery(event);
+        }}
         className="rounded-xl border border-cyan-300/30 bg-[#020617] p-4 shadow-[inset_0_0_0_1px_rgba(163,230,53,0.04)]"
       >
         <label className="sr-only" htmlFor="console-question">
@@ -1450,16 +1504,16 @@ function ConsoleAskView({
             disabled={agentLoading || !agentQuery.trim()}
             className="min-h-11 rounded-lg bg-lime-300 px-5 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
           >
-            {agentLoading ? "Thinking" : "Run Answer"}
+            {agentLoading ? "Thinking" : "Ask"}
           </button>
         </div>
       </form>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <ConsoleMetric label="Sources" value={sourceStatusText} />
-        <ConsoleMetric label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
-        <ConsoleMetric label="Auto route" value={formatAgentIntent(inferredContext.intent)} />
-      </div>
+      <section className="grid gap-4 xl:grid-cols-5">
+        {modules.map((module) => (
+          <HomeVisualModuleCard key={module.id} module={module} />
+        ))}
+      </section>
 
       <section className="rounded-xl border border-[#1d3558] bg-[#0a1628]/75 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1503,6 +1557,125 @@ function ConsoleAskView({
         )}
       </section>
     </div>
+  );
+}
+
+function HomeVisualModuleCard({ module }: { module: HomeVisualModule }) {
+  const accentClass = {
+    lime: "border-lime-300/35 text-lime-300",
+    cyan: "border-cyan-300/35 text-cyan-300",
+    pink: "border-pink-300/35 text-pink-300",
+    orange: "border-orange-300/35 text-orange-300",
+    violet: "border-violet-300/35 text-violet-300",
+  }[module.accent];
+  const glowClass = {
+    lime: "bg-lime-300 shadow-[0_0_24px_rgba(163,230,53,0.45)]",
+    cyan: "bg-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.45)]",
+    pink: "bg-pink-300 shadow-[0_0_24px_rgba(249,168,212,0.45)]",
+    orange: "bg-orange-300 shadow-[0_0_24px_rgba(253,186,116,0.45)]",
+    violet: "bg-violet-300 shadow-[0_0_24px_rgba(196,181,253,0.45)]",
+  }[module.accent];
+
+  return (
+    <button
+      type="button"
+      className={`group min-h-[250px] rounded-[20px] border bg-[#061320]/88 p-4 text-left transition hover:-translate-y-0.5 hover:bg-[#08182a] ${accentClass}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-mono text-[11px] font-black uppercase text-slate-500">{module.status}</p>
+          <h3 className="mt-2 text-xl font-black text-white">{module.title}</h3>
+        </div>
+        <span className={`h-2.5 w-2.5 rounded-full ${glowClass}`} />
+      </div>
+      <div className="mt-5">
+        <p className="text-4xl font-black text-white">{module.value}</p>
+        <p className="mt-1 text-xs font-bold uppercase tracking-normal text-slate-500">{module.label}</p>
+      </div>
+      <MiniBarChart points={module.points} accent={module.accent} />
+      <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-400">{module.summary}</p>
+    </button>
+  );
+}
+
+function MiniBarChart({ points, accent }: { points: number[]; accent: HomeVisualModule["accent"] }) {
+  const maxPoint = Math.max(...points, 1);
+  const barClass = {
+    lime: "bg-lime-300",
+    cyan: "bg-cyan-300",
+    pink: "bg-pink-300",
+    orange: "bg-orange-300",
+    violet: "bg-violet-300",
+  }[accent];
+
+  return (
+    <div className="mt-5 flex h-16 items-end gap-1.5 rounded-xl border border-[#1d3558] bg-[#020617]/76 px-3 py-2">
+      {points.map((point, index) => (
+        <span
+          key={`${point}-${index}`}
+          className={`w-full rounded-t-sm opacity-85 ${barClass}`}
+          style={{ height: `${Math.max(12, (point / maxPoint) * 100)}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function HomeProfileRail({
+  personalizationProfile,
+  sourceStatusText,
+  scheduleData,
+  reportListData,
+  reportsLoading,
+  openSettings,
+}: {
+  personalizationProfile: PersonalizationProfile;
+  sourceStatusText: string;
+  scheduleData: DailyScheduleConfig | null;
+  reportListData: ReportListResponse | null;
+  reportsLoading: boolean;
+  openSettings: () => void;
+}) {
+  const latestReport = reportListData?.reports[0] ?? null;
+
+  return (
+    <aside className="grid content-start gap-4 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
+      <section className="rounded-[18px] border border-cyan-300/20 bg-[#020617]/80 p-4">
+        <p className="font-mono text-xs font-black uppercase text-lime-300">Profile</p>
+        <h2 className="mt-3 text-2xl font-black text-white">{personalizationProfile.profileName || "My VerityDesk"}</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-400">
+          {personalizationProfile.personalNote || "Add a short note in Settings so answers and daily briefs know what matters to you."}
+        </p>
+        <button
+          type="button"
+          onClick={openSettings}
+          className="mt-4 min-h-10 rounded-lg border border-cyan-300/30 px-4 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
+        >
+          Tune Profile
+        </button>
+      </section>
+
+      <section className="rounded-[18px] border border-[#1d3558] bg-[#020617]/70 p-4">
+        <p className="font-mono text-xs font-black uppercase text-cyan-300">Status</p>
+        <div className="mt-4 grid gap-3">
+          <SourceStripRow label="Sources" value={sourceStatusText} />
+          <SourceStripRow label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
+          <SourceStripRow label="Next" value={formatDateTime(scheduleData?.next_run_at)} />
+          <SourceStripRow label="Location" value={personalizationProfile.location || "Not set"} />
+          <SourceStripRow label="Watchlist" value={compactListLabel(splitList(personalizationProfile.watchlist))} />
+        </div>
+      </section>
+
+      <section className="rounded-[18px] border border-[#1d3558] bg-[#020617]/70 p-4">
+        <p className="font-mono text-xs font-black uppercase text-pink-300">Latest saved</p>
+        <p className="mt-3 text-sm font-bold text-white">
+          {reportsLoading ? "Loading..." : latestReport?.title ?? "No report yet"}
+        </p>
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          {latestReport ? `Retrieved ${formatDateTime(latestReport.as_of ?? latestReport.created_at)}` : "Daily cards will fill in after refreshes and brief generation."}
+        </p>
+      </section>
+    </aside>
   );
 }
 
@@ -2039,6 +2212,82 @@ function buildDailyTopicPanels({
   ];
 }
 
+function buildHomeVisualModules({
+  profile,
+  reports,
+  healthData,
+  scheduleData,
+}: {
+  profile: PersonalizationProfile;
+  reports: ReportResponse[];
+  healthData: SourceHealthResponse | null;
+  scheduleData: DailyScheduleConfig | null;
+}): HomeVisualModule[] {
+  const latestByType = latestReportByType(reports);
+  const freshCount = healthData?.fresh_count ?? 0;
+  const needsCheck = needsCheckCount(healthData);
+  const totalSources = healthData?.total ?? 0;
+  const location = profile.location || compactListLabel(splitList(profile.housingMarkets));
+  const watchlist = compactListLabel(splitList(profile.watchlist));
+
+  return [
+    {
+      id: "daily_read",
+      title: "Daily Read",
+      value: latestByType.has("daily_briefing") ? "Ready" : "Open",
+      label: scheduleData?.enabled ? "Auto brief" : "Manual brief",
+      summary: latestByType.get("daily_briefing")?.summary ?? "A personal briefing will appear after the daily refresh and brief generation run.",
+      status: latestByType.has("daily_briefing") ? "Ready" : "Needs brief",
+      accent: "lime",
+      points: normalizeSparkPoints([freshCount, totalSources, reports.length, scheduleData?.enabled ? 8 : 3, needsCheck]),
+    },
+    {
+      id: "housing",
+      title: "Housing",
+      value: location === "Not set" ? "Set area" : "Local",
+      label: location === "Not set" ? "Location needed" : location,
+      summary: latestByType.get("housing")?.summary ?? "Tracks rates, affordability, housing markets, and local pressure points from your saved area.",
+      status: latestByType.has("housing") ? "Ready" : "No local data",
+      accent: "cyan",
+      points: normalizeSparkPoints([2, profile.housingMarkets ? 7 : 3, freshCount, 5, needsCheck + 2]),
+    },
+    {
+      id: "markets",
+      title: "Markets",
+      value: freshCount > 0 ? String(freshCount) : "--",
+      label: "fresh sources",
+      summary: latestByType.get("market_strategy")?.summary ?? "Shows broad risk, rates, volatility, commodities, and sector tone from connected feeds.",
+      status: latestByType.has("market_strategy") ? "Ready" : "Needs refresh",
+      accent: "pink",
+      points: normalizeSparkPoints([freshCount, needsCheck + 1, totalSources, reports.length + 2, 6]),
+    },
+    {
+      id: "companies",
+      title: "Companies",
+      value: watchlist === "Not set" ? "--" : String(splitList(profile.watchlist).length),
+      label: watchlist === "Not set" ? "watchlist empty" : "tracked tickers",
+      summary: latestByType.get("company_research")?.summary ?? "Surfaces news, filings, catalysts, and watchlist changes for saved companies.",
+      status: watchlist === "Not set" ? "Needs setup" : latestByType.has("company_research") ? "Ready" : "Watching",
+      accent: "orange",
+      points: normalizeSparkPoints([splitList(profile.watchlist).length + 1, reports.length, freshCount, 3, needsCheck + 1]),
+    },
+    {
+      id: "macro",
+      title: "Macro",
+      value: totalSources > 0 ? String(totalSources) : "--",
+      label: "source map",
+      summary: latestByType.get("macro")?.summary ?? "Connects inflation, rates, jobs, consumer, credit, and policy signals into one macro pulse.",
+      status: latestByType.has("macro") ? "Ready" : "Quiet",
+      accent: "violet",
+      points: normalizeSparkPoints([totalSources, freshCount, needsCheck, profile.macroInterests.length + 2, reports.length + 1]),
+    },
+  ];
+}
+
+function normalizeSparkPoints(points: number[]) {
+  return points.map((point) => Math.max(1, Math.round(point)));
+}
+
 function latestReportByType(reports: ReportResponse[]) {
   const map = new Map<ReportResponse["report_type"], ReportResponse>();
   for (const report of reports) {
@@ -2190,7 +2439,7 @@ function DashboardView({
               </button>
               <button
                 type="button"
-                onClick={() => setActiveView("Daily Briefing")}
+                onClick={() => setActiveView("Daily Brief")}
                 className="min-h-11 rounded-md border border-[#cbd5dc] px-4 py-2 text-sm font-semibold text-[#143642]"
               >
                 Open Daily Briefing
@@ -2234,7 +2483,7 @@ function DashboardView({
             </div>
             <button
               type="button"
-              onClick={() => setActiveView("Daily Briefing")}
+              onClick={() => setActiveView("Daily Brief")}
               className="min-h-10 rounded-md border border-[#cbd5dc] px-3 py-2 text-sm font-semibold text-[#143642]"
             >
               Open
