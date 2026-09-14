@@ -21,16 +21,13 @@ const domains = [
 ];
 
 const navigation = [
-  "Dashboard",
-  "Daily Briefing",
-  "Reports",
-  "Sources",
-  "Watchlist",
+  "Home",
+  "Daily Brief",
   "Agent Chat",
   "Settings",
 ] as const;
 
-type View = (typeof navigation)[number];
+type View = (typeof navigation)[number] | "Reports" | "Sources" | "Watchlist";
 type ShellNavItem = {
   label: string;
   title: string;
@@ -334,8 +331,49 @@ type InferredAgentContext = {
   explanation: string;
 };
 
+type HomeVisualModule = {
+  id: "daily_read" | "housing" | "markets" | "companies" | "macro";
+  title: string;
+  value: string;
+  label: string;
+  summary: string;
+  status: string;
+  accent: "lime" | "cyan" | "pink" | "orange" | "violet";
+  points: number[];
+  updatedAt: string | null;
+  stats: Array<{ label: string; value: string; detail: string | null }>;
+  sources: Array<{ name: string; status: string; retrievedAt: string | null; description: string | null }>;
+  relatedReportId: number | null;
+  suggestedPrompt: string;
+};
+
+type VisualModulesApiResponse = {
+  modules: Array<{
+    id: HomeVisualModule["id"];
+    title: string;
+    summary: string;
+    primary_value: string;
+    primary_label: string;
+    status: string;
+    trend: string;
+    updated_at: string | null;
+    chart: {
+      kind: "bar" | "line" | "spark";
+      points: Array<{ label: string; value: number }>;
+    };
+    stats: Array<{ label: string; value: string; detail: string | null }>;
+    sources: Array<{ name: string; status: string; retrieved_at: string | null; description: string | null }>;
+    related_report_id: number | null;
+    related_watch_item_ids: number[];
+    suggested_prompt: string;
+  }>;
+  total: number;
+  generated_at: string;
+};
+
 const PERSONALIZATION_STORAGE_KEY = "investoragent.personalization.v1";
 const SETUP_COMPLETE_STORAGE_KEY = "investoragent.setupComplete.v1";
+const LOCAL_SESSION_STORAGE_KEY = "investoragent.localSession.v1";
 
 const topicOptions = [
   "World news",
@@ -368,16 +406,14 @@ const macroInterestOptions = [
 ];
 
 const shellNavigation: ShellNavItem[] = [
-  { label: "Ask", title: "Ask VerityDesk", view: "Dashboard" },
-  { label: "Day", title: "Daily Briefing", view: "Daily Briefing" },
-  { label: "Rpt", title: "Reports", view: "Reports" },
-  { label: "Src", title: "Sources", view: "Sources" },
-  { label: "Wch", title: "Watchlist", view: "Watchlist" },
+  { label: "Home", title: "Home", view: "Home" },
+  { label: "Brief", title: "Daily Brief", view: "Daily Brief" },
+  { label: "Chat", title: "Agent Chat", view: "Agent Chat" },
   { label: "Set", title: "Settings", view: "Settings" },
 ];
 
 export default function Home() {
-  const [activeView, setActiveView] = useState<View>("Dashboard");
+  const [activeView, setActiveView] = useState<View>("Home");
   const [sourceData, setSourceData] = useState<SourceCatalogResponse | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [sourcesLoading, setSourcesLoading] = useState(true);
@@ -427,6 +463,9 @@ export default function Home() {
   const [suggestionsData, setSuggestionsData] = useState<ProactiveSuggestionsResponse | null>(null);
   const [suggestionsLoading, setSuggestionsLoading] = useState(true);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [visualModulesData, setVisualModulesData] = useState<VisualModulesApiResponse | null>(null);
+  const [visualModulesLoading, setVisualModulesLoading] = useState(true);
+  const [visualModulesError, setVisualModulesError] = useState<string | null>(null);
   const [watchItemsData, setWatchItemsData] = useState<WatchItemListResponse | null>(null);
   const [watchItemsLoading, setWatchItemsLoading] = useState(true);
   const [watchItemsError, setWatchItemsError] = useState<string | null>(null);
@@ -437,6 +476,8 @@ export default function Home() {
   const [personalizationProfile, setPersonalizationProfile] = useState<PersonalizationProfile>(defaultPersonalizationProfile());
   const [profileSavedAt, setProfileSavedAt] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [localSessionReady, setLocalSessionReady] = useState(false);
+  const [entryLoaded, setEntryLoaded] = useState(false);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -488,13 +529,16 @@ export default function Home() {
     loadAgentRuns();
     loadReports();
     loadSuggestions();
+    loadVisualModules();
     loadWatchItems();
   }, []);
 
   useEffect(() => {
     const savedProfile = loadPersonalizationProfile();
+    const setupComplete = isSetupComplete(savedProfile);
     setPersonalizationProfile(savedProfile);
-    setSetupOpen(!isSetupComplete(savedProfile));
+    setLocalSessionReady(hasLocalSession());
+    setSetupOpen(hasLocalSession() && !setupComplete);
     setAgentTicker(savedProfile.watchlist);
     if (savedProfile.companies.trim()) {
       setCompanyName(firstListItem(savedProfile.companies));
@@ -502,6 +546,7 @@ export default function Home() {
     if (savedProfile.watchlist.trim()) {
       setCompanyTicker(firstListItem(savedProfile.watchlist).toUpperCase());
     }
+    setEntryLoaded(true);
   }, []);
 
   function savePersonalizationProfile(nextProfile: PersonalizationProfile) {
@@ -518,6 +563,13 @@ export default function Home() {
     }
   }
 
+  function startLocalSession() {
+    localStorage.setItem(LOCAL_SESSION_STORAGE_KEY, new Date().toISOString());
+    setLocalSessionReady(true);
+    setSetupOpen(!isSetupComplete(personalizationProfile));
+    setActiveView("Home");
+  }
+
   async function loadAgentRuns() {
     setAgentRunsLoading(true);
 
@@ -531,6 +583,23 @@ export default function Home() {
       setAgentRunsData(null);
     } finally {
       setAgentRunsLoading(false);
+    }
+  }
+
+  async function loadVisualModules() {
+    setVisualModulesLoading(true);
+    setVisualModulesError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/visuals/modules`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Visual module request failed with status ${response.status}`);
+      }
+      setVisualModulesData((await response.json()) as VisualModulesApiResponse);
+    } catch (error) {
+      setVisualModulesError(error instanceof Error ? error.message : "Could not load visual modules");
+    } finally {
+      setVisualModulesLoading(false);
     }
   }
 
@@ -669,22 +738,22 @@ export default function Home() {
     }
     if (suggestion.action === "generate_daily_briefing") {
       generateDailyBriefing();
-      setActiveView("Daily Briefing");
+      setActiveView("Daily Brief");
       return;
     }
     if (suggestion.action === "generate_market_strategy") {
       generateMarketStrategy();
-      setActiveView("Dashboard");
+      setActiveView("Home");
       return;
     }
     if (suggestion.action === "generate_housing_report") {
       generateHousingReport();
-      setActiveView("Dashboard");
+      setActiveView("Home");
       return;
     }
     if (suggestion.action === "generate_macro_report") {
       generateMacroReport();
-      setActiveView("Dashboard");
+      setActiveView("Home");
       return;
     }
     if (suggestion.action === "review_sources") {
@@ -753,6 +822,7 @@ export default function Home() {
       setLastRunResponse((await response.json()) as IngestionRunResponse);
       await loadIngestionStatus();
       await loadSuggestions();
+      await loadVisualModules();
     } catch (error) {
       setIngestionError(error instanceof Error ? error.message : "Could not run ingestion");
     } finally {
@@ -809,7 +879,7 @@ export default function Home() {
     setAgentDomain(requestContext.domain);
     setAgentTicker(requestContext.tickers.join(", "));
     setAgentQuery(trimmedQuery);
-    setActiveView("Dashboard");
+    setActiveView("Agent Chat");
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/agents/query`, {
@@ -858,6 +928,7 @@ export default function Home() {
       await loadAgentRuns();
       await loadReports();
       await loadSuggestions();
+      await loadVisualModules();
     } catch (error) {
       setDailyBriefingError(error instanceof Error ? error.message : "Could not generate daily briefing");
     } finally {
@@ -889,6 +960,7 @@ export default function Home() {
       await loadAgentRuns();
       await loadReports();
       await loadSuggestions();
+      await loadVisualModules();
     } catch (error) {
       setCompanyReportError(error instanceof Error ? error.message : "Could not generate company report");
     } finally {
@@ -915,6 +987,7 @@ export default function Home() {
       await loadAgentRuns();
       await loadReports();
       await loadSuggestions();
+      await loadVisualModules();
     } catch (error) {
       setMarketReportError(error instanceof Error ? error.message : "Could not generate market strategy report");
     } finally {
@@ -941,6 +1014,7 @@ export default function Home() {
       await loadAgentRuns();
       await loadReports();
       await loadSuggestions();
+      await loadVisualModules();
     } catch (error) {
       setHousingReportError(error instanceof Error ? error.message : "Could not generate housing report");
     } finally {
@@ -967,6 +1041,7 @@ export default function Home() {
       await loadAgentRuns();
       await loadReports();
       await loadSuggestions();
+      await loadVisualModules();
     } catch (error) {
       setMacroReportError(error instanceof Error ? error.message : "Could not generate macro report");
     } finally {
@@ -982,7 +1057,30 @@ export default function Home() {
       return;
     }
     setManualAgentContext(false);
-    setActiveView("Dashboard");
+    setActiveView("Home");
+  }
+
+  if (!entryLoaded) {
+    return (
+      <main className="min-h-screen bg-[#020617] text-[#f8fafc]">
+        <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_72%_18%,rgba(34,211,238,0.18),transparent_30rem),radial-gradient(circle_at_18%_78%,rgba(163,230,53,0.12),transparent_30rem),#020617]" />
+      </main>
+    );
+  }
+
+  if (!localSessionReady) {
+    return (
+      <LoginEntryFlow
+        profile={personalizationProfile}
+        sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
+        scheduleData={scheduleData}
+        onContinue={startLocalSession}
+        onSetup={() => {
+          startLocalSession();
+          setSetupOpen(true);
+        }}
+      />
+    );
   }
 
   return (
@@ -996,7 +1094,7 @@ export default function Home() {
           onSave={(nextProfile) => {
             savePersonalizationProfile(nextProfile);
             setSetupOpen(false);
-            setActiveView("Dashboard");
+            setActiveView("Home");
           }}
           onSkip={() => {
             localStorage.setItem(SETUP_COMPLETE_STORAGE_KEY, "true");
@@ -1059,13 +1157,13 @@ export default function Home() {
             <span className="h-2.5 w-2.5 rounded-full bg-orange-400" />
             <span className="h-2.5 w-2.5 rounded-full bg-lime-300" />
             <span className="ml-2 font-mono text-xs font-bold text-slate-400">
-              {activeView === "Dashboard" ? "veritydesk run --mode=answer --citations=hidden" : `veritydesk open --view=${activeView.toLowerCase().replaceAll(" ", "-")}`}
+              {activeView === "Home" ? "veritydesk home --visuals=api --ask=ready" : `veritydesk open --view=${activeView.toLowerCase().replaceAll(" ", "-")}`}
             </span>
           </div>
 
           <div className="p-5 md:p-7">
-            {activeView === "Dashboard" && (
-              <ConsoleAskView
+            {activeView === "Home" && (
+              <OptionMHomeView
                 healthData={healthData}
                 scheduleData={scheduleData}
                 ingestionError={ingestionError}
@@ -1073,6 +1171,9 @@ export default function Home() {
                 reportListData={reportListData}
                 reportsLoading={reportsLoading}
                 reportsError={reportsError}
+                visualModulesData={visualModulesData}
+                visualModulesLoading={visualModulesLoading}
+                visualModulesError={visualModulesError}
                 agentQuery={agentQuery}
                 agentLoading={agentLoading}
                 agentResponse={agentResponse}
@@ -1081,9 +1182,11 @@ export default function Home() {
                 setAgentQuery={setAgentQuery}
                 setManualAgentContext={setManualAgentContext}
                 submitAgentQuery={submitAgentQuery}
+                openDailyBrief={() => setActiveView("Daily Brief")}
+                openAgentChat={() => setActiveView("Agent Chat")}
               />
             )}
-            {activeView === "Daily Briefing" && (
+            {activeView === "Daily Brief" && (
               <DailyBriefingView
                 latestItemsData={latestItemsData}
                 ingestionLoading={ingestionLoading}
@@ -1194,25 +1297,125 @@ export default function Home() {
           </div>
         </section>
 
-        <BriefingCardsPanel
-          personalizationProfile={personalizationProfile}
-          sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
-          scheduleData={scheduleData}
-          reportListData={reportListData}
-          reportsLoading={reportsLoading}
-          suggestionsData={suggestionsData}
-          suggestionsLoading={suggestionsLoading}
-          suggestionsError={suggestionsError}
-          generateDailyBriefing={generateDailyBriefing}
-          generateHousingReport={generateHousingReport}
-          generateMarketStrategy={generateMarketStrategy}
-          generateCompanyReport={generateCompanyReport}
-          generateMacroReport={generateMacroReport}
-          applySuggestion={applySuggestion}
-          openSettings={() => setActiveView("Settings")}
-        />
+        {activeView === "Home" ? (
+          <HomeProfileRail
+            personalizationProfile={personalizationProfile}
+            sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
+            scheduleData={scheduleData}
+            reportListData={reportListData}
+            reportsLoading={reportsLoading}
+            openSettings={() => setActiveView("Settings")}
+          />
+        ) : (
+          <BriefingCardsPanel
+            personalizationProfile={personalizationProfile}
+            sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
+            scheduleData={scheduleData}
+            reportListData={reportListData}
+            reportsLoading={reportsLoading}
+            suggestionsData={suggestionsData}
+            suggestionsLoading={suggestionsLoading}
+            suggestionsError={suggestionsError}
+            generateDailyBriefing={generateDailyBriefing}
+            generateHousingReport={generateHousingReport}
+            generateMarketStrategy={generateMarketStrategy}
+            generateCompanyReport={generateCompanyReport}
+            generateMacroReport={generateMacroReport}
+            applySuggestion={applySuggestion}
+            openSettings={() => setActiveView("Settings")}
+          />
+        )}
       </div>
     </main>
+  );
+}
+
+function LoginEntryFlow({
+  profile,
+  sourceStatusText,
+  scheduleData,
+  onContinue,
+  onSetup,
+}: {
+  profile: PersonalizationProfile;
+  sourceStatusText: string;
+  scheduleData: DailyScheduleConfig | null;
+  onContinue: () => void;
+  onSetup: () => void;
+}) {
+  const hasProfile = Boolean(profile.profileName || profile.location || profile.personalNote);
+
+  return (
+    <main className="min-h-screen overflow-hidden bg-[#020617] px-4 py-6 text-[#f8fafc] md:px-8">
+      <div className="fixed inset-0 -z-10 bg-[linear-gradient(rgba(34,211,238,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.04)_1px,transparent_1px),radial-gradient(circle_at_78%_16%,rgba(34,211,238,0.22),transparent_30rem),radial-gradient(circle_at_18%_76%,rgba(163,230,53,0.13),transparent_28rem),#020617] bg-[length:42px_42px,42px_42px,auto,auto,auto]" />
+      <section className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl items-center gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
+        <div>
+          <div className="inline-flex items-center gap-3 rounded-full border border-cyan-300/25 bg-[#07111f]/80 px-4 py-2">
+            <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(163,230,53,0.8)]" />
+            <span className="font-mono text-xs font-black uppercase text-cyan-200">Local Intelligence Workspace</span>
+          </div>
+          <h1 className="mt-7 max-w-3xl text-5xl font-black leading-[0.95] text-white md:text-7xl">
+            VerityDesk
+          </h1>
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
+            Daily intelligence shaped around your location, watchlist, sources, and questions.
+          </p>
+          <div className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-3">
+            <LoginSignalCard label="Sources" value={sourceStatusText} />
+            <LoginSignalCard label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
+            <LoginSignalCard label="Profile" value={hasProfile ? "Ready" : "Setup needed"} />
+          </div>
+        </div>
+
+        <div className="rounded-[24px] border border-cyan-300/25 bg-[#07111f]/92 p-5 shadow-[0_30px_110px_rgba(0,0,0,0.45)] backdrop-blur">
+          <div className="rounded-[18px] border border-[#1d3558] bg-[#020617]/82 p-5">
+            <p className="font-mono text-xs font-black uppercase text-lime-300">Secure local entry</p>
+            <h2 className="mt-3 text-3xl font-black text-white">
+              {hasProfile ? `Welcome back${profile.profileName ? `, ${profile.profileName}` : ""}.` : "Set up your command center."}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              This desktop build stores your profile on this Mac. Cloud login, database-backed profiles, and sync can plug into this same entry point during deployment.
+            </p>
+
+            <div className="mt-5 grid gap-3 rounded-xl border border-cyan-300/15 bg-[#07111f]/60 p-4">
+              <SourceStripRow label="Location" value={profile.location || "Not set"} />
+              <SourceStripRow label="Watchlist" value={compactListLabel(splitList(profile.watchlist))} />
+              <SourceStripRow label="Briefing time" value={profile.briefingTime || "08:00"} />
+            </div>
+
+            <div className="mt-6 grid gap-3">
+              <button
+                type="button"
+                onClick={hasProfile ? onContinue : onSetup}
+                className="min-h-12 rounded-xl bg-lime-300 px-5 text-sm font-black text-[#102000] transition hover:bg-lime-200"
+              >
+                {hasProfile ? "Open VerityDesk" : "Start Setup"}
+              </button>
+              <button
+                type="button"
+                onClick={onSetup}
+                className="min-h-12 rounded-xl border border-cyan-300/30 px-5 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
+              >
+                {hasProfile ? "Review Setup" : "Continue Without Account"}
+              </button>
+            </div>
+
+            <p className="mt-5 text-xs leading-5 text-slate-500">
+              No investment advice. Research and educational use only.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function LoginSignalCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-cyan-300/20 bg-[#07111f]/76 p-4">
+      <p className="font-mono text-[11px] font-black uppercase text-slate-500">{label}</p>
+      <p className="mt-2 truncate text-sm font-black text-cyan-100">{value}</p>
+    </div>
   );
 }
 
@@ -1246,7 +1449,7 @@ function AppHeader({
   );
 }
 
-function ConsoleAskView({
+function OptionMHomeView({
   healthData,
   scheduleData,
   ingestionError,
@@ -1254,6 +1457,9 @@ function ConsoleAskView({
   reportListData,
   reportsLoading,
   reportsError,
+  visualModulesData,
+  visualModulesLoading,
+  visualModulesError,
   agentQuery,
   agentLoading,
   agentResponse,
@@ -1262,6 +1468,8 @@ function ConsoleAskView({
   setAgentQuery,
   setManualAgentContext,
   submitAgentQuery,
+  openDailyBrief,
+  openAgentChat,
 }: {
   healthData: SourceHealthResponse | null;
   scheduleData: DailyScheduleConfig | null;
@@ -1270,6 +1478,9 @@ function ConsoleAskView({
   reportListData: ReportListResponse | null;
   reportsLoading: boolean;
   reportsError: string | null;
+  visualModulesData: VisualModulesApiResponse | null;
+  visualModulesLoading: boolean;
+  visualModulesError: string | null;
   agentQuery: string;
   agentLoading: boolean;
   agentResponse: AgentResponse | null;
@@ -1278,27 +1489,79 @@ function ConsoleAskView({
   setAgentQuery: (value: string) => void;
   setManualAgentContext: (value: boolean) => void;
   submitAgentQuery: (event: FormEvent<HTMLFormElement>) => void;
+  openDailyBrief: () => void;
+  openAgentChat: () => void;
 }) {
   const latestReport = reportListData?.reports[0] ?? null;
   const sourceStatusText = summarizeSourceStatus(healthData, ingestionLoading, ingestionError);
   const inferredContext = inferAgentContext(agentQuery, personalizationProfile);
+  const fallbackModules = buildHomeVisualModules({
+    profile: personalizationProfile,
+    reports: reportListData?.reports ?? [],
+    healthData,
+    scheduleData,
+  });
+  const modules = visualModulesData?.modules.length ? visualModulesData.modules.map(mapVisualModuleFromApi) : fallbackModules;
+  const [selectedModule, setSelectedModule] = useState<HomeVisualModule | null>(null);
+
+  function askAboutModule(module: HomeVisualModule) {
+    const contextLines = [
+      module.suggestedPrompt,
+      "",
+      `Visual: ${module.title}`,
+      `Status: ${module.status}`,
+      `Primary signal: ${module.value} (${module.label})`,
+      `Summary: ${module.summary}`,
+      module.stats.length > 0 ? `Stats: ${module.stats.map((stat) => `${stat.label} ${stat.value}`).join("; ")}` : null,
+      module.sources.length > 0 ? `Sources: ${module.sources.map((source) => `${source.name} (${source.status})`).join("; ")}` : null,
+    ].filter(Boolean);
+
+    setAgentQuery(contextLines.join("\n"));
+    setManualAgentContext(false);
+    openAgentChat();
+  }
 
   return (
-    <div className="grid gap-6">
-      <section className="grid gap-4">
-        <div className="font-mono text-sm font-bold text-lime-300">veritydesk / ask / profile loaded</div>
-        <div>
-          <h1 className="max-w-4xl text-[clamp(2.6rem,6vw,4.8rem)] font-black leading-[0.94] tracking-normal text-white">
-            Ask once. Get the brief.
+    <div className="grid gap-5">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(340px,0.55fr)]">
+        <div className="rounded-[22px] border border-cyan-300/20 bg-[radial-gradient(circle_at_82%_18%,rgba(34,211,238,0.18),transparent_18rem),#020617]/90 p-5 md:p-6">
+          <p className="font-mono text-xs font-black uppercase text-lime-300">Home / visual intelligence</p>
+          <h1 className="mt-4 max-w-4xl text-[clamp(2.7rem,6vw,5rem)] font-black leading-[0.92] text-white">
+            Read the signal. Ask the rest.
           </h1>
-          <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400">
-            Type one question. VerityDesk handles live web search, API checks, source ranking, and agent routing behind the scenes.
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">
+            A cleaner daily surface powered by source refreshes, saved reports, and live web answers.
           </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <NeonChip variant="live">{sourceStatusText}</NeonChip>
+            <NeonChip>{scheduleData?.enabled ? "Daily run on" : "Daily run off"}</NeonChip>
+            <NeonChip variant="search">{formatAgentIntent(inferredContext.intent)}</NeonChip>
+          </div>
+        </div>
+
+        <div className="rounded-[22px] border border-lime-300/20 bg-[#061320]/90 p-5">
+          <p className="font-mono text-xs font-black uppercase text-cyan-300">Today&apos;s brief</p>
+          <h2 className="mt-3 text-2xl font-black text-white">
+            {latestReport ? latestReport.title : "No saved brief yet"}
+          </h2>
+          <p className="mt-3 line-clamp-4 text-sm leading-6 text-slate-400">
+            {cleanAnswerText(latestReport?.summary ?? latestReport?.body) ?? "Generate a daily brief or ask a question to start building today&apos;s intelligence layer."}
+          </p>
+          <button
+            type="button"
+            onClick={openDailyBrief}
+            className="mt-5 min-h-10 rounded-lg border border-cyan-300/30 px-4 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
+          >
+            Open Daily Brief
+          </button>
         </div>
       </section>
 
       <form
-        onSubmit={submitAgentQuery}
+        onSubmit={(event) => {
+          openAgentChat();
+          submitAgentQuery(event);
+        }}
         className="rounded-xl border border-cyan-300/30 bg-[#020617] p-4 shadow-[inset_0_0_0_1px_rgba(163,230,53,0.04)]"
       >
         <label className="sr-only" htmlFor="console-question">
@@ -1325,16 +1588,34 @@ function ConsoleAskView({
             disabled={agentLoading || !agentQuery.trim()}
             className="min-h-11 rounded-lg bg-lime-300 px-5 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
           >
-            {agentLoading ? "Thinking" : "Run Answer"}
+            {agentLoading ? "Thinking" : "Ask"}
           </button>
         </div>
       </form>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <ConsoleMetric label="Sources" value={sourceStatusText} />
-        <ConsoleMetric label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
-        <ConsoleMetric label="Auto route" value={formatAgentIntent(inferredContext.intent)} />
-      </div>
+      <section className="grid gap-4 xl:grid-cols-5">
+        {visualModulesLoading && !visualModulesData && (
+          <div className="rounded-[20px] border border-[#1d3558] bg-[#061320]/88 p-4 text-sm text-slate-400 xl:col-span-5">
+            Loading visual modules.
+          </div>
+        )}
+        {visualModulesError && (
+          <div className="rounded-[20px] border border-orange-300/30 bg-orange-950/20 p-4 text-sm text-orange-100 xl:col-span-5">
+            Using local fallback visuals. {visualModulesError}
+          </div>
+        )}
+        {modules.map((module) => (
+          <HomeVisualModuleCard key={module.id} module={module} onOpen={setSelectedModule} />
+        ))}
+      </section>
+
+      {selectedModule && (
+        <VisualDrillDownView
+          module={selectedModule}
+          onClose={() => setSelectedModule(null)}
+          onAsk={() => askAboutModule(selectedModule)}
+        />
+      )}
 
       <section className="rounded-xl border border-[#1d3558] bg-[#0a1628]/75 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1378,6 +1659,252 @@ function ConsoleAskView({
         )}
       </section>
     </div>
+  );
+}
+
+function HomeVisualModuleCard({ module, onOpen }: { module: HomeVisualModule; onOpen: (module: HomeVisualModule) => void }) {
+  const accentClass = {
+    lime: "border-lime-300/35 text-lime-300",
+    cyan: "border-cyan-300/35 text-cyan-300",
+    pink: "border-pink-300/35 text-pink-300",
+    orange: "border-orange-300/35 text-orange-300",
+    violet: "border-violet-300/35 text-violet-300",
+  }[module.accent];
+  const glowClass = {
+    lime: "bg-lime-300 shadow-[0_0_24px_rgba(163,230,53,0.45)]",
+    cyan: "bg-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.45)]",
+    pink: "bg-pink-300 shadow-[0_0_24px_rgba(249,168,212,0.45)]",
+    orange: "bg-orange-300 shadow-[0_0_24px_rgba(253,186,116,0.45)]",
+    violet: "bg-violet-300 shadow-[0_0_24px_rgba(196,181,253,0.45)]",
+  }[module.accent];
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(module)}
+      className={`group min-h-[250px] rounded-[20px] border bg-[#061320]/88 p-4 text-left transition hover:-translate-y-0.5 hover:bg-[#08182a] ${accentClass}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-mono text-[11px] font-black uppercase text-slate-500">{module.status}</p>
+          <h3 className="mt-2 text-xl font-black text-white">{module.title}</h3>
+        </div>
+        <span className={`h-2.5 w-2.5 rounded-full ${glowClass}`} />
+      </div>
+      <div className="mt-5">
+        <p className="text-4xl font-black text-white">{module.value}</p>
+        <p className="mt-1 text-xs font-bold uppercase tracking-normal text-slate-500">{module.label}</p>
+      </div>
+      <MiniBarChart points={module.points} accent={module.accent} />
+      <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-400">{module.summary}</p>
+      <p className="mt-4 font-mono text-[11px] font-black uppercase text-slate-500 group-hover:text-cyan-200">Open detail</p>
+    </button>
+  );
+}
+
+function VisualDrillDownView({
+  module,
+  onClose,
+  onAsk,
+}: {
+  module: HomeVisualModule;
+  onClose: () => void;
+  onAsk: () => void;
+}) {
+  const accentClass = {
+    lime: "border-lime-300/40 text-lime-300",
+    cyan: "border-cyan-300/40 text-cyan-300",
+    pink: "border-pink-300/40 text-pink-300",
+    orange: "border-orange-300/40 text-orange-300",
+    violet: "border-violet-300/40 text-violet-300",
+  }[module.accent];
+
+  return (
+    <section className={`rounded-[24px] border bg-[#061320]/95 p-5 shadow-[0_28px_90px_rgba(0,0,0,0.38)] ${accentClass}`}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="font-mono text-xs font-black uppercase text-slate-500">Visual detail / {module.status}</p>
+          <h2 className="mt-2 text-4xl font-black leading-none text-white">{module.title}</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">{module.summary}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onAsk}
+            className="min-h-10 rounded-lg bg-lime-300 px-4 text-sm font-black text-[#102000]"
+          >
+            Ask About This
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-10 rounded-lg border border-[#1d3558] px-4 text-sm font-black text-slate-300 transition hover:border-cyan-300/60 hover:text-cyan-200"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+        <div className="rounded-[18px] border border-[#1d3558] bg-[#020617]/80 p-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-5xl font-black text-white">{module.value}</p>
+              <p className="mt-1 text-xs font-black uppercase text-slate-500">{module.label}</p>
+            </div>
+            <NeonChip>Updated {formatDateTime(module.updatedAt)}</NeonChip>
+          </div>
+          <LargeBarChart module={module} />
+        </div>
+
+        <div className="grid gap-4">
+          <div className="rounded-[18px] border border-[#1d3558] bg-[#020617]/76 p-4">
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Key stats</p>
+            <div className="mt-4 grid gap-3">
+              {module.stats.length === 0 ? (
+                <p className="text-sm text-slate-500">No structured stats yet.</p>
+              ) : (
+                module.stats.map((stat) => (
+                  <div key={`${stat.label}-${stat.value}`} className="rounded-xl border border-[#1d3558] bg-[#061320]/70 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-bold text-slate-300">{stat.label}</span>
+                      <span className="font-mono text-sm font-black text-white">{stat.value}</span>
+                    </div>
+                    {stat.detail && <p className="mt-1 text-xs leading-5 text-slate-500">{stat.detail}</p>}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <details className="mt-4 rounded-[18px] border border-[#1d3558] bg-[#020617]/72 p-4">
+        <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">View sources</summary>
+        <div className="mt-4 grid gap-3">
+          {module.sources.length === 0 ? (
+            <p className="text-sm text-slate-500">No connected sources are attached to this visual yet.</p>
+          ) : (
+            module.sources.map((source) => (
+              <div key={`${source.name}-${source.retrievedAt}`} className="rounded-xl border border-[#1d3558] bg-[#061320]/70 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-white">{source.name}</p>
+                  <NeonChip>{titleCase(source.status.replaceAll("_", " "))}</NeonChip>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">Retrieved {formatDateTime(source.retrievedAt)}</p>
+                {source.description && <p className="mt-2 text-sm leading-5 text-slate-400">{source.description}</p>}
+              </div>
+            ))
+          )}
+        </div>
+      </details>
+    </section>
+  );
+}
+
+function LargeBarChart({ module }: { module: HomeVisualModule }) {
+  const maxPoint = Math.max(...module.points, 1);
+  const barClass = {
+    lime: "bg-lime-300",
+    cyan: "bg-cyan-300",
+    pink: "bg-pink-300",
+    orange: "bg-orange-300",
+    violet: "bg-violet-300",
+  }[module.accent];
+
+  return (
+    <div className="mt-6 flex h-64 items-end gap-2 rounded-[18px] border border-[#1d3558] bg-[#061320]/70 px-4 py-4">
+      {module.points.map((point, index) => (
+        <div key={`${point}-${index}`} className="flex h-full flex-1 flex-col justify-end gap-2">
+          <span
+            className={`min-h-3 rounded-t-md opacity-90 ${barClass}`}
+            style={{ height: `${Math.max(5, (point / maxPoint) * 100)}%` }}
+          />
+          <span className="text-center font-mono text-[10px] font-black text-slate-600">{index + 1}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MiniBarChart({ points, accent }: { points: number[]; accent: HomeVisualModule["accent"] }) {
+  const maxPoint = Math.max(...points, 1);
+  const barClass = {
+    lime: "bg-lime-300",
+    cyan: "bg-cyan-300",
+    pink: "bg-pink-300",
+    orange: "bg-orange-300",
+    violet: "bg-violet-300",
+  }[accent];
+
+  return (
+    <div className="mt-5 flex h-16 items-end gap-1.5 rounded-xl border border-[#1d3558] bg-[#020617]/76 px-3 py-2">
+      {points.map((point, index) => (
+        <span
+          key={`${point}-${index}`}
+          className={`w-full rounded-t-sm opacity-85 ${barClass}`}
+          style={{ height: `${Math.max(12, (point / maxPoint) * 100)}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function HomeProfileRail({
+  personalizationProfile,
+  sourceStatusText,
+  scheduleData,
+  reportListData,
+  reportsLoading,
+  openSettings,
+}: {
+  personalizationProfile: PersonalizationProfile;
+  sourceStatusText: string;
+  scheduleData: DailyScheduleConfig | null;
+  reportListData: ReportListResponse | null;
+  reportsLoading: boolean;
+  openSettings: () => void;
+}) {
+  const latestReport = reportListData?.reports[0] ?? null;
+
+  return (
+    <aside className="grid content-start gap-4 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
+      <section className="rounded-[18px] border border-cyan-300/20 bg-[#020617]/80 p-4">
+        <p className="font-mono text-xs font-black uppercase text-lime-300">Profile</p>
+        <h2 className="mt-3 text-2xl font-black text-white">{personalizationProfile.profileName || "My VerityDesk"}</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-400">
+          {personalizationProfile.personalNote || "Add a short note in Settings so answers and daily briefs know what matters to you."}
+        </p>
+        <button
+          type="button"
+          onClick={openSettings}
+          className="mt-4 min-h-10 rounded-lg border border-cyan-300/30 px-4 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
+        >
+          Tune Profile
+        </button>
+      </section>
+
+      <section className="rounded-[18px] border border-[#1d3558] bg-[#020617]/70 p-4">
+        <p className="font-mono text-xs font-black uppercase text-cyan-300">Status</p>
+        <div className="mt-4 grid gap-3">
+          <SourceStripRow label="Sources" value={sourceStatusText} />
+          <SourceStripRow label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
+          <SourceStripRow label="Next" value={formatDateTime(scheduleData?.next_run_at)} />
+          <SourceStripRow label="Location" value={personalizationProfile.location || "Not set"} />
+          <SourceStripRow label="Watchlist" value={compactListLabel(splitList(personalizationProfile.watchlist))} />
+        </div>
+      </section>
+
+      <section className="rounded-[18px] border border-[#1d3558] bg-[#020617]/70 p-4">
+        <p className="font-mono text-xs font-black uppercase text-pink-300">Latest saved</p>
+        <p className="mt-3 text-sm font-bold text-white">
+          {reportsLoading ? "Loading..." : latestReport?.title ?? "No report yet"}
+        </p>
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          {latestReport ? `Retrieved ${formatDateTime(latestReport.as_of ?? latestReport.created_at)}` : "Daily cards will fill in after refreshes and brief generation."}
+        </p>
+      </section>
+    </aside>
   );
 }
 
@@ -1914,6 +2441,153 @@ function buildDailyTopicPanels({
   ];
 }
 
+function buildHomeVisualModules({
+  profile,
+  reports,
+  healthData,
+  scheduleData,
+}: {
+  profile: PersonalizationProfile;
+  reports: ReportResponse[];
+  healthData: SourceHealthResponse | null;
+  scheduleData: DailyScheduleConfig | null;
+}): HomeVisualModule[] {
+  const latestByType = latestReportByType(reports);
+  const freshCount = healthData?.fresh_count ?? 0;
+  const needsCheck = needsCheckCount(healthData);
+  const totalSources = healthData?.total ?? 0;
+  const location = profile.location || compactListLabel(splitList(profile.housingMarkets));
+  const watchlist = compactListLabel(splitList(profile.watchlist));
+
+  return [
+    {
+      id: "daily_read",
+      title: "Daily Read",
+      value: latestByType.has("daily_briefing") ? "Ready" : "Open",
+      label: scheduleData?.enabled ? "Auto brief" : "Manual brief",
+      summary: latestByType.get("daily_briefing")?.summary ?? "A personal briefing will appear after the daily refresh and brief generation run.",
+      status: latestByType.has("daily_briefing") ? "Ready" : "Needs brief",
+      accent: "lime",
+      points: normalizeSparkPoints([freshCount, totalSources, reports.length, scheduleData?.enabled ? 8 : 3, needsCheck]),
+      updatedAt: latestByType.get("daily_briefing")?.as_of ?? latestByType.get("daily_briefing")?.created_at ?? scheduleData?.last_run_at ?? null,
+      stats: [
+        { label: "Fresh sources", value: String(freshCount), detail: "Current source health" },
+        { label: "Needs check", value: String(needsCheck), detail: "Sources stale, failed, or missing" },
+      ],
+      sources: [],
+      relatedReportId: latestByType.get("daily_briefing")?.id ?? null,
+      suggestedPrompt: "Explain today's daily read and what changed most since the last refresh.",
+    },
+    {
+      id: "housing",
+      title: "Housing",
+      value: location === "Not set" ? "Set area" : "Local",
+      label: location === "Not set" ? "Location needed" : location,
+      summary: latestByType.get("housing")?.summary ?? "Tracks rates, affordability, housing markets, and local pressure points from your saved area.",
+      status: latestByType.has("housing") ? "Ready" : "No local data",
+      accent: "cyan",
+      points: normalizeSparkPoints([2, profile.housingMarkets ? 7 : 3, freshCount, 5, needsCheck + 2]),
+      updatedAt: latestByType.get("housing")?.as_of ?? latestByType.get("housing")?.created_at ?? null,
+      stats: [
+        { label: "Location", value: location === "Not set" ? "Not set" : location, detail: "Saved housing focus" },
+        { label: "Fresh sources", value: String(freshCount), detail: "All connected source health" },
+      ],
+      sources: [],
+      relatedReportId: latestByType.get("housing")?.id ?? null,
+      suggestedPrompt: "Explain the housing visual using my saved location and call out affordability, rates, inventory, and data gaps.",
+    },
+    {
+      id: "markets",
+      title: "Markets",
+      value: freshCount > 0 ? String(freshCount) : "--",
+      label: "fresh sources",
+      summary: latestByType.get("market_strategy")?.summary ?? "Shows broad risk, rates, volatility, commodities, and sector tone from connected feeds.",
+      status: latestByType.has("market_strategy") ? "Ready" : "Needs refresh",
+      accent: "pink",
+      points: normalizeSparkPoints([freshCount, needsCheck + 1, totalSources, reports.length + 2, 6]),
+      updatedAt: latestByType.get("market_strategy")?.as_of ?? latestByType.get("market_strategy")?.created_at ?? null,
+      stats: [
+        { label: "Fresh sources", value: String(freshCount), detail: "Current source health" },
+        { label: "Reports", value: String(reports.length), detail: "Saved reports available" },
+      ],
+      sources: [],
+      relatedReportId: latestByType.get("market_strategy")?.id ?? null,
+      suggestedPrompt: "Explain the market setup using live web first and corroborate it with connected market APIs.",
+    },
+    {
+      id: "companies",
+      title: "Companies",
+      value: watchlist === "Not set" ? "--" : String(splitList(profile.watchlist).length),
+      label: watchlist === "Not set" ? "watchlist empty" : "tracked tickers",
+      summary: latestByType.get("company_research")?.summary ?? "Surfaces news, filings, catalysts, and watchlist changes for saved companies.",
+      status: watchlist === "Not set" ? "Needs setup" : latestByType.has("company_research") ? "Ready" : "Watching",
+      accent: "orange",
+      points: normalizeSparkPoints([splitList(profile.watchlist).length + 1, reports.length, freshCount, 3, needsCheck + 1]),
+      updatedAt: latestByType.get("company_research")?.as_of ?? latestByType.get("company_research")?.created_at ?? null,
+      stats: [
+        { label: "Tickers", value: watchlist === "Not set" ? "0" : String(splitList(profile.watchlist).length), detail: "Saved watchlist" },
+        { label: "Companies", value: String(splitList(profile.companies).length), detail: "Saved company names" },
+      ],
+      sources: [],
+      relatedReportId: latestByType.get("company_research")?.id ?? null,
+      suggestedPrompt: "Explain what changed for my saved companies and watchlist without giving buy or sell instructions.",
+    },
+    {
+      id: "macro",
+      title: "Macro",
+      value: totalSources > 0 ? String(totalSources) : "--",
+      label: "source map",
+      summary: latestByType.get("macro")?.summary ?? "Connects inflation, rates, jobs, consumer, credit, and policy signals into one macro pulse.",
+      status: latestByType.has("macro") ? "Ready" : "Quiet",
+      accent: "violet",
+      points: normalizeSparkPoints([totalSources, freshCount, needsCheck, profile.macroInterests.length + 2, reports.length + 1]),
+      updatedAt: latestByType.get("macro")?.as_of ?? latestByType.get("macro")?.created_at ?? null,
+      stats: [
+        { label: "Macro interests", value: String(profile.macroInterests.length), detail: "Saved setup preferences" },
+        { label: "Fresh sources", value: String(freshCount), detail: "Current source health" },
+      ],
+      sources: [],
+      relatedReportId: latestByType.get("macro")?.id ?? null,
+      suggestedPrompt: "Explain the macro visual and the main trends in rates, inflation, jobs, credit, and consumer conditions.",
+    },
+  ];
+}
+
+function mapVisualModuleFromApi(module: VisualModulesApiResponse["modules"][number]): HomeVisualModule {
+  const accentById: Record<HomeVisualModule["id"], HomeVisualModule["accent"]> = {
+    daily_read: "lime",
+    housing: "cyan",
+    markets: "pink",
+    companies: "orange",
+    macro: "violet",
+  };
+
+  return {
+    id: module.id,
+    title: module.title,
+    value: module.primary_value,
+    label: module.primary_label,
+    summary: module.summary,
+    status: titleCase(module.status.replaceAll("_", " ")),
+    accent: accentById[module.id],
+    points: normalizeSparkPoints(module.chart.points.map((point) => point.value)),
+    updatedAt: module.updated_at,
+    stats: module.stats,
+    sources: module.sources.map((source) => ({
+      name: source.name,
+      status: source.status,
+      retrievedAt: source.retrieved_at,
+      description: source.description,
+    })),
+    relatedReportId: module.related_report_id,
+    suggestedPrompt: module.suggested_prompt,
+  };
+}
+
+function normalizeSparkPoints(points: number[]) {
+  return points.map((point) => Math.max(1, Math.round(point)));
+}
+
 function latestReportByType(reports: ReportResponse[]) {
   const map = new Map<ReportResponse["report_type"], ReportResponse>();
   for (const report of reports) {
@@ -2065,7 +2739,7 @@ function DashboardView({
               </button>
               <button
                 type="button"
-                onClick={() => setActiveView("Daily Briefing")}
+                onClick={() => setActiveView("Daily Brief")}
                 className="min-h-11 rounded-md border border-[#cbd5dc] px-4 py-2 text-sm font-semibold text-[#143642]"
               >
                 Open Daily Briefing
@@ -2109,7 +2783,7 @@ function DashboardView({
             </div>
             <button
               type="button"
-              onClick={() => setActiveView("Daily Briefing")}
+              onClick={() => setActiveView("Daily Brief")}
               className="min-h-10 rounded-md border border-[#cbd5dc] px-3 py-2 text-sm font-semibold text-[#143642]"
             >
               Open
@@ -4649,6 +5323,14 @@ function isSetupComplete(profile: PersonalizationProfile) {
   }
 
   return window.localStorage.getItem(SETUP_COMPLETE_STORAGE_KEY) === "true" || Boolean(profile.profileName || profile.location || profile.personalNote);
+}
+
+function hasLocalSession() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.localStorage.getItem(LOCAL_SESSION_STORAGE_KEY) === "ready" || Boolean(window.localStorage.getItem(LOCAL_SESSION_STORAGE_KEY));
 }
 
 function normalizePersonalizationProfile(profile: PersonalizationProfile): PersonalizationProfile {

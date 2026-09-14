@@ -127,6 +127,8 @@ For local desktop, implementation can remain local-first at first:
 - stored preferences on this machine
 - clear future path to cloud login/sync
 
+For deployment, the app should move user-specific data into a backend database tied to login. That includes profile details, preferences, saved chats, daily brief settings, source configuration, watch items, visual preferences, and acknowledgement state.
+
 Setup should collect:
 
 - name/profile label
@@ -186,19 +188,30 @@ Avoid generic repetitive labels such as every card saying `Developing`.
 
 ### 9.6.1 Preserve Approved Design And Contracts
 
+Status: Complete
+
 - Keep Option M interactive flow as the reference artifact.
 - Define visual module data contracts.
 - Define view/state routing for Home, Daily Brief, Agent Chat, Settings, drill-downs, login, and setup.
 - Document exact fields needed from backend APIs.
 
+Milestone doc: [milestones/9.6.1-design-contracts.md](milestones/9.6.1-design-contracts.md)
+
 ### 9.6.2 Login And Setup Flow
+
+Status: Complete
 
 - Add login/setup screens in the app.
 - Keep local-first storage for now.
+- Preserve a clear migration path to backend user tables for deployed multi-user use.
 - Connect setup answers to existing profile/personalization settings.
 - Route first-time users through setup before Home.
 
+Milestone doc: [milestones/9.6.2-login-setup-flow.md](milestones/9.6.2-login-setup-flow.md)
+
 ### 9.6.3 Option M Home Layout
+
+Status: Complete
 
 - Replace the current dashboard with the Option M visual Home.
 - Reduce visible navigation to the approved tabs.
@@ -206,27 +219,43 @@ Avoid generic repetitive labels such as every card saying `Developing`.
 - Keep the ask bar on Home.
 - When the user asks from Home, move into Agent Chat.
 
+Milestone doc: [milestones/9.6.3-option-m-home-layout.md](milestones/9.6.3-option-m-home-layout.md)
+
 ### 9.6.4 Visual Module Data API
+
+Status: Complete
 
 - Add backend endpoint(s) for visual modules.
 - Build Housing, Markets, Companies, and Macro module summaries from existing API/source data.
 - Include source timestamps and freshness.
 - Add frontend loading/empty/error states.
 
+Milestone doc: [milestones/9.6.4-visual-module-data-api.md](milestones/9.6.4-visual-module-data-api.md)
+
 ### 9.6.5 Drill-Down Views
+
+Status: Complete
 
 - Clicking a visual opens a focused drill-down.
 - Show larger chart, stats, sources, and explanation prompt.
 - Add `Ask About This` behavior that opens Agent Chat with visual context.
 
+Milestone doc: [milestones/9.6.5-drilldown-views.md](milestones/9.6.5-drilldown-views.md)
+
 ### 9.6.6 Daily Brief Page
+
+Status: Planned
 
 - Implement the markdown daily brief page.
 - Use stored generated report data where available.
 - Autogenerate from user profile, Tavily, connected APIs, watch items, and source health.
 - Keep citations hidden by default.
 
+Milestone doc: [milestones/9.6.6-daily-brief-page.md](milestones/9.6.6-daily-brief-page.md)
+
 ### 9.6.7 Agent Chat With Session Memory
+
+Status: Planned
 
 - Add chat page with active and previous chats in the same view.
 - Persist chat sessions locally/backend.
@@ -234,13 +263,21 @@ Avoid generic repetitive labels such as every card saying `Developing`.
 - Add session memory to agent request context.
 - Add `New Chat`.
 
+Milestone doc: [milestones/9.6.7-agent-chat-memory.md](milestones/9.6.7-agent-chat-memory.md)
+
 ### 9.6.8 Settings Consolidation
+
+Status: Planned
 
 - Move sources, refresh controls, watch items, profile, schedule, and provider/key status into Settings.
 - Reduce main app navigation clutter.
 - Keep advanced technical details collapsible.
 
+Milestone doc: [milestones/9.6.8-settings-consolidation.md](milestones/9.6.8-settings-consolidation.md)
+
 ### 9.6.9 QA And Local Testing
+
+Status: Planned
 
 - Validate login/setup to Home flow.
 - Validate Home visuals with live and missing data.
@@ -249,6 +286,8 @@ Avoid generic repetitive labels such as every card saying `Developing`.
 - Validate Agent Chat memory and previous chats.
 - Validate Settings controls.
 - Run backend tests, frontend typecheck, frontend build.
+
+Milestone doc: [milestones/9.6.9-qa-local-testing.md](milestones/9.6.9-qa-local-testing.md)
 
 ## Definition Of Done
 
