@@ -255,7 +255,7 @@ Milestone doc: [milestones/9.6.6-daily-brief-page.md](milestones/9.6.6-daily-bri
 
 ### 9.6.7 Agent Chat With Session Memory
 
-Status: Planned
+Status: Complete
 
 - Add chat page with active and previous chats in the same view.
 - Persist chat sessions locally/backend.

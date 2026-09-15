@@ -347,6 +347,22 @@ type HomeVisualModule = {
   suggestedPrompt: string;
 };
 
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+};
+
+type ChatSession = {
+  id: string;
+  title: string;
+  summary: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+};
+
 type VisualModulesApiResponse = {
   modules: Array<{
     id: HomeVisualModule["id"];
@@ -374,6 +390,8 @@ type VisualModulesApiResponse = {
 const PERSONALIZATION_STORAGE_KEY = "investoragent.personalization.v1";
 const SETUP_COMPLETE_STORAGE_KEY = "investoragent.setupComplete.v1";
 const LOCAL_SESSION_STORAGE_KEY = "investoragent.localSession.v1";
+const CHAT_SESSIONS_STORAGE_KEY = "investoragent.chatSessions.v1";
+const ACTIVE_CHAT_SESSION_STORAGE_KEY = "investoragent.activeChatSession.v1";
 
 const topicOptions = [
   "World news",
@@ -478,6 +496,8 @@ export default function Home() {
   const [setupOpen, setSetupOpen] = useState(false);
   const [localSessionReady, setLocalSessionReady] = useState(false);
   const [entryLoaded, setEntryLoaded] = useState(false);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(null);
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -536,9 +556,13 @@ export default function Home() {
   useEffect(() => {
     const savedProfile = loadPersonalizationProfile();
     const setupComplete = isSetupComplete(savedProfile);
+    const savedChatSessions = loadChatSessions();
+    const savedActiveChatId = loadActiveChatSessionId(savedChatSessions);
     setPersonalizationProfile(savedProfile);
     setLocalSessionReady(hasLocalSession());
     setSetupOpen(hasLocalSession() && !setupComplete);
+    setChatSessions(savedChatSessions);
+    setActiveChatSessionId(savedActiveChatId);
     setAgentTicker(savedProfile.watchlist);
     if (savedProfile.companies.trim()) {
       setCompanyName(firstListItem(savedProfile.companies));
@@ -568,6 +592,35 @@ export default function Home() {
     setLocalSessionReady(true);
     setSetupOpen(!isSetupComplete(personalizationProfile));
     setActiveView("Home");
+  }
+
+  function persistChatSessions(nextSessions: ChatSession[], nextActiveId: string | null = activeChatSessionId) {
+    setChatSessions(nextSessions);
+    setActiveChatSessionId(nextActiveId);
+    localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(nextSessions));
+    if (nextActiveId) {
+      localStorage.setItem(ACTIVE_CHAT_SESSION_STORAGE_KEY, nextActiveId);
+    } else {
+      localStorage.removeItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
+    }
+  }
+
+  function createNewChatSession() {
+    const nextSession = createChatSession();
+    persistChatSessions([nextSession, ...chatSessions].slice(0, 20), nextSession.id);
+    setAgentResponse(null);
+    setAgentError(null);
+    setAgentQuery("");
+  }
+
+  function selectChatSession(sessionId: string) {
+    const session = chatSessions.find((item) => item.id === sessionId);
+    if (!session) {
+      return;
+    }
+    persistChatSessions(chatSessions, sessionId);
+    const lastUserMessage = [...session.messages].reverse().find((message) => message.role === "user");
+    setAgentQuery(lastUserMessage?.content ?? "");
   }
 
   async function loadAgentRuns() {
@@ -880,13 +933,29 @@ export default function Home() {
     setAgentTicker(requestContext.tickers.join(", "));
     setAgentQuery(trimmedQuery);
     setActiveView("Agent Chat");
+    const sessionBeforeRun = ensureActiveChatSession(chatSessions, activeChatSessionId, trimmedQuery);
+    const userMessage: ChatMessage = {
+      id: createLocalId("msg"),
+      role: "user",
+      content: trimmedQuery,
+      createdAt: new Date().toISOString(),
+    };
+    const sessionsWithUserMessage = upsertChatSession(chatSessions, {
+      ...sessionBeforeRun,
+      messages: [...sessionBeforeRun.messages, userMessage],
+      title: sessionBeforeRun.title === "New chat" ? titleFromQuestion(trimmedQuery) : sessionBeforeRun.title,
+      summary: summarizeChatMessages([...sessionBeforeRun.messages, userMessage]),
+      updatedAt: userMessage.createdAt,
+    });
+    persistChatSessions(sessionsWithUserMessage, sessionBeforeRun.id);
+    const queryWithMemory = buildQueryWithSessionMemory(trimmedQuery, sessionBeforeRun);
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/agents/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_query: trimmedQuery,
+          user_query: queryWithMemory,
           intent: requestContext.intent,
           domains: [requestContext.domain],
           tickers: requestContext.tickers,
@@ -900,7 +969,24 @@ export default function Home() {
         throw new Error(`Agent request failed with status ${response.status}`);
       }
 
-      setAgentResponse((await response.json()) as AgentResponse);
+      const nextAgentResponse = (await response.json()) as AgentResponse;
+      setAgentResponse(nextAgentResponse);
+      const assistantMessage: ChatMessage = {
+        id: createLocalId("msg"),
+        role: "assistant",
+        content: nextAgentResponse.summary,
+        createdAt: new Date().toISOString(),
+      };
+      const latestSession = sessionsWithUserMessage.find((session) => session.id === sessionBeforeRun.id) ?? sessionBeforeRun;
+      persistChatSessions(
+        upsertChatSession(sessionsWithUserMessage, {
+          ...latestSession,
+          messages: [...latestSession.messages, assistantMessage],
+          summary: summarizeChatMessages([...latestSession.messages, assistantMessage]),
+          updatedAt: assistantMessage.createdAt,
+        }),
+        sessionBeforeRun.id,
+      );
       await loadAgentRuns();
     } catch (error) {
       setAgentError(error instanceof Error ? error.message : "Could not run agent query");
@@ -1267,12 +1353,16 @@ export default function Home() {
                 agentError={agentError}
                 personalizationProfile={personalizationProfile}
                 manualAgentContext={manualAgentContext}
+                chatSessions={chatSessions}
+                activeChatSessionId={activeChatSessionId}
                 setAgentQuery={setAgentQuery}
                 setAgentIntent={setAgentIntent}
                 setAgentTicker={setAgentTicker}
                 setAgentDomain={setAgentDomain}
                 setManualAgentContext={setManualAgentContext}
                 submitAgentQuery={submitAgentQuery}
+                createNewChatSession={createNewChatSession}
+                selectChatSession={selectChatSession}
               />
             )}
             {activeView === "Settings" && (
@@ -3860,12 +3950,16 @@ function AgentChatView({
   agentError,
   personalizationProfile,
   manualAgentContext,
+  chatSessions,
+  activeChatSessionId,
   setAgentQuery,
   setAgentIntent,
   setAgentTicker,
   setAgentDomain,
   setManualAgentContext,
   submitAgentQuery,
+  createNewChatSession,
+  selectChatSession,
 }: {
   agentQuery: string;
   agentIntent: AgentIntent;
@@ -3878,14 +3972,19 @@ function AgentChatView({
   agentError: string | null;
   personalizationProfile: PersonalizationProfile;
   manualAgentContext: boolean;
+  chatSessions: ChatSession[];
+  activeChatSessionId: string | null;
   setAgentQuery: (value: string) => void;
   setAgentIntent: (value: AgentIntent) => void;
   setAgentTicker: (value: string) => void;
   setAgentDomain: (value: string) => void;
   setManualAgentContext: (value: boolean) => void;
   submitAgentQuery: (event: FormEvent<HTMLFormElement>) => void;
+  createNewChatSession: () => void;
+  selectChatSession: (sessionId: string) => void;
 }) {
   const inferredContext = inferAgentContext(agentQuery, personalizationProfile);
+  const activeSession = chatSessions.find((session) => session.id === activeChatSessionId) ?? null;
   const displayedContext = manualAgentContext
     ? {
         ...inferredContext,
@@ -3897,137 +3996,180 @@ function AgentChatView({
     : inferredContext;
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-      <form onSubmit={submitAgentQuery} className="rounded-md border border-[#d7dee3] bg-white p-4">
-        <h3 className="text-lg font-semibold">Ask InvestorAgent</h3>
-        <label className="mt-4 block text-sm font-medium" htmlFor="agent-query">
-          Question
-        </label>
-        <textarea
-          id="agent-query"
-          value={agentQuery}
-          onChange={(event) => {
-            setAgentQuery(event.target.value);
-            setManualAgentContext(false);
-          }}
-          className="mt-2 min-h-32 w-full rounded-md border border-[#cbd5dc] px-3 py-2 text-sm outline-none focus:border-[#25636b]"
-        />
-
-        <InferredContextPanel inferredContext={displayedContext} manualAgentContext={manualAgentContext} />
-
-        <details className="mt-4 rounded-md border border-[#e5eaf0] p-3">
-          <summary className="cursor-pointer text-sm font-semibold text-[#143642]">Advanced</summary>
-          <p className="mt-2 text-sm text-[#5b6573]">
-            InvestorAgent fills these in automatically. Adjust them only when you want to override the default routing.
-          </p>
-
-          <label className="mt-4 block text-sm font-medium" htmlFor="agent-intent">
-            Intent
-          </label>
-          <select
-            id="agent-intent"
-            value={agentIntent}
-            onChange={(event) => {
-              setAgentIntent(event.target.value as AgentIntent);
-              setManualAgentContext(true);
-            }}
-            className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
-          >
-            <option value="market_research">Market research</option>
-            <option value="company_research">Company research</option>
-            <option value="housing_macro_research">Housing and macro</option>
-            <option value="daily_briefing">Daily briefing</option>
-            <option value="general_research">General research</option>
-          </select>
-
-          <label className="mt-4 block text-sm font-medium" htmlFor="agent-ticker">
-            Tickers
-          </label>
-          <input
-            id="agent-ticker"
-            value={agentTicker}
-            onChange={(event) => {
-              setAgentTicker(event.target.value);
-              setManualAgentContext(true);
-            }}
-            className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] px-3 text-sm outline-none focus:border-[#25636b]"
-          />
-
-          <label className="mt-4 block text-sm font-medium" htmlFor="agent-domain">
-            Domain
-          </label>
-          <select
-            id="agent-domain"
-            value={agentDomain}
-            onChange={(event) => {
-              setAgentDomain(event.target.value);
-              setManualAgentContext(true);
-            }}
-            className="mt-2 h-10 w-full rounded-md border border-[#cbd5dc] bg-white px-3 text-sm outline-none focus:border-[#25636b]"
-          >
-            {domains.map((domain) => (
-              <option key={domain} value={domain}>
-                {domain}
-              </option>
-            ))}
-          </select>
-          {manualAgentContext && (
-            <button
-              type="button"
-              onClick={() => setManualAgentContext(false)}
-              className="mt-4 min-h-10 rounded-md border border-[#cbd5dc] px-3 py-2 text-sm font-semibold text-[#143642]"
-            >
-              Return To Auto
-            </button>
-          )}
-        </details>
-
-        <button
-          type="submit"
-          disabled={agentLoading || !agentQuery.trim()}
-          className="mt-5 min-h-10 w-full rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
-        >
-          {agentLoading ? "Thinking" : "Ask InvestorAgent"}
-        </button>
-
-        <details className="mt-5 border-t border-[#e5eaf0] pt-4">
-          <summary className="cursor-pointer text-sm font-semibold text-[#143642]">Recent agent runs</summary>
-          <h4 className="text-sm font-semibold">Recent Agent Runs</h4>
-          <AgentRunsList agentRunsData={agentRunsData} loading={agentRunsLoading} />
-        </details>
-      </form>
-
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
+    <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+      <aside className="rounded-[20px] border border-cyan-300/20 bg-[#07111f]/88 p-4">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-lg font-semibold">Answer</h3>
-          {agentResponse && <StatusBadge status={agentResponse.guardrail.status} />}
-        </div>
-        <p className="mt-3 rounded-md border border-[#d7dee3] bg-[#f8fafb] p-3 text-sm text-[#4b5563]">
-          {FINANCIAL_DISCLAIMER}
-        </p>
-        {agentError && <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{agentError}</p>}
-        {!agentResponse && !agentError && (
-          <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
-            No response yet.
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Chats</p>
+            <p className="mt-1 text-xs text-slate-500">{chatSessions.length} saved locally</p>
           </div>
-        )}
+          <button
+            type="button"
+            onClick={createNewChatSession}
+            className="min-h-9 rounded-lg bg-lime-300 px-3 text-xs font-black text-[#102000]"
+          >
+            New
+          </button>
+        </div>
+        <div className="mt-4 grid gap-2">
+          {chatSessions.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-[#1d3558] p-3 text-sm text-slate-500">No previous chats yet.</p>
+          ) : (
+            chatSessions.map((session) => (
+              <button
+                key={session.id}
+                type="button"
+                onClick={() => selectChatSession(session.id)}
+                className={`rounded-xl border p-3 text-left transition ${
+                  session.id === activeChatSessionId
+                    ? "border-cyan-300/60 bg-cyan-300/10"
+                    : "border-[#1d3558] bg-[#020617]/70 hover:border-cyan-300/40"
+                }`}
+              >
+                <p className="line-clamp-1 text-sm font-black text-white">{session.title}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{session.summary || "New chat"}</p>
+                <p className="mt-2 font-mono text-[10px] font-black uppercase text-slate-600">{formatDateTime(session.updatedAt)}</p>
+              </button>
+            ))
+          )}
+        </div>
+      </aside>
+
+      <section className="rounded-[20px] border border-cyan-300/20 bg-[#07111f]/92 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-lime-300">Agent Chat</p>
+            <h1 className="mt-2 text-3xl font-black text-white">{activeSession?.title ?? "Ask VerityDesk"}</h1>
+            <p className="mt-2 text-sm leading-6 text-slate-400">Session memory is saved locally and included as compact context for follow-up questions.</p>
+          </div>
+          {agentResponse && <NeonChip>Confidence: {agentResponse.confidence}</NeonChip>}
+        </div>
+
+        <div className="mt-5 grid gap-3">
+          {activeSession?.messages.length ? (
+            activeSession.messages.map((message) => (
+              <ChatMessageBubble key={message.id} message={message} />
+            ))
+          ) : (
+            <div className="rounded-[18px] border border-dashed border-[#1d3558] bg-[#020617]/70 p-6 text-sm text-slate-500">
+              Start a question or use Ask About This from a visual.
+            </div>
+          )}
+          {agentLoading && (
+            <div className="rounded-[18px] border border-cyan-300/20 bg-[#020617]/70 p-4 text-sm text-cyan-200">Thinking...</div>
+          )}
+          {agentError && <p className="rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-200">{agentError}</p>}
+        </div>
+
+        <form onSubmit={submitAgentQuery} className="mt-5 rounded-[18px] border border-cyan-300/25 bg-[#020617]/86 p-4">
+          <label className="sr-only" htmlFor="agent-query">Question</label>
+          <textarea
+            id="agent-query"
+            value={agentQuery}
+            onChange={(event) => {
+              setAgentQuery(event.target.value);
+              setManualAgentContext(false);
+            }}
+            placeholder="Ask a follow-up or start a new question..."
+            className="min-h-28 w-full resize-y border-0 bg-transparent text-base leading-7 text-white outline-none placeholder:text-slate-600"
+          />
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#1d3558] pt-4">
+            <div className="flex flex-wrap gap-2">
+              <NeonChip>{formatAgentIntent(displayedContext.intent)}</NeonChip>
+              <NeonChip>{displayedContext.domain}</NeonChip>
+              <NeonChip>{manualAgentContext ? "Manual route" : "Auto route"}</NeonChip>
+            </div>
+            <button
+              type="submit"
+              disabled={agentLoading || !agentQuery.trim()}
+              className="min-h-10 rounded-lg bg-lime-300 px-4 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+            >
+              {agentLoading ? "Thinking" : "Send"}
+            </button>
+          </div>
+
+          <details className="mt-4 rounded-xl border border-[#1d3558] bg-[#07111f]/75 p-3">
+            <summary className="cursor-pointer font-mono text-xs font-black uppercase text-slate-400">Advanced routing</summary>
+            <InferredContextPanel inferredContext={displayedContext} manualAgentContext={manualAgentContext} />
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <SettingsSelect
+                id="agent-intent"
+                label="Intent"
+                value={agentIntent}
+                onChange={(value) => {
+                  setAgentIntent(value as AgentIntent);
+                  setManualAgentContext(true);
+                }}
+                options={[
+                  ["market_research", "Market research"],
+                  ["company_research", "Company research"],
+                  ["housing_macro_research", "Housing and macro"],
+                  ["daily_briefing", "Daily briefing"],
+                  ["general_research", "General research"],
+                ]}
+              />
+              <SettingsTextInput
+                id="agent-ticker"
+                label="Tickers"
+                value={agentTicker}
+                onChange={(value) => {
+                  setAgentTicker(value);
+                  setManualAgentContext(true);
+                }}
+              />
+              <SettingsSelect
+                id="agent-domain"
+                label="Domain"
+                value={agentDomain}
+                onChange={(value) => {
+                  setAgentDomain(value);
+                  setManualAgentContext(true);
+                }}
+                options={domains.map((domain): [string, string] => [domain, domain])}
+              />
+            </div>
+            {manualAgentContext && (
+              <button
+                type="button"
+                onClick={() => setManualAgentContext(false)}
+                className="mt-4 min-h-10 rounded-lg border border-cyan-300/30 px-3 text-sm font-black text-cyan-200"
+              >
+                Return To Auto
+              </button>
+            )}
+          </details>
+        </form>
+
         {agentResponse && (
-          <div className="mt-4 space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <SettingRow label="Confidence" value={agentResponse.confidence} />
-              <SettingRow label="Sources" value={String(agentResponse.citations.length)} />
-              <SettingRow label="Review Needed" value={agentResponse.requires_guardrail_review ? "Yes" : "No"} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold">Natural Language Response</p>
-              <div className="mt-2 rounded-md border border-[#e5eaf0] bg-[#f8fafb] p-3">
-                <MarkdownAnswer text={agentResponse.summary} tone="light" />
-              </div>
-            </div>
+          <div className="mt-5">
             <EvidenceDrawer response={agentResponse} />
           </div>
         )}
+        <details className="mt-5 rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
+          <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">Recent agent runs</summary>
+          <AgentRunsList agentRunsData={agentRunsData} loading={agentRunsLoading} />
+        </details>
       </section>
+    </div>
+  );
+}
+
+function ChatMessageBubble({ message }: { message: ChatMessage }) {
+  const isUser = message.role === "user";
+  return (
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`max-w-[86%] rounded-[18px] border p-4 ${
+          isUser
+            ? "border-lime-300/25 bg-lime-300/10 text-slate-100"
+            : "border-cyan-300/20 bg-[#020617]/78 text-slate-300"
+        }`}
+      >
+        <p className="font-mono text-[10px] font-black uppercase text-slate-500">{isUser ? "You" : "VerityDesk"} / {formatDateTime(message.createdAt)}</p>
+        <div className="mt-2">
+          <MarkdownAnswer text={message.content} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -5378,6 +5520,91 @@ function hasLocalSession() {
   }
 
   return window.localStorage.getItem(LOCAL_SESSION_STORAGE_KEY) === "ready" || Boolean(window.localStorage.getItem(LOCAL_SESSION_STORAGE_KEY));
+}
+
+function loadChatSessions(): ChatSession[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const storedSessions = window.localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
+  if (!storedSessions) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(storedSessions) as ChatSession[];
+    return parsed
+      .filter((session) => session.id && Array.isArray(session.messages))
+      .sort((first, second) => second.updatedAt.localeCompare(first.updatedAt))
+      .slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
+function loadActiveChatSessionId(sessions: ChatSession[]) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storedId = window.localStorage.getItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
+  if (storedId && sessions.some((session) => session.id === storedId)) {
+    return storedId;
+  }
+  return sessions[0]?.id ?? null;
+}
+
+function createChatSession(question?: string): ChatSession {
+  const now = new Date().toISOString();
+  return {
+    id: createLocalId("chat"),
+    title: question ? titleFromQuestion(question) : "New chat",
+    summary: question ? question.slice(0, 160) : "",
+    createdAt: now,
+    updatedAt: now,
+    messages: [],
+  };
+}
+
+function ensureActiveChatSession(sessions: ChatSession[], activeSessionId: string | null, question: string) {
+  const activeSession = sessions.find((session) => session.id === activeSessionId);
+  return activeSession ?? createChatSession(question);
+}
+
+function upsertChatSession(sessions: ChatSession[], nextSession: ChatSession) {
+  const withoutSession = sessions.filter((session) => session.id !== nextSession.id);
+  return [nextSession, ...withoutSession].sort((first, second) => second.updatedAt.localeCompare(first.updatedAt)).slice(0, 20);
+}
+
+function summarizeChatMessages(messages: ChatMessage[]) {
+  const latest = messages.slice(-2).map((message) => `${message.role === "user" ? "Q" : "A"}: ${message.content.replace(/\s+/g, " ").slice(0, 120)}`);
+  return latest.join(" / ");
+}
+
+function buildQueryWithSessionMemory(query: string, session: ChatSession) {
+  const previousMessages = session.messages.slice(-6);
+  if (previousMessages.length === 0) {
+    return query;
+  }
+
+  const memory = previousMessages
+    .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content.replace(/\s+/g, " ").slice(0, 280)}`)
+    .join("\n");
+  const combined = `Use this recent chat context when helpful:\n${memory}\n\nCurrent user question:\n${query}`;
+  return combined.slice(0, 3900);
+}
+
+function titleFromQuestion(question: string) {
+  const compact = question.replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return "New chat";
+  }
+  return compact.length > 54 ? `${compact.slice(0, 54)}...` : compact;
+}
+
+function createLocalId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function normalizePersonalizationProfile(profile: PersonalizationProfile): PersonalizationProfile {
