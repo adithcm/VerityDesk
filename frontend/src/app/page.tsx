@@ -1371,6 +1371,8 @@ export default function Home() {
                 sourceError={sourceError}
                 sourcesLoading={sourcesLoading}
                 healthData={healthData}
+                runsData={runsData}
+                latestItemsData={latestItemsData}
                 scheduleData={scheduleData}
                 scheduleSaving={scheduleSaving}
                 scheduleError={scheduleError}
@@ -1378,12 +1380,21 @@ export default function Home() {
                 ingestionLoading={ingestionLoading}
                 runMode={runMode}
                 runLoading={runLoading}
+                lastRunResponse={lastRunResponse}
+                reportListData={reportListData}
+                reportsLoading={reportsLoading}
+                reportsError={reportsError}
+                watchItemsData={watchItemsData}
+                watchItemsLoading={watchItemsLoading}
+                watchItemsError={watchItemsError}
+                watchEvaluationLoading={watchEvaluationLoading}
                 personalizationProfile={personalizationProfile}
                 profileSavedAt={profileSavedAt}
                 setRunMode={setRunMode}
                 triggerIngestionRun={triggerIngestionRun}
                 saveSchedule={saveSchedule}
                 savePersonalizationProfile={savePersonalizationProfile}
+                evaluateWatchItems={evaluateWatchItems}
                 openSetup={() => setSetupOpen(true)}
               />
             )}
@@ -4524,6 +4535,8 @@ function SettingsView({
   sourceError,
   sourcesLoading,
   healthData,
+  runsData,
+  latestItemsData,
   scheduleData,
   scheduleSaving,
   scheduleError,
@@ -4531,18 +4544,29 @@ function SettingsView({
   ingestionLoading,
   runMode,
   runLoading,
+  lastRunResponse,
+  reportListData,
+  reportsLoading,
+  reportsError,
+  watchItemsData,
+  watchItemsLoading,
+  watchItemsError,
+  watchEvaluationLoading,
   personalizationProfile,
   profileSavedAt,
   setRunMode,
   triggerIngestionRun,
   saveSchedule,
   savePersonalizationProfile,
+  evaluateWatchItems,
   openSetup,
 }: {
   sourceData: SourceCatalogResponse | null;
   sourceError: string | null;
   sourcesLoading: boolean;
   healthData: SourceHealthResponse | null;
+  runsData: IngestionRunHistoryResponse | null;
+  latestItemsData: LatestItemsResponse | null;
   scheduleData: DailyScheduleConfig | null;
   scheduleSaving: boolean;
   scheduleError: string | null;
@@ -4550,12 +4574,21 @@ function SettingsView({
   ingestionLoading: boolean;
   runMode: RunMode;
   runLoading: boolean;
+  lastRunResponse: IngestionRunResponse | null;
+  reportListData: ReportListResponse | null;
+  reportsLoading: boolean;
+  reportsError: string | null;
+  watchItemsData: WatchItemListResponse | null;
+  watchItemsLoading: boolean;
+  watchItemsError: string | null;
+  watchEvaluationLoading: boolean;
   personalizationProfile: PersonalizationProfile;
   profileSavedAt: string | null;
   setRunMode: (mode: RunMode) => void;
   triggerIngestionRun: () => void;
   saveSchedule: (nextSchedule: DailyScheduleConfig) => Promise<void>;
   savePersonalizationProfile: (nextProfile: PersonalizationProfile) => void;
+  evaluateWatchItems: () => void;
   openSetup: () => void;
 }) {
   const schedule = scheduleData ?? defaultScheduleConfig();
@@ -4857,6 +4890,74 @@ function SettingsView({
       <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Saved intelligence</p>
+            <h2 className="mt-1 text-2xl font-bold text-white">Reports and brief history</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-400">
+              Saved briefings and generated reports live here so Home can stay focused on the current signal.
+            </p>
+          </div>
+          <StatusBadge status={reportsLoading ? "loading" : `${reportListData?.total ?? 0} reports`} />
+        </div>
+        <StatusBlock loading={reportsLoading} error={reportsError} />
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          {(reportListData?.reports ?? []).slice(0, 6).map((report) => (
+            <article key={report.id} className="rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-bold text-white">{report.title}</p>
+                <StatusBadge status={report.confidence} />
+              </div>
+              <p className="mt-2 text-xs text-slate-500">{titleCase(report.report_type)} / {formatDateTime(report.as_of ?? report.created_at)}</p>
+              <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400">{cleanAnswerText(report.summary ?? report.body) ?? "No summary."}</p>
+            </article>
+          ))}
+          {!reportsLoading && (reportListData?.reports ?? []).length === 0 && (
+            <p className="rounded-xl border border-dashed border-[#1d3558] p-4 text-sm text-slate-500">No saved reports yet.</p>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="font-mono text-xs font-black uppercase text-cyan-300">Watch items</p>
+            <h2 className="mt-1 text-2xl font-bold text-white">Signals to monitor</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-400">
+              Plain-English monitoring rules used by the daily workflow and agent context.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={evaluateWatchItems}
+            disabled={watchEvaluationLoading}
+            className="min-h-10 rounded-lg border border-lime-300/40 px-4 text-sm font-black text-lime-300 transition hover:border-lime-300 disabled:cursor-not-allowed disabled:text-slate-500"
+          >
+            {watchEvaluationLoading ? "Checking" : "Check Watch Items"}
+          </button>
+        </div>
+        <StatusBlock loading={watchItemsLoading} error={watchItemsError} />
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          {(watchItemsData?.items ?? []).slice(0, 6).map((item) => (
+            <article key={item.id} className="rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-bold text-white">{item.title}</p>
+                <StatusBadge status={item.enabled ? item.status : "off"} />
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-400">{item.query}</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <SourceStripRow label="Category" value={titleCase(item.category)} />
+                <SourceStripRow label="Last checked" value={formatDateTime(item.last_checked_at)} />
+              </div>
+            </article>
+          ))}
+          {!watchItemsLoading && (watchItemsData?.items ?? []).length === 0 && (
+            <p className="rounded-xl border border-dashed border-[#1d3558] p-4 text-sm text-slate-500">No watch items yet.</p>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
             <p className="font-mono text-xs font-black uppercase text-cyan-300">Sources</p>
             <h2 className="mt-1 text-2xl font-bold text-white">Connected data</h2>
             <p className="mt-1 text-sm leading-6 text-slate-400">
@@ -4885,6 +4986,37 @@ function SettingsView({
             );
           })}
         </div>
+        {lastRunResponse && (
+          <p className="mt-4 rounded-xl border border-[#1d3558] bg-[#020617]/70 p-3 text-sm leading-6 text-slate-400">
+            Latest refresh: {lastRunResponse.message}
+          </p>
+        )}
+        <details className="mt-5 rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
+          <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">Recent runs and latest items</summary>
+          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            <div>
+              <p className="text-sm font-bold text-white">Recent runs</p>
+              <RecentRunsTable runsData={runsData} loading={ingestionLoading} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-white">Latest retrieved items</p>
+              <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
+        <p className="font-mono text-xs font-black uppercase text-cyan-300">Provider status</p>
+        <h2 className="mt-1 text-2xl font-bold text-white">Models and live web</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <ConsoleMetric label="LLM provider" value="OpenAI via backend .env" />
+          <ConsoleMetric label="Live web" value="Tavily via backend .env" />
+          <ConsoleMetric label="Source keys" value="Managed locally" />
+        </div>
+        <p className="mt-3 text-sm leading-6 text-slate-400">
+          API keys stay in the backend environment and are not exposed in the browser. If an answer falls back or a source fails, check backend logs and source health above.
+        </p>
       </section>
     </div>
   );

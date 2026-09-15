@@ -267,7 +267,7 @@ Milestone doc: [milestones/9.6.7-agent-chat-memory.md](milestones/9.6.7-agent-ch
 
 ### 9.6.8 Settings Consolidation
 
-Status: Planned
+Status: Complete
 
 - Move sources, refresh controls, watch items, profile, schedule, and provider/key status into Settings.
 - Reduce main app navigation clutter.
