@@ -244,7 +244,7 @@ Milestone doc: [milestones/9.6.5-drilldown-views.md](milestones/9.6.5-drilldown-
 
 ### 9.6.6 Daily Brief Page
 
-Status: Planned
+Status: Complete
 
 - Implement the markdown daily brief page.
 - Use stored generated report data where available.

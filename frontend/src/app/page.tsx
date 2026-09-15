@@ -1190,6 +1190,9 @@ export default function Home() {
               <DailyBriefingView
                 latestItemsData={latestItemsData}
                 ingestionLoading={ingestionLoading}
+                reportListData={reportListData}
+                reportsLoading={reportsLoading}
+                reportsError={reportsError}
                 dailyBriefingReport={dailyBriefingReport}
                 dailyBriefingLoading={dailyBriefingLoading}
                 dailyBriefingError={dailyBriefingError}
@@ -3156,6 +3159,9 @@ function SchedulerStatusCard({
 function DailyBriefingView({
   latestItemsData,
   ingestionLoading,
+  reportListData,
+  reportsLoading,
+  reportsError,
   dailyBriefingReport,
   dailyBriefingLoading,
   dailyBriefingError,
@@ -3163,44 +3169,85 @@ function DailyBriefingView({
 }: {
   latestItemsData: LatestItemsResponse | null;
   ingestionLoading: boolean;
+  reportListData: ReportListResponse | null;
+  reportsLoading: boolean;
+  reportsError: string | null;
   dailyBriefingReport: ReportResponse | null;
   dailyBriefingLoading: boolean;
   dailyBriefingError: string | null;
   generateDailyBriefing: () => void;
 }) {
+  const savedDailyBrief = reportListData?.reports.find((report) => report.report_type === "daily_briefing") ?? null;
+  const activeBrief = dailyBriefingReport ?? savedDailyBrief;
+  const briefText = cleanAnswerText(activeBrief?.body ?? activeBrief?.summary) ?? null;
+
   return (
-    <div className="space-y-4">
-      <section className="rounded-md border border-[#d7dee3] bg-white p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div className="grid gap-5 text-slate-100">
+      <section className="rounded-[24px] border border-cyan-300/20 bg-[radial-gradient(circle_at_86%_14%,rgba(34,211,238,0.16),transparent_22rem),#061320]/95 p-5 md:p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Daily Briefing</h3>
-            <p className="mt-1 text-sm text-[#5b6573]">A readable summary built from the latest saved evidence.</p>
+            <p className="font-mono text-xs font-black uppercase text-lime-300">Daily Brief</p>
+            <h1 className="mt-3 text-4xl font-black leading-none text-white md:text-5xl">
+              {activeBrief?.title ?? "Your daily intelligence brief"}
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+              A concise AI briefing generated from your profile, live web research, connected APIs, watch items, and source freshness.
+            </p>
           </div>
           <button
             type="button"
             onClick={generateDailyBriefing}
             disabled={dailyBriefingLoading}
-            className="min-h-10 rounded-md bg-[#143642] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#9aa8b2]"
+            className="min-h-11 rounded-lg bg-lime-300 px-5 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
           >
-            {dailyBriefingLoading ? "Generating" : "Generate Daily Briefing"}
+            {dailyBriefingLoading ? "Generating" : activeBrief ? "Regenerate Brief" : "Generate Brief"}
           </button>
         </div>
         {dailyBriefingError && (
-          <p className="mt-4 rounded-md bg-[#fff1f0] p-3 text-sm text-[#b42318]">{dailyBriefingError}</p>
+          <p className="mt-4 rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-200">{dailyBriefingError}</p>
         )}
-        {!dailyBriefingReport && !dailyBriefingError && (
-          <div className="mt-4 rounded-md border border-dashed border-[#cbd5dc] p-6 text-sm text-[#5b6573]">
-            No briefing generated in this session yet.
+        {reportsError && (
+          <p className="mt-4 rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-200">{reportsError}</p>
+        )}
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-4">
+          <ConsoleMetric label="Retrieved" value={formatDateTime(activeBrief?.as_of ?? activeBrief?.created_at)} />
+          <ConsoleMetric label="Confidence" value={activeBrief?.confidence ?? "--"} />
+          <ConsoleMetric label="Sources" value={String(activeBrief?.citations.length ?? 0)} />
+          <ConsoleMetric label="Status" value={activeBrief?.guardrail_status ?? "waiting"} />
+        </div>
+      </section>
+
+      <section className="rounded-[24px] border border-cyan-300/20 bg-[#07111f]/92 p-5 md:p-6">
+        {reportsLoading && !activeBrief && (
+          <p className="rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4 text-sm text-slate-400">Loading saved briefing.</p>
+        )}
+        {!activeBrief && !dailyBriefingError && !reportsLoading && (
+          <div className="rounded-[18px] border border-dashed border-cyan-300/25 bg-[#020617]/70 p-8 text-sm leading-6 text-slate-400">
+            No daily brief is saved yet. Generate one to create the markdown briefing for today.
           </div>
         )}
-        {dailyBriefingReport && (
-          <ReportReadingPanel report={dailyBriefingReport} variant="briefing" />
+        {activeBrief && (
+          <div className="space-y-5">
+            <MarkdownAnswer text={briefText} />
+            <p className="rounded-lg border border-[#1d3558] bg-[#020617]/70 p-3 text-xs leading-5 text-slate-400">
+              {FINANCIAL_DISCLAIMER}
+            </p>
+            <details className="rounded-[18px] border border-[#1d3558] bg-[#020617]/72 p-4">
+              <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">
+                View citations
+              </summary>
+              <div className="mt-4">
+                <ReportEvidenceDrawer report={activeBrief} />
+              </div>
+            </details>
+          </div>
         )}
       </section>
 
-      <details className="rounded-md border border-[#d7dee3] bg-white p-4">
-        <summary className="cursor-pointer text-sm font-semibold text-[#143642]">Source material used for briefings</summary>
-        <p className="mt-2 text-sm text-[#5b6573]">Latest retrieved items are available here when you want to inspect the raw inputs.</p>
+      <details className="rounded-[20px] border border-cyan-300/20 bg-[#07111f]/88 p-4">
+        <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">Latest source material</summary>
+        <p className="mt-2 text-sm text-slate-400">Raw retrieved items stay hidden unless you want to inspect the inputs.</p>
         <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
       </details>
     </div>
