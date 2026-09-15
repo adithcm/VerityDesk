@@ -1,6 +1,6 @@
 # Phase 9.6: Option M Visual Product Implementation
 
-Status: Planned
+Status: Complete
 
 ## Goal
 
@@ -277,7 +277,7 @@ Milestone doc: [milestones/9.6.8-settings-consolidation.md](milestones/9.6.8-set
 
 ### 9.6.9 QA And Local Testing
 
-Status: Planned
+Status: Complete
 
 - Validate login/setup to Home flow.
 - Validate Home visuals with live and missing data.
@@ -288,6 +288,12 @@ Status: Planned
 - Run backend tests, frontend typecheck, frontend build.
 
 Milestone doc: [milestones/9.6.9-qa-local-testing.md](milestones/9.6.9-qa-local-testing.md)
+
+Validation completed:
+
+- `make backend-test` passed: 204 tests
+- `make frontend-typecheck` passed
+- `make frontend-build` passed
 
 ## Definition Of Done
 
