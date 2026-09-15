@@ -1,6 +1,6 @@
 # Phase 9.6: Option M Visual Product Implementation
 
-Status: Planned
+Status: Complete
 
 ## Goal
 
@@ -244,7 +244,7 @@ Milestone doc: [milestones/9.6.5-drilldown-views.md](milestones/9.6.5-drilldown-
 
 ### 9.6.6 Daily Brief Page
 
-Status: Planned
+Status: Complete
 
 - Implement the markdown daily brief page.
 - Use stored generated report data where available.
@@ -255,7 +255,7 @@ Milestone doc: [milestones/9.6.6-daily-brief-page.md](milestones/9.6.6-daily-bri
 
 ### 9.6.7 Agent Chat With Session Memory
 
-Status: Planned
+Status: Complete
 
 - Add chat page with active and previous chats in the same view.
 - Persist chat sessions locally/backend.
@@ -267,7 +267,7 @@ Milestone doc: [milestones/9.6.7-agent-chat-memory.md](milestones/9.6.7-agent-ch
 
 ### 9.6.8 Settings Consolidation
 
-Status: Planned
+Status: Complete
 
 - Move sources, refresh controls, watch items, profile, schedule, and provider/key status into Settings.
 - Reduce main app navigation clutter.
@@ -277,7 +277,7 @@ Milestone doc: [milestones/9.6.8-settings-consolidation.md](milestones/9.6.8-set
 
 ### 9.6.9 QA And Local Testing
 
-Status: Planned
+Status: Complete
 
 - Validate login/setup to Home flow.
 - Validate Home visuals with live and missing data.
@@ -288,6 +288,12 @@ Status: Planned
 - Run backend tests, frontend typecheck, frontend build.
 
 Milestone doc: [milestones/9.6.9-qa-local-testing.md](milestones/9.6.9-qa-local-testing.md)
+
+Validation completed:
+
+- `make backend-test` passed: 204 tests
+- `make frontend-typecheck` passed
+- `make frontend-build` passed
 
 ## Definition Of Done
 
