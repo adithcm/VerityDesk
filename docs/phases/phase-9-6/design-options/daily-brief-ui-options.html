@@ -136,7 +136,7 @@
     .brief-head p { max-width: 780px; line-height: 1.55; }
     .status-strip {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 10px;
       padding: 14px 24px;
       border-bottom: 1px solid var(--line);
@@ -152,6 +152,26 @@
     }
     .metric strong { display: block; margin-top: 9px; font-size: 23px; }
     .metric span { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+    .score-panel {
+      display: grid;
+      gap: 10px;
+      padding: 0 24px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(97, 232, 255, 0.04);
+    }
+    .score-ranges {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .range {
+      border: 1px solid rgba(97, 232, 255, 0.15);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(2, 6, 23, 0.52);
+    }
+    .range strong { display: block; margin-bottom: 5px; }
+    .range span { color: var(--muted); font-size: 13px; line-height: 1.4; }
 
     .content { padding: 24px; }
     .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
@@ -339,10 +359,20 @@
         <button class="solid" data-expand-all="cards">Expand All</button>
       </div>
       <div class="status-strip">
+        <div class="metric"><span>Brief score</span><strong>72</strong></div>
         <div class="metric"><span>Market mood</span><strong>Mixed</strong></div>
         <div class="metric"><span>Geopolitics</span><strong>High</strong></div>
         <div class="metric"><span>AI momentum</span><strong>Hot</strong></div>
         <div class="metric"><span>Watchlist</span><strong>6 names</strong></div>
+      </div>
+      <div class="score-panel">
+        <button class="ghost" data-toggle="cards-score">What does the Brief Score mean?</button>
+        <div id="cards-score" class="score-ranges hidden">
+          <div class="range"><strong>0-30 · Quiet</strong><span>Low urgency. Skim the bottom line and move on.</span></div>
+          <div class="range"><strong>31-60 · Normal</strong><span>Useful daily context. Read the cards that match your interests.</span></div>
+          <div class="range"><strong>61-80 · Important</strong><span>High-signal day. Read the full brief and watch trend changes.</span></div>
+          <div class="range"><strong>81-100 · High attention</strong><span>Material change or elevated uncertainty. Review evidence and follow-ups.</span></div>
+        </div>
       </div>
       <div class="content grid-3">
         <article class="card">
@@ -353,21 +383,42 @@
           <div id="cards-1" class="detail hidden">Focus on whether oil/rates confirm the risk move. If S&P 500 breadth weakens while megacap AI names hold, the market may be narrower than it looks.</div>
         </article>
         <article class="card">
+          <h3>World News</h3>
+          <p><strong>Global headlines</strong> are summarized separately from conflict and policy risk so the user can see the broad world picture first.</p>
+          <div class="badge-row"><span class="badge cyan">Broad context</span><span class="badge">Top 3 stories</span></div>
+          <button class="ghost" data-toggle="cards-world">Open detail</button>
+          <div id="cards-world" class="detail hidden">Show the major world developments, why they matter, and whether each story is likely to affect markets, policy, technology, or consumer conditions.</div>
+        </article>
+        <article class="card">
           <h3>Geopolitics</h3>
-          <p><strong>Global tension</strong> is the main macro risk today, with U.S. policy reactions worth watching.</p>
+          <p><strong>Global tension</strong> gets its own card, separate from general world news, with focus on conflict, sanctions, energy, trade, and alliances.</p>
           <div class="badge-row"><span class="badge orange">Change: worsening</span></div>
           <button class="ghost" data-toggle="cards-2">Open detail</button>
-          <div id="cards-2" class="detail hidden">Show the top 2 events, likely market channels, and the evidence quality. Sources stay collapsed unless requested.</div>
+          <div id="cards-2" class="detail hidden">Show the top 2 geopolitical events, likely market or policy channels, and evidence quality. Sources stay collapsed unless requested.</div>
+        </article>
+        <article class="card">
+          <h3>U.S. News</h3>
+          <p><strong>U.S. policy, economy, and regulation</strong> are pulled into one readable card so domestic signals do not get buried.</p>
+          <div class="badge-row"><span class="badge pink">U.S. focus</span><span class="badge">Policy + economy</span></div>
+          <button class="ghost" data-toggle="cards-us">Open detail</button>
+          <div id="cards-us" class="detail hidden">Include federal policy, economic releases, legal/regulatory signals, major domestic events, and why they matter to the user's saved topics.</div>
         </article>
         <article class="card">
           <h3>AI & Major Tech</h3>
-          <p><strong>AI infrastructure demand</strong> is still the key story across NVDA, MSFT, AMZN, and GOOGL.</p>
+          <p><strong>AI infrastructure demand</strong> is summarized separately from general company news, focused on models, chips, cloud, products, regulation, and adoption.</p>
           <div class="badge-row"><span class="badge cyan">Strengthening</span></div>
           <button class="ghost" data-toggle="cards-3">Show sources</button>
           <div id="cards-3" class="source-drawer hidden">
             <div class="source-row"><span>Company news feeds</span><span>fresh</span></div>
             <div class="source-row"><span>Market APIs</span><span>verified</span></div>
           </div>
+        </article>
+        <article class="card">
+          <h3>Markets & Watchlist</h3>
+          <p><strong>SPY, AAPL, MSFT, NVDA, AMZN, and GOOGL</strong> get concise trend notes, not a long generic market paragraph.</p>
+          <div class="badge-row"><span class="badge lime">Trend focused</span><span class="badge">No buy/sell calls</span></div>
+          <button class="ghost" data-toggle="cards-market">Open detail</button>
+          <div id="cards-market" class="detail hidden">Show S&P 500 setup, rates/yields context, and one-line watchlist trend read-throughs with confidence labels and what would change the view.</div>
         </article>
       </div>
     </section>
