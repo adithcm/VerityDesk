@@ -27,6 +27,17 @@ from app.services.guardrails import FINANCIAL_DISCLAIMER
 from app.services.personalization import read_user_preferences
 
 
+DEFAULT_DAILY_WATCHLIST = ["SPY", "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL"]
+DEFAULT_DAILY_BRIEFING_TOPICS = [
+    "main world news",
+    "geopolitical risk globally and in the United States",
+    "major AI news around the world and in the United States",
+    "major technology company developments",
+    "S&P 500 setup and trend",
+    "watchlist stock trends",
+    "rates, macro, housing, and consumer signals",
+]
+
 REPORT_TYPE_LABELS = {
     "daily_briefing": "Daily Briefing",
     "company_research": "Company Research",
@@ -142,7 +153,7 @@ def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> 
     preferences = read_user_preferences(session)
     domains = request.domains or DAILY_BRIEFING_DOMAINS
     regions = request.regions or preferences.preferred_regions
-    tickers = preferences.watchlist_tickers
+    tickers = preferences.watchlist_tickers or DEFAULT_DAILY_WATCHLIST
     query = request.user_query or build_personalized_daily_briefing_query(preferences)
     agent_request = AgentQueryRequest(
         user_query=query,
@@ -194,21 +205,21 @@ def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> 
 
 
 def build_personalized_daily_briefing_query(preferences: UserPreferencesResponse) -> str:
-    focus_parts = [
-        "world and market news",
-        "macro, rates, credit, commodities, technology, consumer, policy, and legal signals",
-        "housing and real estate conditions",
-    ]
-    if preferences.watchlist_tickers:
-        focus_parts.append(f"watchlist names: {', '.join(preferences.watchlist_tickers[:8])}")
+    watchlist = preferences.watchlist_tickers or DEFAULT_DAILY_WATCHLIST
+    focus_parts = list(DEFAULT_DAILY_BRIEFING_TOPICS)
+    focus_parts.append(f"watchlist names: {', '.join(watchlist[:8])}")
     if preferences.preferred_regions:
         focus_parts.append(f"preferred regions: {', '.join(preferences.preferred_regions[:5])}")
 
     return (
-        "Generate a concise personalized daily intelligence briefing for today. "
+        "Generate today's personalized daily intelligence briefing in clean markdown. "
         "Use Tavily live web research as the primary current source, then use direct APIs and local stored data "
-        "to verify or add context. Cover only the highest-signal developments for the user across "
-        f"{'; '.join(focus_parts)}. Explain what changed, why it matters, what is uncertain, and what to watch next. "
+        "to verify or add context. Cover only the highest-signal developments across "
+        f"{'; '.join(focus_parts)}. If user preferences are sparse, use those default topics to create a useful general brief. "
+        "Structure the answer as ## Bottom Line, ## Major Trends, ## Markets And Watchlist, ## AI And Major Tech, "
+        "## Geopolitics And U.S. Signals, ## What To Watch, and ## Data Gaps. "
+        "Use bullets, bold the key terms/tickers/companies/places/numbers, and label trend direction as strengthening, weakening, mixed, or unclear. "
+        "Explain what changed, why it matters, what is uncertain, and what to watch next. "
         "Use source-backed evidence only and do not give buy, sell, or hold instructions."
     )
 

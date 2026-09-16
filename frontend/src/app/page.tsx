@@ -392,18 +392,37 @@ const SETUP_COMPLETE_STORAGE_KEY = "investoragent.setupComplete.v1";
 const LOCAL_SESSION_STORAGE_KEY = "investoragent.localSession.v1";
 const CHAT_SESSIONS_STORAGE_KEY = "investoragent.chatSessions.v1";
 const ACTIVE_CHAT_SESSION_STORAGE_KEY = "investoragent.activeChatSession.v1";
+const DEFAULT_DAILY_WATCHLIST = "SPY, AAPL, MSFT, NVDA, AMZN, GOOGL";
+const DEFAULT_DAILY_COMPANIES = "Apple, Microsoft, Nvidia, Amazon, Alphabet";
+const LEGACY_DEFAULT_WATCHLIST = "SPY, QQQ, TLT";
+const LEGACY_DEFAULT_TOPICS = ["Markets", "Housing", "U.S. economy"];
+const dailyBriefingDefaultTopics = [
+  "World news",
+  "Geopolitics",
+  "U.S. news and policy",
+  "Markets",
+  "S&P 500",
+  "Company news",
+  "AI and technology",
+  "Major tech companies",
+];
 
 const topicOptions = [
   "World news",
+  "Geopolitics",
+  "U.S. news and policy",
   "U.S. economy",
   "Markets",
+  "S&P 500",
   "Company news",
   "Housing",
   "Mortgage rates",
   "AI and technology",
+  "Major tech companies",
   "Energy",
   "Banks and credit",
   "Consumer trends",
+  "Regulation and legal",
 ];
 
 const housingInterestOptions = [
@@ -559,6 +578,8 @@ export default function Home() {
     const savedChatSessions = loadChatSessions();
     const savedActiveChatId = loadActiveChatSessionId(savedChatSessions);
     setPersonalizationProfile(savedProfile);
+    localStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(savedProfile));
+    void syncBackendPreferences(savedProfile);
     setLocalSessionReady(hasLocalSession());
     setSetupOpen(hasLocalSession() && !setupComplete);
     setChatSessions(savedChatSessions);
@@ -577,6 +598,7 @@ export default function Home() {
     setPersonalizationProfile(nextProfile);
     localStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(nextProfile));
     localStorage.setItem(SETUP_COMPLETE_STORAGE_KEY, "true");
+    void syncBackendPreferences(nextProfile);
     setProfileSavedAt(new Date().toISOString());
     if (nextProfile.watchlist.trim()) {
       setAgentTicker(nextProfile.watchlist);
@@ -1003,7 +1025,17 @@ export default function Home() {
       const response = await fetch(`${API_BASE_URL}/api/v1/reports/daily-briefing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ time_window: "week" }),
+        body: JSON.stringify({
+          time_window: "day",
+          domains: personalizationProfile.priorityTopics.length
+            ? personalizationProfile.priorityTopics
+            : dailyBriefingDefaultTopics,
+          regions: uniqueList([
+            personalizationProfile.location,
+            ...splitList(personalizationProfile.housingMarkets),
+          ]),
+          user_query: buildDailyBriefingPrompt(personalizationProfile),
+        }),
       });
 
       if (!response.ok) {
@@ -2067,14 +2099,14 @@ function SetupProfileFlow({
                 id="setup-watchlist"
                 label="Watchlist"
                 value={draft.watchlist}
-                placeholder="SPY, QQQ, TLT"
+                placeholder={DEFAULT_DAILY_WATCHLIST}
                 onChange={(value) => updateDraft({ watchlist: value.toUpperCase() })}
               />
               <SettingsTextInput
                 id="setup-companies"
                 label="Companies"
                 value={draft.companies}
-                placeholder="Apple, Nvidia, Tesla"
+                placeholder={DEFAULT_DAILY_COMPANIES}
                 onChange={(value) => updateDraft({ companies: value })}
               />
               <SettingsTextInput
@@ -2141,7 +2173,7 @@ function SetupProfileFlow({
 
         <section className="grid gap-4 lg:grid-cols-3">
           <CheckboxGroup
-            title="Topics"
+            title="Daily brief topics"
             options={topicOptions}
             values={draft.priorityTopics}
             onToggle={(value) => toggleDraftOption("priorityTopics", value)}
@@ -2404,14 +2436,20 @@ function latestReportByType(reports: ReportResponse[]) {
 
 function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
   const promptContext = cardPromptContext(profile);
+  const selectedTopics = profile.priorityTopics.length ? profile.priorityTopics : dailyBriefingDefaultTopics;
+  const watchlist = profile.watchlist || DEFAULT_DAILY_WATCHLIST;
+  const companies = profile.companies || DEFAULT_DAILY_COMPANIES;
 
   return [
-    "Give me today's personalized briefing.",
-    "Cover world news, market setup, rates and macro, local housing, watchlist companies, and major risks.",
-    "Use a simple structure: Bottom Line, Major Trends, What Changed Recently, Why It Matters To Me, What To Watch Next, and Uncertainty/Data Gaps.",
-    "Analyze cross-category trends in global risk, markets, rates/macro, housing, company/watchlist news, consumer/labor, credit, and commodities.",
-    "For each major trend, say whether it looks strengthening, weakening, mixed, or unclear.",
-    "Prioritize what matters to my saved profile and keep the answer easy to scan.",
+    "Generate today's personalized daily brief in clean markdown.",
+    `Primary daily brief topics: ${selectedTopics.join(", ")}.`,
+    `Default market watchlist if the user has not overridden it: ${watchlist}.`,
+    `Default major company focus if the user has not overridden it: ${companies}.`,
+    "Prioritize main world news, geopolitical risk globally and in the U.S., major AI news, major tech company developments, S&P 500 setup, watchlist stock trends, rates/macro, housing, and the clearest risks.",
+    "If a setting is blank, use the selected/default topics to create a useful general brief instead of asking the user for more information.",
+    "Use this structure: ## Bottom Line, ## Major Trends, ## Markets And Watchlist, ## AI And Major Tech, ## Geopolitics And U.S. Signals, ## What To Watch, ## Data Gaps.",
+    "Use bullets under each section. Bold the key terms, tickers, companies, places, and numbers that matter.",
+    "For each major trend, say whether it is strengthening, weakening, mixed, or unclear.",
     "Use live web research first, then use direct APIs and stored data to verify or add context.",
     "Do not give direct buy, sell, or hold recommendations.",
     promptContext,
@@ -4449,14 +4487,14 @@ function SettingsView({
             id="profile-watchlist"
             label="Watchlist"
             value={profileDraft.watchlist}
-            placeholder="AAPL, MSFT, SPY, QQQ"
+            placeholder={DEFAULT_DAILY_WATCHLIST}
             onChange={(value) => updateProfile({ watchlist: value.toUpperCase() })}
           />
           <SettingsTextInput
             id="profile-companies"
             label="Companies"
             value={profileDraft.companies}
-            placeholder="Apple, Nvidia, Tesla"
+            placeholder={DEFAULT_DAILY_COMPANIES}
             onChange={(value) => updateProfile({ companies: value })}
           />
           <SettingsTextInput
@@ -4525,7 +4563,7 @@ function SettingsView({
 
         <div className="mt-5 grid gap-4 xl:grid-cols-3 text-slate-200">
           <CheckboxGroup
-            title="Topics to prioritize"
+            title="Daily brief topics"
             options={topicOptions}
             values={profileDraft.priorityTopics}
             onToggle={(value) => toggleProfileOption("priorityTopics", value)}
@@ -5334,14 +5372,15 @@ function defaultScheduleConfig(): DailyScheduleConfig {
 
 function defaultPersonalizationProfile(): PersonalizationProfile {
   return {
-    profileName: "",
-    personalNote: "",
+    profileName: "Daily intelligence",
+    personalNote:
+      "Prioritize concise daily intelligence on world news, geopolitics globally and in the U.S., major AI developments, major tech companies, S&P 500 conditions, and selected stock trends.",
     location: "",
     housingMarkets: "",
-    watchlist: "SPY, QQQ, TLT",
-    companies: "",
-    priorityTopics: ["Markets", "Housing", "U.S. economy"],
-    sectors: "",
+    watchlist: DEFAULT_DAILY_WATCHLIST,
+    companies: DEFAULT_DAILY_COMPANIES,
+    priorityTopics: dailyBriefingDefaultTopics,
+    sectors: "AI, semiconductors, cloud, consumer technology, rates, housing",
     housingInterests: ["Mortgage rates", "Affordability"],
     macroInterests: ["Inflation", "Interest rates", "Fed policy"],
     riskPreference: "balanced",
@@ -5364,10 +5403,10 @@ function loadPersonalizationProfile() {
   }
 
   try {
-    return normalizePersonalizationProfile({
+    return withDailyBriefingDefaults(normalizePersonalizationProfile({
       ...defaultPersonalizationProfile(),
       ...(JSON.parse(storedProfile) as Partial<PersonalizationProfile>),
-    });
+    }));
   } catch {
     return defaultPersonalizationProfile();
   }
@@ -5493,6 +5532,41 @@ function normalizePersonalizationProfile(profile: PersonalizationProfile): Perso
     answerFormat: profile.answerFormat || "brief",
     briefingTime: profile.briefingTime || "08:00",
   };
+}
+
+function withDailyBriefingDefaults(profile: PersonalizationProfile): PersonalizationProfile {
+  const watchlist = profile.watchlist.trim().toUpperCase();
+  const companies = profile.companies.trim();
+  const shouldUpgradeTopics =
+    profile.priorityTopics.length === 0 ||
+    profile.priorityTopics.every((topic) => LEGACY_DEFAULT_TOPICS.includes(topic));
+  return {
+    ...profile,
+    profileName: profile.profileName || "Daily intelligence",
+    personalNote: profile.personalNote || defaultPersonalizationProfile().personalNote,
+    watchlist: !watchlist || watchlist === LEGACY_DEFAULT_WATCHLIST ? DEFAULT_DAILY_WATCHLIST : profile.watchlist,
+    companies: companies || DEFAULT_DAILY_COMPANIES,
+    priorityTopics: shouldUpgradeTopics ? dailyBriefingDefaultTopics : profile.priorityTopics,
+    sectors: profile.sectors || "AI, semiconductors, cloud, consumer technology, rates, housing",
+  };
+}
+
+async function syncBackendPreferences(profile: PersonalizationProfile) {
+  try {
+    await fetch(`${API_BASE_URL}/api/v1/preferences`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        watchlist_tickers: splitList(profile.watchlist || DEFAULT_DAILY_WATCHLIST),
+        preferred_regions: uniqueList([
+          profile.location,
+          ...splitList(profile.housingMarkets),
+        ]),
+      }),
+    });
+  } catch {
+    // Backend sync is best-effort; local personalization still works offline.
+  }
 }
 
 function normalizeListText(value: string) {
