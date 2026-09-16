@@ -1218,7 +1218,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1440px] gap-4 p-4 lg:grid-cols-[82px_minmax(0,1fr)_390px] lg:gap-5 lg:p-6">
+      <div className="grid w-full gap-4 p-3 sm:p-4 lg:grid-cols-[82px_minmax(0,1fr)] lg:gap-5 lg:p-5 xl:p-6">
         <aside className="flex gap-2 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.32)] lg:min-h-[calc(100vh-118px)] lg:flex-col">
           {shellNavigation.map((item) => (
             <button
@@ -1247,7 +1247,7 @@ export default function Home() {
             </span>
           </div>
 
-          <div className="p-5 md:p-7">
+          <div className="p-4 md:p-5 xl:p-6">
             {activeView === "Home" && (
               <OptionMHomeView
                 healthData={healthData}
@@ -1401,34 +1401,6 @@ export default function Home() {
           </div>
         </section>
 
-        {activeView === "Home" ? (
-          <HomeProfileRail
-            personalizationProfile={personalizationProfile}
-            sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
-            scheduleData={scheduleData}
-            reportListData={reportListData}
-            reportsLoading={reportsLoading}
-            openSettings={() => setActiveView("Settings")}
-          />
-        ) : (
-          <BriefingCardsPanel
-            personalizationProfile={personalizationProfile}
-            sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
-            scheduleData={scheduleData}
-            reportListData={reportListData}
-            reportsLoading={reportsLoading}
-            suggestionsData={suggestionsData}
-            suggestionsLoading={suggestionsLoading}
-            suggestionsError={suggestionsError}
-            generateDailyBriefing={generateDailyBriefing}
-            generateHousingReport={generateHousingReport}
-            generateMarketStrategy={generateMarketStrategy}
-            generateCompanyReport={generateCompanyReport}
-            generateMacroReport={generateMacroReport}
-            applySuggestion={applySuggestion}
-            openSettings={() => setActiveView("Settings")}
-          />
-        )}
       </div>
     </main>
   );
@@ -1954,214 +1926,6 @@ function MiniBarChart({ points, accent }: { points: number[]; accent: HomeVisual
   );
 }
 
-function HomeProfileRail({
-  personalizationProfile,
-  sourceStatusText,
-  scheduleData,
-  reportListData,
-  reportsLoading,
-  openSettings,
-}: {
-  personalizationProfile: PersonalizationProfile;
-  sourceStatusText: string;
-  scheduleData: DailyScheduleConfig | null;
-  reportListData: ReportListResponse | null;
-  reportsLoading: boolean;
-  openSettings: () => void;
-}) {
-  const latestReport = reportListData?.reports[0] ?? null;
-
-  return (
-    <aside className="grid content-start gap-4 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
-      <section className="rounded-[18px] border border-cyan-300/20 bg-[#020617]/80 p-4">
-        <p className="font-mono text-xs font-black uppercase text-lime-300">Profile</p>
-        <h2 className="mt-3 text-2xl font-black text-white">{personalizationProfile.profileName || "My VerityDesk"}</h2>
-        <p className="mt-3 text-sm leading-6 text-slate-400">
-          {personalizationProfile.personalNote || "Add a short note in Settings so answers and daily briefs know what matters to you."}
-        </p>
-        <button
-          type="button"
-          onClick={openSettings}
-          className="mt-4 min-h-10 rounded-lg border border-cyan-300/30 px-4 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
-        >
-          Tune Profile
-        </button>
-      </section>
-
-      <section className="rounded-[18px] border border-[#1d3558] bg-[#020617]/70 p-4">
-        <p className="font-mono text-xs font-black uppercase text-cyan-300">Status</p>
-        <div className="mt-4 grid gap-3">
-          <SourceStripRow label="Sources" value={sourceStatusText} />
-          <SourceStripRow label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
-          <SourceStripRow label="Next" value={formatDateTime(scheduleData?.next_run_at)} />
-          <SourceStripRow label="Location" value={personalizationProfile.location || "Not set"} />
-          <SourceStripRow label="Watchlist" value={compactListLabel(splitList(personalizationProfile.watchlist))} />
-        </div>
-      </section>
-
-      <section className="rounded-[18px] border border-[#1d3558] bg-[#020617]/70 p-4">
-        <p className="font-mono text-xs font-black uppercase text-pink-300">Latest saved</p>
-        <p className="mt-3 text-sm font-bold text-white">
-          {reportsLoading ? "Loading..." : latestReport?.title ?? "No report yet"}
-        </p>
-        <p className="mt-2 text-xs leading-5 text-slate-500">
-          {latestReport ? `Retrieved ${formatDateTime(latestReport.as_of ?? latestReport.created_at)}` : "Daily cards will fill in after refreshes and brief generation."}
-        </p>
-      </section>
-    </aside>
-  );
-}
-
-function BriefingCardsPanel({
-  personalizationProfile,
-  sourceStatusText,
-  scheduleData,
-  reportListData,
-  reportsLoading,
-  suggestionsData,
-  suggestionsLoading,
-  suggestionsError,
-  generateDailyBriefing,
-  generateHousingReport,
-  generateMarketStrategy,
-  generateCompanyReport,
-  generateMacroReport,
-  applySuggestion,
-  openSettings,
-}: {
-  personalizationProfile: PersonalizationProfile;
-  sourceStatusText: string;
-  scheduleData: DailyScheduleConfig | null;
-  reportListData: ReportListResponse | null;
-  reportsLoading: boolean;
-  suggestionsData: ProactiveSuggestionsResponse | null;
-  suggestionsLoading: boolean;
-  suggestionsError: string | null;
-  generateDailyBriefing: () => void;
-  generateHousingReport: () => void;
-  generateMarketStrategy: () => void;
-  generateCompanyReport: () => void;
-  generateMacroReport: () => void;
-  applySuggestion: (suggestion: ProactiveSuggestion) => void;
-  openSettings: () => void;
-}) {
-  const panels = buildDailyTopicPanels({
-    profile: personalizationProfile,
-    reports: reportListData?.reports ?? [],
-    generateDailyBriefing,
-    generateHousingReport,
-    generateMarketStrategy,
-    generateCompanyReport,
-    generateMacroReport,
-  });
-
-  return (
-    <aside className="grid content-start gap-4 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-white">Today&apos;s Panels</h2>
-          <p className="mt-1 font-mono text-xs font-black uppercase text-slate-500">Saved daily intelligence</p>
-        </div>
-        <button type="button" onClick={openSettings} className="text-sm font-bold text-cyan-300">
-          Tune
-        </button>
-      </div>
-
-      {reportsLoading ? (
-        <div className="rounded-xl border border-[#1d3558] bg-[#020617]/80 p-4 text-sm text-slate-400">
-          Loading saved daily panels.
-        </div>
-      ) : (
-        panels.map((panel) => <DailyTopicPanelCard key={panel.title} panel={panel} />)
-      )}
-
-      <div className="rounded-xl border border-[#1d3558] bg-[#020617]/80 p-4">
-        <p className="font-mono text-xs font-black uppercase text-cyan-300">System</p>
-        <div className="mt-3 grid gap-2">
-          <SourceStripRow label="Sources" value={sourceStatusText} />
-          <SourceStripRow label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
-          <SourceStripRow label="Next run" value={formatDateTime(scheduleData?.next_run_at)} />
-          <SourceStripRow label="Location" value={personalizationProfile.location || "Set in Settings"} />
-        </div>
-      </div>
-
-      <details className="rounded-xl border border-[#1d3558] bg-[#020617]/60 p-4">
-        <summary className="cursor-pointer font-mono text-xs font-black uppercase text-slate-400">Suggested next questions</summary>
-        {suggestionsLoading && <p className="mt-3 text-sm text-slate-400">Loading suggestions.</p>}
-        {suggestionsError && <p className="mt-3 text-sm text-red-200">{suggestionsError}</p>}
-        {!suggestionsLoading && !suggestionsError && (
-          <div className="mt-3 grid gap-2">
-            {(suggestionsData?.suggestions ?? []).slice(0, 3).map((suggestion) => (
-              <button
-                key={suggestion.id}
-                type="button"
-                onClick={() => applySuggestion(suggestion)}
-                className="rounded-lg border border-[#1d3558] px-3 py-2 text-left text-sm leading-5 text-slate-300 hover:border-cyan-300/50"
-              >
-                {suggestion.title}
-              </button>
-            ))}
-            {(!suggestionsData || suggestionsData.suggestions.length === 0) && (
-              <p className="text-sm text-slate-400">No suggestions available yet.</p>
-            )}
-          </div>
-        )}
-      </details>
-    </aside>
-  );
-}
-
-type DailyTopicPanel = {
-  title: string;
-  description: string;
-  report: ReportResponse | null;
-  borderClass: string;
-  dotClass: string;
-  onRefresh: () => void;
-};
-
-function DailyTopicPanelCard({ panel }: { panel: DailyTopicPanel }) {
-  const body = cleanAnswerText(panel.report?.summary ?? panel.report?.body);
-  const signalLabel = reportMetadataText(panel.report, "signal_label") ?? (panel.report ? "Developing" : "No panel yet");
-  const changeLabel = reportMetadataText(panel.report, "change_label") ?? "Waiting";
-
-  return (
-    <section className={`rounded-xl border bg-[#020617] p-4 ${panel.borderClass}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-lg font-bold text-white">{panel.title}</p>
-          <p className="mt-1 text-xs font-semibold uppercase text-slate-500">
-            {panel.report ? `Updated ${formatDateTime(panel.report.as_of ?? panel.report.created_at)}` : "Waiting for daily refresh"}
-          </p>
-        </div>
-        <span className={`mt-2 h-2 w-2 rounded-full ${panel.dotClass}`} />
-      </div>
-      <p className="mt-3 text-sm leading-5 text-slate-400">
-        {body ? compactText(body, 210) : panel.description}
-      </p>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-2">
-          <NeonChip variant={signalChipVariant(signalLabel)}>{signalLabel}</NeonChip>
-          <NeonChip>{`Change: ${changeLabel}`}</NeonChip>
-          {panel.report && <NeonChip>{panel.report.citations.length} sources</NeonChip>}
-        </div>
-        <button
-          type="button"
-          onClick={panel.onRefresh}
-          className="min-h-9 rounded-lg border border-cyan-300/30 px-3 text-xs font-black text-cyan-200 transition hover:border-cyan-300/70"
-        >
-          Refresh
-        </button>
-      </div>
-      {panel.report && (
-        <div className="mt-3">
-          <ReportEvidenceDrawer report={panel.report} />
-        </div>
-      )}
-    </section>
-  );
-}
-
 function reportMetadataText(report: ReportResponse | null | undefined, key: string) {
   const value = report?.metadata?.[key];
   return typeof value === "string" && value.trim() ? value : null;
@@ -2476,71 +2240,6 @@ function buildBriefingCards(profile: PersonalizationProfile) {
       ].join("\n"),
       borderClass: "border-orange-300/30",
       dotClass: "bg-orange-300 shadow-[0_0_24px_rgba(251,146,60,0.8)]",
-    },
-  ];
-}
-
-function buildDailyTopicPanels({
-  profile,
-  reports,
-  generateDailyBriefing,
-  generateHousingReport,
-  generateMarketStrategy,
-  generateCompanyReport,
-  generateMacroReport,
-}: {
-  profile: PersonalizationProfile;
-  reports: ReportResponse[];
-  generateDailyBriefing: () => void;
-  generateHousingReport: () => void;
-  generateMarketStrategy: () => void;
-  generateCompanyReport: () => void;
-  generateMacroReport: () => void;
-}): DailyTopicPanel[] {
-  const latestByType = latestReportByType(reports);
-  const location = profile.location || compactListLabel(splitList(profile.housingMarkets));
-  const watchlist = compactListLabel(splitList(profile.watchlist));
-
-  return [
-    {
-      title: "Daily Briefing",
-      description: "Today's personal intelligence summary will appear here after the daily refresh runs.",
-      report: latestByType.get("daily_briefing") ?? null,
-      borderClass: "border-lime-300/35",
-      dotClass: "bg-lime-300 shadow-[0_0_24px_rgba(163,230,53,0.8)]",
-      onRefresh: generateDailyBriefing,
-    },
-    {
-      title: "Local Housing Pulse",
-      description: `Rates, affordability, inventory, and local housing signals for ${location === "Not set" ? "your saved area" : location}.`,
-      report: latestByType.get("housing") ?? null,
-      borderClass: "border-cyan-300/30",
-      dotClass: "bg-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.8)]",
-      onRefresh: generateHousingReport,
-    },
-    {
-      title: "Market Setup",
-      description: "Indexes, rates, sector tone, volatility, commodities, and macro risk.",
-      report: latestByType.get("market_strategy") ?? null,
-      borderClass: "border-pink-300/30",
-      dotClass: "bg-pink-300 shadow-[0_0_24px_rgba(249,168,212,0.75)]",
-      onRefresh: generateMarketStrategy,
-    },
-    {
-      title: "Watchlist Moves",
-      description: `Catalysts, filings, news, and risk signals for ${watchlist === "Not set" ? "your saved watchlist" : watchlist}.`,
-      report: latestByType.get("company_research") ?? null,
-      borderClass: "border-orange-300/30",
-      dotClass: "bg-orange-300 shadow-[0_0_24px_rgba(253,186,116,0.75)]",
-      onRefresh: generateCompanyReport,
-    },
-    {
-      title: "Rates And Credit",
-      description: "Rates, yields, inflation pressure, credit conditions, Fed policy, and consumer stress.",
-      report: latestByType.get("macro") ?? null,
-      borderClass: "border-violet-300/30",
-      dotClass: "bg-violet-300 shadow-[0_0_24px_rgba(196,181,253,0.75)]",
-      onRefresh: generateMacroReport,
     },
   ];
 }
