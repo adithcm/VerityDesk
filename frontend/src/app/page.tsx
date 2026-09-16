@@ -3232,6 +3232,8 @@ function DailyBriefingView({
   const briefText = cleanAnswerText(activeBrief?.body ?? activeBrief?.summary) ?? null;
   const briefCards = activeBrief ? buildDailyBriefCards(activeBrief) : [];
   const briefScore = activeBrief ? calculateDailyBriefScore(activeBrief) : null;
+  const [expandedBriefCardId, setExpandedBriefCardId] = useState<string | null>(null);
+  const expandedBriefCard = briefCards.find((card) => card.id === expandedBriefCardId) ?? null;
 
   return (
     <div className="grid gap-5 text-slate-100">
@@ -3282,9 +3284,20 @@ function DailyBriefingView({
         {activeBrief && (
           <div className="space-y-5">
             <DailyBriefScorePanel report={activeBrief} score={briefScore} />
+            {expandedBriefCard && (
+              <DailyBriefExpandedRead
+                card={expandedBriefCard}
+                onClose={() => setExpandedBriefCardId(null)}
+              />
+            )}
             <div className="grid gap-4 xl:grid-cols-3">
               {briefCards.map((card) => (
-                <DailyBriefInsightCard key={card.id} card={card} />
+                <DailyBriefInsightCard
+                  key={card.id}
+                  card={card}
+                  isExpanded={expandedBriefCardId === card.id}
+                  onExpand={() => setExpandedBriefCardId(expandedBriefCardId === card.id ? null : card.id)}
+                />
               ))}
             </div>
             <p className="rounded-lg border border-[#1d3558] bg-[#020617]/70 p-3 text-xs leading-5 text-slate-400">
@@ -3372,7 +3385,15 @@ function ScoreRangeCard({ range, label, detail }: { range: string; label: string
   );
 }
 
-function DailyBriefInsightCard({ card }: { card: DailyBriefCard }) {
+function DailyBriefInsightCard({
+  card,
+  isExpanded,
+  onExpand,
+}: {
+  card: DailyBriefCard;
+  isExpanded: boolean;
+  onExpand: () => void;
+}) {
   const accentClass = {
     lime: "border-lime-300/55 text-lime-200 shadow-[0_0_28px_rgba(190,242,100,0.08)]",
     cyan: "border-cyan-300/55 text-cyan-200 shadow-[0_0_28px_rgba(34,211,238,0.08)]",
@@ -3401,13 +3422,50 @@ function DailyBriefInsightCard({ card }: { card: DailyBriefCard }) {
       <div className="mt-4 rounded-xl border border-cyan-300/15 bg-[#07111f]/70 p-3">
         <MarkdownAnswer text={card.summary} compact />
       </div>
-      <details className="mt-4 rounded-xl border border-[#1d3558] bg-[#020617]/70 p-3">
-        <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">Open deeper read</summary>
-        <div className="mt-3">
-          <MarkdownAnswer text={card.details} compact />
-        </div>
-      </details>
+      <button
+        type="button"
+        onClick={onExpand}
+        className={`mt-4 min-h-10 w-full rounded-lg border px-3 text-left font-mono text-xs font-black uppercase transition ${
+          isExpanded
+            ? "border-lime-300/60 bg-lime-300 text-[#102000]"
+            : "border-[#1d3558] bg-[#020617]/70 text-cyan-300 hover:border-cyan-300/55"
+        }`}
+      >
+        {isExpanded ? "Reading below" : "Open deeper read"}
+      </button>
     </article>
+  );
+}
+
+function DailyBriefExpandedRead({ card, onClose }: { card: DailyBriefCard; onClose: () => void }) {
+  const accentClass = {
+    lime: "border-lime-300/40",
+    cyan: "border-cyan-300/40",
+    pink: "border-pink-300/40",
+    orange: "border-orange-300/40",
+    violet: "border-violet-300/40",
+  }[card.accent];
+
+  return (
+    <section className={`rounded-[24px] border bg-[#020617]/88 p-5 ${accentClass}`}>
+      <div className="flex flex-col gap-3 border-b border-[#1d3558] pb-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="font-mono text-xs font-black uppercase text-cyan-300">Deeper read</p>
+          <h2 className="mt-2 text-3xl font-black text-white">{card.title}</h2>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">{card.description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="min-h-10 rounded-lg border border-cyan-300/30 px-4 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
+        >
+          Close
+        </button>
+      </div>
+      <div className="mt-4 max-h-[58vh] overflow-y-auto pr-2">
+        <MarkdownAnswer text={card.details} />
+      </div>
+    </section>
   );
 }
 
