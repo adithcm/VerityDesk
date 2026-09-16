@@ -152,12 +152,49 @@
     }
     .metric strong { display: block; margin-top: 9px; font-size: 23px; }
     .metric span { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+    .score-hero {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.62fr) minmax(0, 1.38fr);
+      gap: 14px;
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--line);
+      background:
+        radial-gradient(circle at 14% 42%, rgba(188, 255, 93, 0.12), transparent 34%),
+        rgba(97, 232, 255, 0.04);
+    }
+    .score-card {
+      display: grid;
+      grid-template-columns: 132px minmax(0, 1fr);
+      align-items: center;
+      gap: 18px;
+      min-height: 160px;
+      border: 1px solid rgba(97, 232, 255, 0.28);
+      border-radius: 24px;
+      padding: 18px;
+      background:
+        radial-gradient(circle at 28% 50%, rgba(188, 255, 93, 0.15), transparent 36%),
+        linear-gradient(145deg, rgba(97, 232, 255, 0.12), rgba(255, 122, 199, 0.08));
+    }
+    .score-orb {
+      width: 132px;
+      height: 132px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background:
+        radial-gradient(circle, rgba(188, 255, 93, 0.18), transparent 30%),
+        conic-gradient(from 180deg, rgba(97, 232, 255, 0.22), rgba(255, 122, 199, 0.18), rgba(188, 255, 93, 0.24), rgba(97, 232, 255, 0.22));
+      box-shadow: inset 0 0 34px rgba(97, 232, 255, 0.12), 0 0 48px rgba(97, 232, 255, 0.16);
+    }
+    .score-orb strong { display: block; font-size: 38px; color: var(--lime); }
+    .score-copy p { margin-top: 8px; color: var(--soft); line-height: 1.5; }
     .score-panel {
       display: grid;
       gap: 10px;
-      padding: 0 24px 20px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(97, 232, 255, 0.04);
+      padding: 0;
+      background: transparent;
     }
     .score-ranges {
       display: grid;
@@ -325,7 +362,8 @@
 
     @media (max-width: 900px) {
       .topbar, .brief-head { flex-direction: column; align-items: stretch; }
-      .status-strip, .grid-3, .grid-2, .matrix, .signal-layout { grid-template-columns: 1fr; }
+      .score-hero, .status-strip, .grid-3, .grid-2, .matrix, .signal-layout { grid-template-columns: 1fr; }
+      .score-card { grid-template-columns: 1fr; }
       .shell { width: min(100% - 20px, 1520px); }
     }
   </style>
@@ -358,20 +396,34 @@
         </div>
         <button class="solid" data-expand-all="cards">Expand All</button>
       </div>
-      <div class="status-strip">
-        <div class="metric"><span>Brief score</span><strong>72</strong></div>
-        <div class="metric"><span>Market mood</span><strong>Mixed</strong></div>
-        <div class="metric"><span>Geopolitics</span><strong>High</strong></div>
-        <div class="metric"><span>AI momentum</span><strong>Hot</strong></div>
-        <div class="metric"><span>Watchlist</span><strong>6 names</strong></div>
-      </div>
-      <div class="score-panel">
-        <button class="ghost" data-toggle="cards-score">What does the Brief Score mean?</button>
-        <div id="cards-score" class="score-ranges hidden">
-          <div class="range"><strong>0-30 · Quiet</strong><span>Low urgency. Skim the bottom line and move on.</span></div>
-          <div class="range"><strong>31-60 · Normal</strong><span>Useful daily context. Read the cards that match your interests.</span></div>
-          <div class="range"><strong>61-80 · Important</strong><span>High-signal day. Read the full brief and watch trend changes.</span></div>
-          <div class="range"><strong>81-100 · High attention</strong><span>Material change or elevated uncertainty. Review evidence and follow-ups.</span></div>
+      <div class="score-hero">
+        <div class="score-card">
+          <div class="score-orb">
+            <div>
+              <span class="eyebrow">Brief score</span>
+              <strong>72</strong>
+            </div>
+          </div>
+          <div class="score-copy">
+            <p class="eyebrow">Important day</p>
+            <h3>High signal · mixed risk</h3>
+            <p>The day is worth reading closely because geopolitical risk, S&P 500 setup, AI momentum, and your saved watchlist all have meaningful signals.</p>
+            <div class="actions"><button class="ghost" data-toggle="cards-score">Score Ranges</button></div>
+          </div>
+        </div>
+        <div class="score-panel">
+          <div class="status-strip">
+            <div class="metric"><span>Market mood</span><strong>Mixed</strong></div>
+            <div class="metric"><span>Geopolitics</span><strong>High</strong></div>
+            <div class="metric"><span>AI momentum</span><strong>Hot</strong></div>
+            <div class="metric"><span>Watchlist</span><strong>6 names</strong></div>
+          </div>
+          <div id="cards-score" class="score-ranges hidden">
+            <div class="range"><strong>0-30 · Quiet</strong><span>Low urgency. Skim the bottom line and move on.</span></div>
+            <div class="range"><strong>31-60 · Normal</strong><span>Useful daily context. Read the cards that match your interests.</span></div>
+            <div class="range"><strong>61-80 · Important</strong><span>High-signal day. Read the full brief and watch trend changes.</span></div>
+            <div class="range"><strong>81-100 · High attention</strong><span>Material change or elevated uncertainty. Review evidence and follow-ups.</span></div>
+          </div>
         </div>
       </div>
       <div class="content grid-3">
