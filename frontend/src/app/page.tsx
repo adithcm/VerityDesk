@@ -347,6 +347,23 @@ type HomeVisualModule = {
   suggestedPrompt: string;
 };
 
+type DailyBriefCard = {
+  id: string;
+  title: string;
+  description: string;
+  badge: string;
+  accent: "lime" | "cyan" | "pink" | "orange" | "violet";
+  summary: string;
+  details: string;
+};
+
+type DailyBriefScore = {
+  score: number;
+  label: string;
+  tone: string;
+  reason: string;
+};
+
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -2434,6 +2451,200 @@ function latestReportByType(reports: ReportResponse[]) {
   return map;
 }
 
+function calculateDailyBriefScore(report: ReportResponse): DailyBriefScore {
+  const signalLabel = reportMetadataText(report, "signal_label") ?? "";
+  const changeLabel = reportMetadataText(report, "change_label") ?? "";
+  const citationCount = report.citations.length;
+  const confidenceScore = report.confidence === "high" ? 32 : report.confidence === "medium" ? 24 : 12;
+  const sourceScore = Math.min(24, citationCount * 2);
+  const signalScore = signalLabel === "High Signal" ? 22 : signalLabel === "Developing" ? 14 : signalLabel === "Watch Later" ? 8 : 4;
+  const changeScore = /worsening|improving|mixed|strengthening/i.test(changeLabel) ? 12 : 6;
+  const personalizationScore = Math.min(10, (report.tickers.length + report.domains.length) * 2);
+  const score = Math.max(0, Math.min(100, confidenceScore + sourceScore + signalScore + changeScore + personalizationScore));
+
+  if (score <= 30) {
+    return {
+      score,
+      label: "Quiet day",
+      tone: "Low urgency",
+      reason: "The brief has limited signal or thinner source support today. Skim the bottom line and only open cards that match your interests.",
+    };
+  }
+  if (score <= 60) {
+    return {
+      score,
+      label: "Normal day",
+      tone: "Useful context",
+      reason: "The brief has enough current evidence for a normal daily read. Focus on the cards tied to your saved topics and watchlist.",
+    };
+  }
+  if (score <= 80) {
+    return {
+      score,
+      label: "Important day",
+      tone: "High signal - mixed risk",
+      reason: "Multiple current signals are relevant to your topics, watchlist, or macro setup. Read the cards and watch for trend changes.",
+    };
+  }
+  return {
+    score,
+    label: "High attention day",
+    tone: "Material change likely",
+    reason: "The brief is flagging unusually strong source support, high relevance, or meaningful change. Review the deeper reads and citations.",
+  };
+}
+
+function buildDailyBriefCards(report: ReportResponse): DailyBriefCard[] {
+  const text = cleanAnswerText(report.body || report.summary) ?? "";
+  const sections = parseMarkdownSections(text);
+  const fallback = text || "No daily brief text is available yet.";
+  const marketTerms = report.tickers.length ? report.tickers.join(", ") : DEFAULT_DAILY_WATCHLIST;
+
+  return [
+    makeDailyBriefCard({
+      id: "bottom-line",
+      title: "Bottom Line",
+      description: "The fastest read on what matters today and whether the day deserves attention.",
+      badge: "Start here",
+      accent: "lime",
+      sections,
+      fallback,
+      matchers: ["bottom line", "today in 30 seconds", "summary"],
+    }),
+    makeDailyBriefCard({
+      id: "world-news",
+      title: "World News",
+      description: "Major global developments separated from conflict and policy risk.",
+      badge: "Global context",
+      accent: "cyan",
+      sections,
+      fallback,
+      matchers: ["world news", "main world news", "global news", "world"],
+    }),
+    makeDailyBriefCard({
+      id: "geopolitics",
+      title: "Geopolitics",
+      description: "Conflict, sanctions, trade, alliances, energy risk, and international policy pressure.",
+      badge: "Risk map",
+      accent: "orange",
+      sections,
+      fallback,
+      matchers: ["geopolitics", "geopolitical", "geopolitics and u.s. signals"],
+    }),
+    makeDailyBriefCard({
+      id: "us-news",
+      title: "U.S. News",
+      description: "Domestic policy, economy, regulation, legal signals, and major U.S. events.",
+      badge: "U.S. focus",
+      accent: "pink",
+      sections,
+      fallback,
+      matchers: ["u.s. news", "us news", "u.s. signals", "u.s. policy", "united states"],
+    }),
+    makeDailyBriefCard({
+      id: "ai-tech",
+      title: "AI & Major Tech",
+      description: "AI models, chips, cloud, product moves, regulation, adoption, and major technology companies.",
+      badge: "AI radar",
+      accent: "violet",
+      sections,
+      fallback,
+      matchers: ["ai and major tech", "ai & major tech", "ai", "major tech", "technology"],
+    }),
+    makeDailyBriefCard({
+      id: "markets-watchlist",
+      title: "Markets & Watchlist",
+      description: `S&P 500 setup and concise read-throughs for ${marketTerms}.`,
+      badge: "Market setup",
+      accent: "lime",
+      sections,
+      fallback,
+      matchers: ["markets and watchlist", "markets", "watchlist", "s&p 500", "market setup"],
+    }),
+  ];
+}
+
+function makeDailyBriefCard({
+  id,
+  title,
+  description,
+  badge,
+  accent,
+  sections,
+  fallback,
+  matchers,
+}: {
+  id: string;
+  title: string;
+  description: string;
+  badge: string;
+  accent: DailyBriefCard["accent"];
+  sections: Map<string, string>;
+  fallback: string;
+  matchers: string[];
+}): DailyBriefCard {
+  const content = findSectionContent(sections, matchers) || fallback;
+  const summary = truncateMarkdown(content, 420);
+  return {
+    id,
+    title,
+    description,
+    badge,
+    accent,
+    summary,
+    details: content,
+  };
+}
+
+function parseMarkdownSections(text: string) {
+  const sections = new Map<string, string>();
+  const lines = text.split("\n");
+  let currentTitle = "summary";
+  let currentLines: string[] = [];
+
+  function flushSection() {
+    const content = currentLines.join("\n").trim();
+    if (content) {
+      sections.set(currentTitle.toLowerCase(), content);
+    }
+  }
+
+  lines.forEach((line) => {
+    const heading = markdownHeadingText(line);
+    if (heading) {
+      flushSection();
+      currentTitle = heading.replace(/:$/, "").trim();
+      currentLines = [];
+    } else {
+      currentLines.push(line);
+    }
+  });
+  flushSection();
+  return sections;
+}
+
+function findSectionContent(sections: Map<string, string>, matchers: string[]) {
+  for (const [title, content] of Array.from(sections.entries())) {
+    if (matchers.some((matcher) => title.includes(matcher.toLowerCase()))) {
+      return content;
+    }
+  }
+  return null;
+}
+
+function truncateMarkdown(text: string, maxLength: number) {
+  const compact = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .join("\n");
+  if (compact.length <= maxLength) {
+    return compact;
+  }
+  return `${compact.slice(0, maxLength).trim()}...`;
+}
+
 function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
   const promptContext = cardPromptContext(profile);
   const selectedTopics = profile.priorityTopics.length ? profile.priorityTopics : dailyBriefingDefaultTopics;
@@ -2447,7 +2658,7 @@ function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
     `Default major company focus if the user has not overridden it: ${companies}.`,
     "Prioritize main world news, geopolitical risk globally and in the U.S., major AI news, major tech company developments, S&P 500 setup, watchlist stock trends, rates/macro, housing, and the clearest risks.",
     "If a setting is blank, use the selected/default topics to create a useful general brief instead of asking the user for more information.",
-    "Use this structure: ## Bottom Line, ## Major Trends, ## Markets And Watchlist, ## AI And Major Tech, ## Geopolitics And U.S. Signals, ## What To Watch, ## Data Gaps.",
+    "Use this exact structure: ## Bottom Line, ## World News, ## Geopolitics, ## U.S. News, ## AI And Major Tech, ## Markets And Watchlist, ## What To Watch, ## Data Gaps.",
     "Use bullets under each section. Bold the key terms, tickers, companies, places, and numbers that matter.",
     "For each major trend, say whether it is strengthening, weakening, mixed, or unclear.",
     "Use live web research first, then use direct APIs and stored data to verify or add context.",
@@ -3019,6 +3230,8 @@ function DailyBriefingView({
   const savedDailyBrief = reportListData?.reports.find((report) => report.report_type === "daily_briefing") ?? null;
   const activeBrief = dailyBriefingReport ?? savedDailyBrief;
   const briefText = cleanAnswerText(activeBrief?.body ?? activeBrief?.summary) ?? null;
+  const briefCards = activeBrief ? buildDailyBriefCards(activeBrief) : [];
+  const briefScore = activeBrief ? calculateDailyBriefScore(activeBrief) : null;
 
   return (
     <div className="grid gap-5 text-slate-100">
@@ -3068,10 +3281,23 @@ function DailyBriefingView({
         )}
         {activeBrief && (
           <div className="space-y-5">
-            <MarkdownAnswer text={briefText} />
+            <DailyBriefScorePanel report={activeBrief} score={briefScore} />
+            <div className="grid gap-4 xl:grid-cols-3">
+              {briefCards.map((card) => (
+                <DailyBriefInsightCard key={card.id} card={card} />
+              ))}
+            </div>
             <p className="rounded-lg border border-[#1d3558] bg-[#020617]/70 p-3 text-xs leading-5 text-slate-400">
               {FINANCIAL_DISCLAIMER}
             </p>
+            <details className="rounded-[18px] border border-[#1d3558] bg-[#020617]/72 p-4">
+              <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">
+                View full markdown brief
+              </summary>
+              <div className="mt-4 rounded-xl border border-cyan-300/15 bg-[#020617]/70 p-4">
+                <MarkdownAnswer text={briefText} />
+              </div>
+            </details>
             <details className="rounded-[18px] border border-[#1d3558] bg-[#020617]/72 p-4">
               <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">
                 View citations
@@ -3090,6 +3316,98 @@ function DailyBriefingView({
         <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
       </details>
     </div>
+  );
+}
+
+function DailyBriefScorePanel({ report, score }: { report: ReportResponse; score: DailyBriefScore | null }) {
+  const signalLabel = reportMetadataText(report, "signal_label") ?? "Latest signal";
+  const changeLabel = reportMetadataText(report, "change_label") ?? "Change: latest";
+  const citationCount = report.citations.length;
+
+  return (
+    <section className="grid gap-4 rounded-[24px] border border-cyan-300/20 bg-[radial-gradient(circle_at_14%_42%,rgba(188,255,93,0.12),transparent_20rem),#020617]/74 p-4 xl:grid-cols-[minmax(300px,0.72fr)_minmax(0,1.28fr)]">
+      <div className="grid gap-4 rounded-[22px] border border-cyan-300/30 bg-[linear-gradient(145deg,rgba(34,211,238,0.12),rgba(244,114,182,0.08))] p-4 sm:grid-cols-[132px_minmax(0,1fr)] sm:items-center">
+        <div className="grid h-32 w-32 place-items-center rounded-full border border-white/20 bg-[conic-gradient(from_180deg,rgba(34,211,238,0.24),rgba(244,114,182,0.18),rgba(190,242,100,0.26),rgba(34,211,238,0.24))] text-center shadow-[0_0_48px_rgba(34,211,238,0.16)]">
+          <div className="grid h-24 w-24 place-items-center rounded-full bg-[#020617]/88">
+            <div>
+              <p className="font-mono text-[10px] font-black uppercase text-cyan-200">Brief score</p>
+              <p className="text-4xl font-black text-lime-300">{score?.score ?? "--"}</p>
+            </div>
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs font-black uppercase text-lime-300">{score?.label ?? "Waiting"}</p>
+          <h2 className="mt-2 text-2xl font-black text-white">{score?.tone ?? "No brief generated yet"}</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-300">{score?.reason ?? "Generate a daily brief to calculate the signal score."}</p>
+          <details className="mt-4">
+            <summary className="cursor-pointer text-sm font-black text-cyan-200">Score Ranges</summary>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <ScoreRangeCard range="0-30" label="Quiet" detail="Low urgency. Skim the bottom line and move on." />
+              <ScoreRangeCard range="31-60" label="Normal" detail="Useful daily context. Read the cards that match your interests." />
+              <ScoreRangeCard range="61-80" label="Important" detail="High-signal day. Read the full brief and watch trend changes." />
+              <ScoreRangeCard range="81-100" label="High attention" detail="Material change or elevated uncertainty. Review evidence and follow-ups." />
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <ConsoleMetric label="Market mood" value={changeLabel.replace(/^Change:\s*/i, "")} />
+        <ConsoleMetric label="Signal" value={signalLabel} />
+        <ConsoleMetric label="Sources" value={String(citationCount)} />
+        <ConsoleMetric label="Retrieved" value={formatDateTime(report.as_of ?? report.created_at)} />
+      </div>
+    </section>
+  );
+}
+
+function ScoreRangeCard({ range, label, detail }: { range: string; label: string; detail: string }) {
+  return (
+    <div className="rounded-xl border border-cyan-300/15 bg-[#020617]/72 p-3">
+      <p className="text-sm font-black text-white">
+        {range} - {label}
+      </p>
+      <p className="mt-1 text-xs leading-5 text-slate-400">{detail}</p>
+    </div>
+  );
+}
+
+function DailyBriefInsightCard({ card }: { card: DailyBriefCard }) {
+  const accentClass = {
+    lime: "border-lime-300/55 text-lime-200 shadow-[0_0_28px_rgba(190,242,100,0.08)]",
+    cyan: "border-cyan-300/55 text-cyan-200 shadow-[0_0_28px_rgba(34,211,238,0.08)]",
+    pink: "border-pink-300/55 text-pink-200 shadow-[0_0_28px_rgba(244,114,182,0.08)]",
+    orange: "border-orange-300/55 text-orange-200 shadow-[0_0_28px_rgba(251,146,60,0.08)]",
+    violet: "border-violet-300/55 text-violet-200 shadow-[0_0_28px_rgba(167,139,250,0.08)]",
+  }[card.accent];
+  const dotClass = {
+    lime: "bg-lime-300",
+    cyan: "bg-cyan-300",
+    pink: "bg-pink-300",
+    orange: "bg-orange-300",
+    violet: "bg-violet-300",
+  }[card.accent];
+
+  return (
+    <article className={`rounded-[20px] border bg-[#020617]/72 p-4 ${accentClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-mono text-[11px] font-black uppercase text-slate-500">{card.badge}</p>
+          <h3 className="mt-2 text-xl font-black text-white">{card.title}</h3>
+        </div>
+        <span className={`h-3 w-3 shrink-0 rounded-full ${dotClass}`} />
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-400">{card.description}</p>
+      <div className="mt-4 rounded-xl border border-cyan-300/15 bg-[#07111f]/70 p-3">
+        <MarkdownAnswer text={card.summary} compact />
+      </div>
+      <details className="mt-4 rounded-xl border border-[#1d3558] bg-[#020617]/70 p-3">
+        <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">Open deeper read</summary>
+        <div className="mt-3">
+          <MarkdownAnswer text={card.details} compact />
+        </div>
+      </details>
+    </article>
   );
 }
 
