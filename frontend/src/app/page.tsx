@@ -1218,7 +1218,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="grid w-full gap-4 p-3 sm:p-4 lg:grid-cols-[82px_minmax(0,1fr)] lg:gap-5 lg:p-5 xl:p-6">
+      <div className="mx-auto grid w-full max-w-[1720px] gap-4 p-3 sm:p-4 lg:grid-cols-[148px_minmax(0,1fr)] lg:gap-5 lg:p-5 xl:p-6">
         <aside className="flex gap-2 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.32)] lg:min-h-[calc(100vh-118px)] lg:flex-col">
           {shellNavigation.map((item) => (
             <button
@@ -1226,13 +1226,14 @@ export default function Home() {
               type="button"
               title={item.title}
               onClick={() => setActiveView(item.view)}
-              className={`h-[54px] w-[54px] rounded-[10px] border bg-[#020617] font-mono text-xs font-black transition ${
+              className={`min-h-[58px] rounded-[10px] border bg-[#020617] px-3 text-left font-mono text-xs font-black transition ${
                 activeView === item.view
                   ? "border-cyan-300 text-cyan-200 shadow-[0_0_28px_rgba(34,211,238,0.16)]"
                   : "border-[#1d3558] text-slate-400 hover:border-cyan-300/50 hover:text-cyan-200"
               }`}
             >
-              {item.label}
+              <span className="block text-[0.7rem] uppercase text-slate-600">{item.label}</span>
+              <span className="mt-1 block text-sm text-inherit">{item.title}</span>
             </button>
           ))}
         </aside>
@@ -1247,7 +1248,7 @@ export default function Home() {
             </span>
           </div>
 
-          <div className="p-4 md:p-5 xl:p-6">
+          <div className="mx-auto w-full max-w-[1440px] p-4 md:p-5 xl:p-6">
             {activeView === "Home" && (
               <OptionMHomeView
                 healthData={healthData}
@@ -4292,6 +4293,7 @@ function SettingsView({
 }) {
   const schedule = scheduleData ?? defaultScheduleConfig();
   const [profileDraft, setProfileDraft] = useState<PersonalizationProfile>(personalizationProfile);
+  const [settingsTab, setSettingsTab] = useState<"profile" | "automation" | "intelligence" | "sources">("profile");
   const healthBySourceKey = useMemo(
     () => new Map(healthData?.sources.map((source) => [source.source_key, source]) ?? []),
     [healthData],
@@ -4357,6 +4359,29 @@ function SettingsView({
         </div>
       </section>
 
+      <div className="grid gap-2 rounded-xl border border-cyan-300/20 bg-[#020617]/70 p-2 md:grid-cols-4">
+        {[
+          ["profile", "Profile"],
+          ["automation", "Automation"],
+          ["intelligence", "Intelligence"],
+          ["sources", "Sources"],
+        ].map(([tab, label]) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setSettingsTab(tab as typeof settingsTab)}
+            className={`min-h-11 rounded-lg px-4 text-sm font-black transition ${
+              settingsTab === tab
+                ? "bg-cyan-300 text-[#061320]"
+                : "border border-[#1d3558] text-slate-300 hover:border-cyan-300/50 hover:text-cyan-200"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {settingsTab === "profile" && (
       <form onSubmit={submitProfile} className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
@@ -4525,7 +4550,9 @@ function SettingsView({
           <p className="mt-2 text-xs text-slate-500">Saved At {formatDateTime(profileSavedAt)}</p>
         </div>
       </form>
+      )}
 
+      {settingsTab === "automation" && (
       <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
@@ -4585,7 +4612,10 @@ function SettingsView({
         </div>
         {scheduleSaving && <p className="mt-4 text-sm text-slate-400">Saving schedule.</p>}
       </section>
+      )}
 
+      {settingsTab === "intelligence" && (
+      <>
       <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
@@ -4653,7 +4683,11 @@ function SettingsView({
           )}
         </div>
       </section>
+      </>
+      )}
 
+      {settingsTab === "sources" && (
+      <>
       <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
@@ -4717,6 +4751,8 @@ function SettingsView({
           API keys stay in the backend environment and are not exposed in the browser. If an answer falls back or a source fails, check backend logs and source health above.
         </p>
       </section>
+      </>
+      )}
     </div>
   );
 }
