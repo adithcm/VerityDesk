@@ -2455,52 +2455,76 @@ function calculateDailyBriefScore(report: ReportResponse): DailyBriefScore {
   const signalLabel = reportMetadataText(report, "signal_label") ?? "";
   const changeLabel = reportMetadataText(report, "change_label") ?? "";
   const citationCount = report.citations.length;
-  const confidenceScore = report.confidence === "high" ? 32 : report.confidence === "medium" ? 24 : 12;
-  const sourceScore = Math.min(24, citationCount * 2);
-  const signalScore = signalLabel === "High Signal" ? 22 : signalLabel === "Developing" ? 14 : signalLabel === "Watch Later" ? 8 : 4;
-  const changeScore = /worsening|improving|mixed|strengthening/i.test(changeLabel) ? 12 : 6;
-  const personalizationScore = Math.min(10, (report.tickers.length + report.domains.length) * 2);
-  const rawScore = confidenceScore + sourceScore + signalScore + changeScore + personalizationScore;
+  const bodyText = `${report.title} ${report.summary ?? ""} ${report.body}`.toLowerCase();
+  const confidenceScore = report.confidence === "high" ? 16 : report.confidence === "medium" ? 11 : 6;
+  const sourceScore = Math.min(18, Math.round(citationCount * 1.2));
+  const signalScore = signalLabel === "High Signal" ? 16 : signalLabel === "Developing" ? 10 : signalLabel === "Watch Later" ? 5 : 2;
+  const changeScore = /worsening|improving|strengthening/i.test(changeLabel) ? 8 : /mixed/i.test(changeLabel) ? 5 : 3;
+  const personalizationScore = Math.min(8, (report.tickers.length + report.domains.length) * 1.5);
+  const severeEventScore = severeDailyBriefSignal(bodyText);
+  const rawScore = Math.round(confidenceScore + sourceScore + signalScore + changeScore + personalizationScore + severeEventScore);
   const score = Math.max(0, Math.min(100, rawScore));
+  const category = dailyBriefScoreCategory(score);
   const scoreReason = [
     `${titleCase(report.confidence)} confidence`,
     `${citationCount} source${citationCount === 1 ? "" : "s"}`,
     signalLabel || "latest signal",
     changeLabel || "latest change state",
     report.tickers.length || report.domains.length ? "matches saved topics/watchlist" : "general relevance",
+    severeEventScore ? "contains severe/high-impact event language" : "no world-changing severity signal",
     rawScore > 100 ? "score capped at 100" : null,
   ].filter(Boolean).join(" · ");
 
-  if (score <= 30) {
-    return {
-      score,
-      label: "Quiet day",
-      tone: "Low urgency",
-      reason: `The brief has limited signal or thinner source support today. Why: ${scoreReason}.`,
-    };
-  }
-  if (score <= 60) {
-    return {
-      score,
-      label: "Normal day",
-      tone: "Useful context",
-      reason: `The brief has enough current evidence for a normal daily read. Why: ${scoreReason}.`,
-    };
-  }
-  if (score <= 80) {
-    return {
-      score,
-      label: "Important day",
-      tone: "High signal - mixed risk",
-      reason: `Multiple current signals are relevant to your topics, watchlist, or macro setup. Why: ${scoreReason}.`,
-    };
-  }
   return {
     score,
-    label: "High attention day",
-    tone: "Material change likely",
-    reason: `The brief is flagging unusually strong source support, high relevance, or meaningful change. Why: ${scoreReason}.`,
+    label: category.label,
+    tone: category.tone,
+    reason: `${category.detail} Why: ${scoreReason}.`,
   };
+}
+
+function severeDailyBriefSignal(text: string) {
+  const severeTerms = [
+    "invasion",
+    "missile strike",
+    "war declared",
+    "major escalation",
+    "financial crisis",
+    "market crash",
+    "bank failure",
+    "emergency rate cut",
+    "emergency meeting",
+    "default",
+    "sovereign crisis",
+    "major cyberattack",
+    "pandemic",
+    "nuclear",
+    "constitutional crisis",
+  ];
+  const moderateTerms = ["strike", "sanction", "tariff", "shutdown", "rate shock", "oil shock", "ceasefire", "antitrust"];
+  if (severeTerms.some((term) => text.includes(term))) {
+    return 28;
+  }
+  if (moderateTerms.some((term) => text.includes(term))) {
+    return 12;
+  }
+  return 0;
+}
+
+function dailyBriefScoreCategory(score: number) {
+  const categories = [
+    { max: 9, label: "Almost no signal", tone: "Background noise", detail: "Very little in the brief appears urgent or well-supported." },
+    { max: 19, label: "Very quiet", tone: "Low attention", detail: "A calm day with limited personally relevant signal." },
+    { max: 29, label: "Quiet", tone: "Skim only", detail: "Useful context exists, but nothing demands much attention." },
+    { max: 39, label: "Light activity", tone: "Normal scan", detail: "Some concrete updates are present, but impact appears limited." },
+    { max: 49, label: "Normal day", tone: "Worth reading", detail: "A standard daily brief with several relevant items." },
+    { max: 59, label: "Active day", tone: "Read the cards", detail: "Multiple specific items are relevant enough to review." },
+    { max: 69, label: "Important", tone: "Watch trend changes", detail: "The brief has strong source support or meaningful change." },
+    { max: 79, label: "High signal", tone: "Pay attention", detail: "Several developments may affect your saved topics or broader market context." },
+    { max: 89, label: "Very high signal", tone: "Review deeply", detail: "Major developments or elevated uncertainty deserve a deeper read." },
+    { max: 100, label: "World-changing", tone: "Exceptional event", detail: "Reserved for severe global, market, policy, or systemic events with strong evidence." },
+  ];
+  return categories.find((category) => score <= category.max) ?? categories[categories.length - 1];
 }
 
 function buildDailyBriefCards(report: ReportResponse): DailyBriefCard[] {
@@ -3396,10 +3420,16 @@ function DailyBriefScorePanel({ report, score }: { report: ReportResponse; score
           <details className="mt-4">
             <summary className="cursor-pointer text-sm font-black text-cyan-200">Score Ranges</summary>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <ScoreRangeCard range="0-30" label="Quiet" detail="Low urgency. Skim the bottom line and move on." />
-              <ScoreRangeCard range="31-60" label="Normal" detail="Useful daily context. Read the cards that match your interests." />
-              <ScoreRangeCard range="61-80" label="Important" detail="High-signal day. Read the full brief and watch trend changes." />
-              <ScoreRangeCard range="81-100" label="High attention" detail="Material change or elevated uncertainty. Review evidence and follow-ups." />
+              <ScoreRangeCard range="0-9" label="Almost no signal" detail="Very little appears urgent or well-supported." />
+              <ScoreRangeCard range="10-19" label="Very quiet" detail="Low attention day with limited personal relevance." />
+              <ScoreRangeCard range="20-29" label="Quiet" detail="Skim the bottom line and only open relevant cards." />
+              <ScoreRangeCard range="30-39" label="Light activity" detail="Some concrete updates, but limited impact." />
+              <ScoreRangeCard range="40-49" label="Normal day" detail="Standard daily read with several relevant items." />
+              <ScoreRangeCard range="50-59" label="Active day" detail="Multiple items are worth reviewing." />
+              <ScoreRangeCard range="60-69" label="Important" detail="Strong support or meaningful change." />
+              <ScoreRangeCard range="70-79" label="High signal" detail="Developments may affect saved topics or market context." />
+              <ScoreRangeCard range="80-89" label="Very high signal" detail="Major developments or elevated uncertainty." />
+              <ScoreRangeCard range="90-100" label="World-changing" detail="Reserved for severe global, market, policy, or systemic events." />
             </div>
           </details>
         </div>
