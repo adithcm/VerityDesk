@@ -115,18 +115,26 @@ def test_preferences_endpoint_round_trip() -> None:
     client = TestClient(app)
 
     try:
+        auth_response = client.post(
+            "/api/v1/auth/register",
+            json={"email": "test@example.com", "password": "password123", "display_name": "Test User"},
+        )
+        token = auth_response.json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
         save_response = client.put(
             "/api/v1/preferences",
+            headers=headers,
             json={
                 "watchlist_tickers": ["spy"],
                 "preferred_regions": ["Arizona"],
                 "enabled_sources": ["newsapi"],
             },
         )
-        read_response = client.get("/api/v1/preferences")
+        read_response = client.get("/api/v1/preferences", headers=headers)
     finally:
         app.dependency_overrides.clear()
 
+    assert auth_response.status_code == 200
     assert save_response.status_code == 200
     assert save_response.json()["watchlist_tickers"] == ["SPY"]
     assert read_response.status_code == 200
@@ -141,4 +149,3 @@ def test_read_user_preferences_creates_defaults() -> None:
     assert response.watchlist_tickers == []
     assert response.preferred_regions == []
     assert response.enabled_sources == []
-

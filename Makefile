@@ -1,4 +1,4 @@
-.PHONY: node-install app-dev backend-dev backend-test backend-lint db-upgrade db-downgrade rss-ingest official-api-ingest frontend-dev frontend-build frontend-typecheck compose-up compose-down
+.PHONY: node-install app-dev backend-dev backend-test backend-lint db-upgrade db-downgrade rss-ingest official-api-ingest frontend-dev frontend-build frontend-typecheck compose-up compose-down postgres-up postgres-shell postgres-tables
 
 LOCAL_NODE_BIN := $(CURDIR)/.runtime/node-v22.23.2-darwin-arm64/bin
 
@@ -44,3 +44,12 @@ compose-up:
 
 compose-down:
 	docker compose down
+
+postgres-up:
+	docker compose up -d postgres
+
+postgres-shell:
+	docker compose exec postgres psql -U veritydesk -d veritydesk
+
+postgres-tables:
+	docker compose exec postgres psql -U veritydesk -d veritydesk -c "\dt"

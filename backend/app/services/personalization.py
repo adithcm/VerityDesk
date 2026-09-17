@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import UserSettings
+from app.db.models import User, UserSettings
 from app.schemas.agent import AgentQueryRequest
 from app.schemas.preferences import UserPreferencesResponse, UserPreferencesUpdate
 
@@ -34,8 +34,29 @@ SPECIFIC_COMPANY_TERMS = {
 }
 
 
-def get_or_create_preferences(session: Session) -> UserSettings:
-    settings = session.scalar(select(UserSettings).order_by(UserSettings.id).limit(1))
+def get_or_create_preferences(session: Session, user: User | None = None) -> UserSettings:
+    if user is not None:
+        settings = session.scalar(select(UserSettings).where(UserSettings.user_id == user.id))
+        if settings is not None:
+            return settings
+        settings = UserSettings(
+            user_id=user.id,
+            watchlist_tickers=[],
+            preferred_regions=[],
+            enabled_sources=[],
+            profile_metadata={},
+            daily_briefing_time="08:00",
+            daily_schedule_enabled=False,
+            daily_schedule_timezone="local",
+            daily_schedule_mode="all",
+            daily_report_enabled=False,
+        )
+        session.add(settings)
+        session.commit()
+        session.refresh(settings)
+        return settings
+
+    settings = session.scalar(select(UserSettings).where(UserSettings.user_id.is_(None)).order_by(UserSettings.id).limit(1))
     if settings is not None:
         return settings
 
@@ -43,6 +64,7 @@ def get_or_create_preferences(session: Session) -> UserSettings:
         watchlist_tickers=[],
         preferred_regions=[],
         enabled_sources=[],
+        profile_metadata={},
         daily_briefing_time="08:00",
         daily_schedule_enabled=False,
         daily_schedule_timezone="local",
@@ -55,15 +77,16 @@ def get_or_create_preferences(session: Session) -> UserSettings:
     return settings
 
 
-def read_user_preferences(session: Session) -> UserPreferencesResponse:
-    return preferences_to_response(get_or_create_preferences(session))
+def read_user_preferences(session: Session, user: User | None = None) -> UserPreferencesResponse:
+    return preferences_to_response(get_or_create_preferences(session, user))
 
 
 def update_user_preferences(
     session: Session,
     update: UserPreferencesUpdate,
+    user: User | None = None,
 ) -> UserPreferencesResponse:
-    settings = get_or_create_preferences(session)
+    settings = get_or_create_preferences(session, user)
     if update.watchlist_tickers is not None:
         settings.watchlist_tickers = normalize_tickers(update.watchlist_tickers)
     if update.preferred_regions is not None:
@@ -79,8 +102,9 @@ def update_user_preferences(
 def personalize_agent_request(
     request: AgentQueryRequest,
     session: Session,
+    user: User | None = None,
 ) -> AgentQueryRequest:
-    settings = get_or_create_preferences(session)
+    settings = get_or_create_preferences(session, user)
     updates: dict[str, list[str]] = {}
     text = request.user_query.lower()
 

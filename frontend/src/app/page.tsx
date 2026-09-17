@@ -321,6 +321,38 @@ type PersonalizationProfile = {
   briefingTime: string;
 };
 
+type AuthProfileResponse = {
+  profile_name: string;
+  personal_note: string;
+  location: string;
+  housing_markets: string;
+  watchlist: string;
+  companies: string;
+  priority_topics: string[];
+  sectors: string;
+  housing_interests: string[];
+  macro_interests: string[];
+  risk_preference: PersonalizationProfile["riskPreference"];
+  investing_style: PersonalizationProfile["investingStyle"];
+  answer_format: PersonalizationProfile["answerFormat"];
+  ignored_topics: string;
+  briefing_style: PersonalizationProfile["briefingStyle"];
+  briefing_time: string;
+};
+
+type AuthUser = {
+  id: number;
+  email: string;
+  display_name: string;
+  setup_complete: boolean;
+  profile: AuthProfileResponse;
+};
+
+type AuthResponse = {
+  token: string;
+  user: AuthUser;
+};
+
 type InferredAgentContext = {
   intent: AgentIntent;
   domain: string;
@@ -409,6 +441,7 @@ const SETUP_COMPLETE_STORAGE_KEY = "investoragent.setupComplete.v1";
 const LOCAL_SESSION_STORAGE_KEY = "investoragent.localSession.v1";
 const CHAT_SESSIONS_STORAGE_KEY = "investoragent.chatSessions.v1";
 const ACTIVE_CHAT_SESSION_STORAGE_KEY = "investoragent.activeChatSession.v1";
+const AUTH_TOKEN_STORAGE_KEY = "veritydesk.authToken.v1";
 const DEFAULT_DAILY_WATCHLIST = "SPY, AAPL, MSFT, NVDA, AMZN, GOOGL";
 const DEFAULT_DAILY_COMPANIES = "Apple, Microsoft, Nvidia, Amazon, Alphabet";
 const LEGACY_DEFAULT_WATCHLIST = "SPY, QQQ, TLT";
@@ -530,10 +563,102 @@ export default function Home() {
   const [personalizationProfile, setPersonalizationProfile] = useState<PersonalizationProfile>(defaultPersonalizationProfile());
   const [profileSavedAt, setProfileSavedAt] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
-  const [localSessionReady, setLocalSessionReady] = useState(false);
+  const [authLoaded, setAuthLoaded] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [entryLoaded, setEntryLoaded] = useState(false);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(null);
+
+  function authorizedHeaders(extra?: HeadersInit): HeadersInit {
+    return {
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...(extra ?? {}),
+    };
+  }
+
+  async function restoreAuthSession() {
+    const token = typeof window !== "undefined" ? window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) : null;
+    if (!token) {
+      setAuthLoaded(true);
+      setEntryLoaded(true);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Saved session is no longer valid");
+      }
+      const user = (await response.json()) as AuthUser;
+      setAuthToken(token);
+      setAuthUser(user);
+      setPersonalizationProfile(profileFromAuthUser(user));
+      setAuthError(null);
+    } catch {
+      window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+      setAuthToken(null);
+      setAuthUser(null);
+    } finally {
+      setAuthLoaded(true);
+      setEntryLoaded(true);
+    }
+  }
+
+  async function submitAuth(mode: "login" | "register", payload: { email: string; password: string; displayName?: string }) {
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/${mode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: payload.email,
+          password: payload.password,
+          display_name: payload.displayName || payload.email.split("@")[0],
+        }),
+      });
+      const data = (await response.json()) as AuthResponse | { detail?: string };
+      if (!response.ok) {
+        throw new Error("detail" in data && data.detail ? data.detail : "Could not authenticate");
+      }
+      const authData = data as AuthResponse;
+      window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authData.token);
+      window.localStorage.setItem(LOCAL_SESSION_STORAGE_KEY, "ready");
+      setAuthToken(authData.token);
+      setAuthUser(authData.user);
+      setPersonalizationProfile(profileFromAuthUser(authData.user));
+      setSetupOpen(!authData.user.setup_complete);
+      setEntryLoaded(true);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Could not authenticate");
+    } finally {
+      setAuthLoading(false);
+      setAuthLoaded(true);
+    }
+  }
+
+  async function logout() {
+    if (authToken) {
+      try {
+        await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+      } catch {
+        // Local logout should still work even if the backend is unavailable.
+      }
+    }
+    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    setAuthToken(null);
+    setAuthUser(null);
+    setEntryLoaded(true);
+  }
 
   async function loadSources() {
     setSourcesLoading(true);
@@ -580,6 +705,13 @@ export default function Home() {
   }
 
   useEffect(() => {
+    void restoreAuthSession();
+  }, []);
+
+  useEffect(() => {
+    if (!authLoaded || !authToken) {
+      return;
+    }
     loadSources();
     loadIngestionStatus();
     loadAgentRuns();
@@ -587,18 +719,22 @@ export default function Home() {
     loadSuggestions();
     loadVisualModules();
     loadWatchItems();
-  }, []);
+  }, [authLoaded, authToken]);
 
   useEffect(() => {
-    const savedProfile = loadPersonalizationProfile();
-    const setupComplete = isSetupComplete(savedProfile);
+    if (!authLoaded) {
+      return;
+    }
+    const savedProfile = authUser ? profileFromAuthUser(authUser) : loadPersonalizationProfile();
+    const setupComplete = authUser?.setup_complete ?? isSetupComplete(savedProfile);
     const savedChatSessions = loadChatSessions();
     const savedActiveChatId = loadActiveChatSessionId(savedChatSessions);
     setPersonalizationProfile(savedProfile);
     localStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(savedProfile));
-    void syncBackendPreferences(savedProfile);
-    setLocalSessionReady(hasLocalSession());
-    setSetupOpen(hasLocalSession() && !setupComplete);
+    if (authToken) {
+      void syncBackendPreferences(savedProfile, authToken);
+    }
+    setSetupOpen(Boolean(authToken) && !setupComplete);
     setChatSessions(savedChatSessions);
     setActiveChatSessionId(savedActiveChatId);
     setAgentTicker(savedProfile.watchlist);
@@ -609,13 +745,19 @@ export default function Home() {
       setCompanyTicker(firstListItem(savedProfile.watchlist).toUpperCase());
     }
     setEntryLoaded(true);
-  }, []);
+  }, [authLoaded, authToken, authUser]);
 
   function savePersonalizationProfile(nextProfile: PersonalizationProfile) {
     setPersonalizationProfile(nextProfile);
     localStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(nextProfile));
     localStorage.setItem(SETUP_COMPLETE_STORAGE_KEY, "true");
-    void syncBackendPreferences(nextProfile);
+    if (authToken) {
+      void syncBackendProfile(nextProfile, authToken).then((user) => {
+        if (user) {
+          setAuthUser(user);
+        }
+      });
+    }
     setProfileSavedAt(new Date().toISOString());
     if (nextProfile.watchlist.trim()) {
       setAgentTicker(nextProfile.watchlist);
@@ -624,13 +766,6 @@ export default function Home() {
     if (nextProfile.companies.trim()) {
       setCompanyName(firstListItem(nextProfile.companies));
     }
-  }
-
-  function startLocalSession() {
-    localStorage.setItem(LOCAL_SESSION_STORAGE_KEY, new Date().toISOString());
-    setLocalSessionReady(true);
-    setSetupOpen(!isSetupComplete(personalizationProfile));
-    setActiveView("Home");
   }
 
   function persistChatSessions(nextSessions: ChatSession[], nextActiveId: string | null = activeChatSessionId) {
@@ -1195,7 +1330,7 @@ export default function Home() {
     setActiveView("Home");
   }
 
-  if (!entryLoaded) {
+  if (!entryLoaded || !authLoaded) {
     return (
       <main className="min-h-screen bg-[#020617] text-[#f8fafc]">
         <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_72%_18%,rgba(34,211,238,0.18),transparent_30rem),radial-gradient(circle_at_18%_78%,rgba(163,230,53,0.12),transparent_30rem),#020617]" />
@@ -1203,17 +1338,14 @@ export default function Home() {
     );
   }
 
-  if (!localSessionReady) {
+  if (!authToken || !authUser) {
     return (
       <LoginEntryFlow
-        profile={personalizationProfile}
         sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
         scheduleData={scheduleData}
-        onContinue={startLocalSession}
-        onSetup={() => {
-          startLocalSession();
-          setSetupOpen(true);
-        }}
+        loading={authLoading}
+        error={authError}
+        onSubmit={submitAuth}
       />
     );
   }
@@ -1233,6 +1365,13 @@ export default function Home() {
           }}
           onSkip={() => {
             localStorage.setItem(SETUP_COMPLETE_STORAGE_KEY, "true");
+            if (authToken) {
+              void syncBackendProfile(personalizationProfile, authToken).then((user) => {
+                if (user) {
+                  setAuthUser(user);
+                }
+              });
+            }
             setSetupOpen(false);
           }}
         />
@@ -1249,6 +1388,9 @@ export default function Home() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <span className="hidden rounded-lg border border-[#1d3558] px-3 py-2 text-xs font-bold text-slate-400 sm:inline">
+            {authUser.display_name}
+          </span>
           <button
             type="button"
             onClick={() => setActiveView("Settings")}
@@ -1263,6 +1405,13 @@ export default function Home() {
             className="min-h-10 rounded-lg bg-lime-300 px-4 text-sm font-black text-[#102000] disabled:cursor-not-allowed disabled:bg-slate-500"
           >
             {runLoading ? "Refreshing" : "Refresh Sources"}
+          </button>
+          <button
+            type="button"
+            onClick={logout}
+            className="min-h-10 rounded-lg border border-[#1d3558] px-3 text-sm font-black text-slate-300 transition hover:border-pink-300/50 hover:text-pink-200"
+          >
+            Logout
           </button>
         </div>
       </header>
@@ -1457,19 +1606,27 @@ export default function Home() {
 }
 
 function LoginEntryFlow({
-  profile,
   sourceStatusText,
   scheduleData,
-  onContinue,
-  onSetup,
+  loading,
+  error,
+  onSubmit,
 }: {
-  profile: PersonalizationProfile;
   sourceStatusText: string;
   scheduleData: DailyScheduleConfig | null;
-  onContinue: () => void;
-  onSetup: () => void;
+  loading: boolean;
+  error: string | null;
+  onSubmit: (mode: "login" | "register", payload: { email: string; password: string; displayName?: string }) => void;
 }) {
-  const hasProfile = Boolean(profile.profileName || profile.location || profile.personalNote);
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSubmit(mode, { email, password, displayName });
+  }
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#020617] px-4 py-6 text-[#f8fafc] md:px-8">
@@ -1489,47 +1646,82 @@ function LoginEntryFlow({
           <div className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-3">
             <LoginSignalCard label="Sources" value={sourceStatusText} />
             <LoginSignalCard label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
-            <LoginSignalCard label="Profile" value={hasProfile ? "Ready" : "Setup needed"} />
+            <LoginSignalCard label="Account" value="Required" />
           </div>
         </div>
 
         <div className="rounded-[24px] border border-cyan-300/25 bg-[#07111f]/92 p-5 shadow-[0_30px_110px_rgba(0,0,0,0.45)] backdrop-blur">
-          <div className="rounded-[18px] border border-[#1d3558] bg-[#020617]/82 p-5">
-            <p className="font-mono text-xs font-black uppercase text-lime-300">Secure local entry</p>
-            <h2 className="mt-3 text-3xl font-black text-white">
-              {hasProfile ? `Welcome back${profile.profileName ? `, ${profile.profileName}` : ""}.` : "Set up your command center."}
-            </h2>
+          <form onSubmit={submit} className="rounded-[18px] border border-[#1d3558] bg-[#020617]/82 p-5">
+            <p className="font-mono text-xs font-black uppercase text-lime-300">Account required</p>
+            <h2 className="mt-3 text-3xl font-black text-white">{mode === "login" ? "Log in to VerityDesk." : "Create your command center."}</h2>
             <p className="mt-3 text-sm leading-6 text-slate-400">
-              This desktop build stores your profile on this Mac. Cloud login, database-backed profiles, and sync can plug into this same entry point during deployment.
+              Your profile, settings, and personalization are stored in the backend database so each user can have their own workspace.
             </p>
 
-            <div className="mt-5 grid gap-3 rounded-xl border border-cyan-300/15 bg-[#07111f]/60 p-4">
-              <SourceStripRow label="Location" value={profile.location || "Not set"} />
-              <SourceStripRow label="Watchlist" value={compactListLabel(splitList(profile.watchlist))} />
-              <SourceStripRow label="Briefing time" value={profile.briefingTime || "08:00"} />
+            <div className="mt-5 grid grid-cols-2 gap-2 rounded-xl border border-cyan-300/15 bg-[#07111f]/60 p-2">
+              {(["login", "register"] as const).map((entryMode) => (
+                <button
+                  key={entryMode}
+                  type="button"
+                  onClick={() => setMode(entryMode)}
+                  className={`min-h-10 rounded-lg text-sm font-black transition ${
+                    mode === entryMode
+                      ? "bg-cyan-300 text-[#03111f]"
+                      : "border border-[#1d3558] text-slate-400 hover:border-cyan-300/50 hover:text-cyan-200"
+                  }`}
+                >
+                  {entryMode === "login" ? "Login" : "Create Account"}
+                </button>
+              ))}
             </div>
+
+            <div className="mt-5 grid gap-4">
+              {mode === "register" && (
+                <SettingsTextInput
+                  id="auth-display-name"
+                  label="Name"
+                  value={displayName}
+                  placeholder="Adith"
+                  onChange={setDisplayName}
+                />
+              )}
+              <SettingsTextInput
+                id="auth-email"
+                label="Email"
+                value={email}
+                placeholder="you@example.com"
+                onChange={setEmail}
+              />
+              <SettingsTextInput
+                id="auth-password"
+                label="Password"
+                type="password"
+                value={password}
+                placeholder="At least 8 characters"
+                onChange={setPassword}
+              />
+            </div>
+
+            {error && (
+              <p className="mt-4 rounded-xl border border-pink-300/30 bg-pink-950/20 p-3 text-sm font-bold text-pink-200">
+                {error}
+              </p>
+            )}
 
             <div className="mt-6 grid gap-3">
               <button
-                type="button"
-                onClick={hasProfile ? onContinue : onSetup}
-                className="min-h-12 rounded-xl bg-lime-300 px-5 text-sm font-black text-[#102000] transition hover:bg-lime-200"
+                type="submit"
+                disabled={loading}
+                className="min-h-12 rounded-xl bg-lime-300 px-5 text-sm font-black text-[#102000] transition hover:bg-lime-200 disabled:cursor-not-allowed disabled:bg-slate-500"
               >
-                {hasProfile ? "Open VerityDesk" : "Start Setup"}
-              </button>
-              <button
-                type="button"
-                onClick={onSetup}
-                className="min-h-12 rounded-xl border border-cyan-300/30 px-5 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
-              >
-                {hasProfile ? "Review Setup" : "Continue Without Account"}
+                {loading ? "Working..." : mode === "login" ? "Open VerityDesk" : "Create Account"}
               </button>
             </div>
 
             <p className="mt-5 text-xs leading-5 text-slate-500">
               No investment advice. Research and educational use only.
             </p>
-          </div>
+          </form>
         </div>
       </section>
     </main>
@@ -5337,7 +5529,7 @@ function SettingsTextInput({
   label: string;
   value: string;
   placeholder?: string;
-  type?: "text" | "time";
+  type?: "text" | "time" | "password";
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
@@ -5949,14 +6141,6 @@ function isSetupComplete(profile: PersonalizationProfile) {
   return window.localStorage.getItem(SETUP_COMPLETE_STORAGE_KEY) === "true" || Boolean(profile.profileName || profile.location || profile.personalNote);
 }
 
-function hasLocalSession() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  return window.localStorage.getItem(LOCAL_SESSION_STORAGE_KEY) === "ready" || Boolean(window.localStorage.getItem(LOCAL_SESSION_STORAGE_KEY));
-}
-
 function loadChatSessions(): ChatSession[] {
   if (typeof window === "undefined") {
     return [];
@@ -6080,11 +6264,78 @@ function withDailyBriefingDefaults(profile: PersonalizationProfile): Personaliza
   };
 }
 
-async function syncBackendPreferences(profile: PersonalizationProfile) {
+function profileFromAuthUser(user: AuthUser): PersonalizationProfile {
+  return withDailyBriefingDefaults(normalizePersonalizationProfile({
+    profileName: user.profile.profile_name || user.display_name,
+    personalNote: user.profile.personal_note,
+    location: user.profile.location,
+    housingMarkets: user.profile.housing_markets,
+    watchlist: user.profile.watchlist,
+    companies: user.profile.companies,
+    priorityTopics: user.profile.priority_topics,
+    sectors: user.profile.sectors,
+    housingInterests: user.profile.housing_interests,
+    macroInterests: user.profile.macro_interests,
+    riskPreference: user.profile.risk_preference,
+    investingStyle: user.profile.investing_style,
+    answerFormat: user.profile.answer_format,
+    ignoredTopics: user.profile.ignored_topics,
+    briefingStyle: user.profile.briefing_style,
+    briefingTime: user.profile.briefing_time,
+  }));
+}
+
+function profileToAuthPayload(profile: PersonalizationProfile): AuthProfileResponse {
+  return {
+    profile_name: profile.profileName,
+    personal_note: profile.personalNote,
+    location: profile.location,
+    housing_markets: profile.housingMarkets,
+    watchlist: profile.watchlist,
+    companies: profile.companies,
+    priority_topics: profile.priorityTopics,
+    sectors: profile.sectors,
+    housing_interests: profile.housingInterests,
+    macro_interests: profile.macroInterests,
+    risk_preference: profile.riskPreference,
+    investing_style: profile.investingStyle,
+    answer_format: profile.answerFormat,
+    ignored_topics: profile.ignoredTopics,
+    briefing_style: profile.briefingStyle,
+    briefing_time: profile.briefingTime,
+  };
+}
+
+async function syncBackendProfile(profile: PersonalizationProfile, token: string) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/profile`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        profile: profileToAuthPayload(profile),
+        setup_complete: true,
+      }),
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as AuthUser;
+  } catch {
+    return null;
+  }
+}
+
+async function syncBackendPreferences(profile: PersonalizationProfile, token: string) {
   try {
     await fetch(`${API_BASE_URL}/api/v1/preferences`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({
         watchlist_tickers: splitList(profile.watchlist || DEFAULT_DAILY_WATCHLIST),
         preferred_regions: uniqueList([

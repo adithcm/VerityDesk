@@ -1,13 +1,26 @@
 services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: veritydesk
+      POSTGRES_USER: veritydesk
+      POSTGRES_PASSWORD: veritydesk
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
   backend:
     build:
       context: ./backend
     environment:
       ENVIRONMENT: development
       FRONTEND_ORIGIN: http://localhost:3000
-      DATABASE_URL: sqlite:///./data/investoragent.db
+      DATABASE_URL: postgresql+psycopg://veritydesk:veritydesk@postgres:5432/veritydesk
     ports:
       - "8000:8000"
+    depends_on:
+      - postgres
     volumes:
       - ./backend/app:/app/app
       - ./data:/app/data
@@ -24,3 +37,6 @@ services:
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
+
+volumes:
+  postgres-data:

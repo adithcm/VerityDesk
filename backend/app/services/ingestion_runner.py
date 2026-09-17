@@ -328,7 +328,7 @@ def generate_daily_topic_reports(session: Session, current_time: datetime) -> li
 
 
 def get_or_create_user_settings(session: Session) -> UserSettings:
-    settings = session.scalar(select(UserSettings).order_by(UserSettings.id).limit(1))
+    settings = session.scalar(select(UserSettings).where(UserSettings.user_id.is_(None)).order_by(UserSettings.id).limit(1))
     if settings is not None:
         return settings
 
@@ -336,6 +336,7 @@ def get_or_create_user_settings(session: Session) -> UserSettings:
         watchlist_tickers=[],
         preferred_regions=[],
         enabled_sources=[],
+        profile_metadata={},
         daily_briefing_time="08:00",
         daily_schedule_enabled=False,
         daily_schedule_timezone="local",

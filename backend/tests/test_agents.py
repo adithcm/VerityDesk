@@ -1,11 +1,13 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.agents.model_client import TemplateResearchSummarizer
 from app.db.base import Base
 from app.db.models import AgentRun
+from app.db.session import get_db
 from app.schemas.agent import AgentCitation, AgentContext, AgentQueryRequest, AgentResult
 from app.schemas.evidence_packet import EvidencePacket, EvidencePacketItem, EvidenceRetrievalStatus
 from app.services import agents
@@ -18,14 +20,33 @@ from app.services.guardrails import (
 )
 
 
-client = TestClient(app)
+def build_session_factory():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    return TestingSessionLocal
 
 
 def build_session():
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(bind=engine)
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    return TestingSessionLocal()
+    return build_session_factory()()
+
+
+def build_client():
+    session_factory = build_session_factory()
+
+    def override_get_db():
+        db = session_factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    return TestClient(app)
 
 
 def test_agent_query_endpoint_runs_coordinator_and_domain_agents(monkeypatch) -> None:
@@ -46,15 +67,19 @@ def test_agent_query_endpoint_runs_coordinator_and_domain_agents(monkeypatch) ->
         ),
     )
 
-    response = client.post(
-        "/api/v1/agents/query",
-        json={
-            "user_query": "What should I watch in markets today?",
-            "intent": "market_research",
-            "domains": ["Markets and Rates"],
-            "tickers": ["SPY"],
-        },
-    )
+    client = build_client()
+    try:
+        response = client.post(
+            "/api/v1/agents/query",
+            json={
+                "user_query": "What should I watch in markets today?",
+                "intent": "market_research",
+                "domains": ["Markets and Rates"],
+                "tickers": ["SPY"],
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 200
     payload = response.json()
@@ -67,21 +92,30 @@ def test_agent_query_endpoint_runs_coordinator_and_domain_agents(monkeypatch) ->
         "CitationAgent",
         "RiskGuardrailAgent",
     ]
-    assert payload["guardrail"]["status"] == "passed"
-    assert payload["requires_guardrail_review"] is False
+    assert payload["guardrail"]["status"] == "needs_revision"
+    assert payload["requires_guardrail_review"] is True
+    assert "no citations" in payload["guardrail"]["issues"][0].lower()
     assert "not financial advice" in payload["summary"].lower()
     assert "not a recommendation" in payload["summary"].lower()
     assert "coordinator selected" not in payload["summary"].lower()
 
 
 def test_agent_query_endpoint_rejects_empty_query() -> None:
-    response = client.post("/api/v1/agents/query", json={"user_query": ""})
+    client = build_client()
+    try:
+        response = client.post("/api/v1/agents/query", json={"user_query": ""})
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 422
 
 
 def test_agent_runs_endpoint_returns_history() -> None:
-    response = client.get("/api/v1/agents/runs?limit=5")
+    client = build_client()
+    try:
+        response = client.get("/api/v1/agents/runs?limit=5")
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 200
     payload = response.json()
