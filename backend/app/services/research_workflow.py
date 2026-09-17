@@ -288,6 +288,17 @@ def build_search_queries(context: AgentContext, understanding: QueryUnderstandin
     ]
     queries = [" ".join(part for part in primary_parts if part).strip()]
 
+    if context.intent == "daily_briefing" or "news" in searchable_text(context):
+        queries.extend(
+            [
+                "top world news today Reuters AP BBC high priority events",
+                "top geopolitical news today Reuters AP BBC conflicts policy sanctions",
+                "top U.S. news today Reuters AP BBC policy economy regulation",
+                "top AI news today Reuters The Verge TechCrunch major tech companies",
+                "S&P 500 major tech stocks today Reuters CNBC MarketWatch Nvidia Microsoft Apple Amazon Alphabet",
+            ]
+        )
+
     if understanding.topics:
         topic_parts = [
             " ".join(understanding.topics[:3]),

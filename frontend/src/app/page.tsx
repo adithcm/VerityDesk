@@ -2460,14 +2460,23 @@ function calculateDailyBriefScore(report: ReportResponse): DailyBriefScore {
   const signalScore = signalLabel === "High Signal" ? 22 : signalLabel === "Developing" ? 14 : signalLabel === "Watch Later" ? 8 : 4;
   const changeScore = /worsening|improving|mixed|strengthening/i.test(changeLabel) ? 12 : 6;
   const personalizationScore = Math.min(10, (report.tickers.length + report.domains.length) * 2);
-  const score = Math.max(0, Math.min(100, confidenceScore + sourceScore + signalScore + changeScore + personalizationScore));
+  const rawScore = confidenceScore + sourceScore + signalScore + changeScore + personalizationScore;
+  const score = Math.max(0, Math.min(100, rawScore));
+  const scoreReason = [
+    `${titleCase(report.confidence)} confidence`,
+    `${citationCount} source${citationCount === 1 ? "" : "s"}`,
+    signalLabel || "latest signal",
+    changeLabel || "latest change state",
+    report.tickers.length || report.domains.length ? "matches saved topics/watchlist" : "general relevance",
+    rawScore > 100 ? "score capped at 100" : null,
+  ].filter(Boolean).join(" · ");
 
   if (score <= 30) {
     return {
       score,
       label: "Quiet day",
       tone: "Low urgency",
-      reason: "The brief has limited signal or thinner source support today. Skim the bottom line and only open cards that match your interests.",
+      reason: `The brief has limited signal or thinner source support today. Why: ${scoreReason}.`,
     };
   }
   if (score <= 60) {
@@ -2475,7 +2484,7 @@ function calculateDailyBriefScore(report: ReportResponse): DailyBriefScore {
       score,
       label: "Normal day",
       tone: "Useful context",
-      reason: "The brief has enough current evidence for a normal daily read. Focus on the cards tied to your saved topics and watchlist.",
+      reason: `The brief has enough current evidence for a normal daily read. Why: ${scoreReason}.`,
     };
   }
   if (score <= 80) {
@@ -2483,14 +2492,14 @@ function calculateDailyBriefScore(report: ReportResponse): DailyBriefScore {
       score,
       label: "Important day",
       tone: "High signal - mixed risk",
-      reason: "Multiple current signals are relevant to your topics, watchlist, or macro setup. Read the cards and watch for trend changes.",
+      reason: `Multiple current signals are relevant to your topics, watchlist, or macro setup. Why: ${scoreReason}.`,
     };
   }
   return {
     score,
     label: "High attention day",
     tone: "Material change likely",
-    reason: "The brief is flagging unusually strong source support, high relevance, or meaningful change. Review the deeper reads and citations.",
+    reason: `The brief is flagging unusually strong source support, high relevance, or meaningful change. Why: ${scoreReason}.`,
   };
 }
 
@@ -2686,6 +2695,9 @@ function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
     `Default market watchlist if the user has not overridden it: ${watchlist}.`,
     `Default major company focus if the user has not overridden it: ${companies}.`,
     "Prioritize main world news, geopolitical risk globally and in the U.S., major AI news, major tech company developments, S&P 500 setup, watchlist stock trends, rates/macro, housing, and the clearest risks.",
+    "Do not stay high-level. Each news section must name the specific events taking place today or recently, including the people, companies, governments, countries, products, policies, data releases, or conflicts involved when the evidence supports it.",
+    "For World News, Geopolitics, U.S. News, and AI And Major Tech, include 2-4 concrete high-priority events per section when available. For each event, explain what happened, why it matters, who is affected, and what to watch next.",
+    "If a category has no specific current event in the evidence, say that clearly and explain the data gap instead of filling it with generic trend language.",
     "If a setting is blank, use the selected/default topics to create a useful general brief instead of asking the user for more information.",
     "Use this exact structure: ## Bottom Line, ## World News, ## Geopolitics, ## U.S. News, ## AI And Major Tech, ## Markets And Watchlist, ## What To Watch, ## Data Gaps.",
     "Use bullets under each section. Bold the key terms, tickers, companies, places, and numbers that matter.",
@@ -3460,7 +3472,7 @@ function DailyBriefInsightCard({
             : "border-[#1d3558] bg-[#020617]/70 text-cyan-300 hover:border-cyan-300/55"
         }`}
       >
-        {isExpanded ? "Reading below" : "Open deeper read"}
+        {isExpanded ? "Reading above" : "Open deeper read"}
       </button>
     </article>
   );

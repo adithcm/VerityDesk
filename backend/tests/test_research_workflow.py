@@ -144,8 +144,8 @@ def test_research_workflow_live_web_need_is_citation_oriented() -> None:
 
     live_web_need = next(need for need in plan.evidence_needs if need.channel == "live_web")
     assert live_web_need.required is True
-    assert live_web_need.search_queries == [
-        "What is happening in world markets today?",
-        "markets world_news latest credible sources",
-    ]
+    assert "What is happening in world markets today?" in live_web_need.search_queries
+    assert "top world news today Reuters AP BBC high priority events" in live_web_need.search_queries
+    assert "top AI news today Reuters The Verge TechCrunch major tech companies" in live_web_need.search_queries
+    assert len(live_web_need.search_queries) >= 5
     assert "citations" in live_web_need.purpose
