@@ -347,6 +347,23 @@ type HomeVisualModule = {
   suggestedPrompt: string;
 };
 
+type DailyBriefCard = {
+  id: string;
+  title: string;
+  description: string;
+  badge: string;
+  accent: "lime" | "cyan" | "pink" | "orange" | "violet";
+  summary: string;
+  details: string;
+};
+
+type DailyBriefScore = {
+  score: number;
+  label: string;
+  tone: string;
+  reason: string;
+};
+
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -392,18 +409,37 @@ const SETUP_COMPLETE_STORAGE_KEY = "investoragent.setupComplete.v1";
 const LOCAL_SESSION_STORAGE_KEY = "investoragent.localSession.v1";
 const CHAT_SESSIONS_STORAGE_KEY = "investoragent.chatSessions.v1";
 const ACTIVE_CHAT_SESSION_STORAGE_KEY = "investoragent.activeChatSession.v1";
+const DEFAULT_DAILY_WATCHLIST = "SPY, AAPL, MSFT, NVDA, AMZN, GOOGL";
+const DEFAULT_DAILY_COMPANIES = "Apple, Microsoft, Nvidia, Amazon, Alphabet";
+const LEGACY_DEFAULT_WATCHLIST = "SPY, QQQ, TLT";
+const LEGACY_DEFAULT_TOPICS = ["Markets", "Housing", "U.S. economy"];
+const dailyBriefingDefaultTopics = [
+  "World news",
+  "Geopolitics",
+  "U.S. news and policy",
+  "Markets",
+  "S&P 500",
+  "Company news",
+  "AI and technology",
+  "Major tech companies",
+];
 
 const topicOptions = [
   "World news",
+  "Geopolitics",
+  "U.S. news and policy",
   "U.S. economy",
   "Markets",
+  "S&P 500",
   "Company news",
   "Housing",
   "Mortgage rates",
   "AI and technology",
+  "Major tech companies",
   "Energy",
   "Banks and credit",
   "Consumer trends",
+  "Regulation and legal",
 ];
 
 const housingInterestOptions = [
@@ -559,6 +595,8 @@ export default function Home() {
     const savedChatSessions = loadChatSessions();
     const savedActiveChatId = loadActiveChatSessionId(savedChatSessions);
     setPersonalizationProfile(savedProfile);
+    localStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(savedProfile));
+    void syncBackendPreferences(savedProfile);
     setLocalSessionReady(hasLocalSession());
     setSetupOpen(hasLocalSession() && !setupComplete);
     setChatSessions(savedChatSessions);
@@ -577,6 +615,7 @@ export default function Home() {
     setPersonalizationProfile(nextProfile);
     localStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(nextProfile));
     localStorage.setItem(SETUP_COMPLETE_STORAGE_KEY, "true");
+    void syncBackendPreferences(nextProfile);
     setProfileSavedAt(new Date().toISOString());
     if (nextProfile.watchlist.trim()) {
       setAgentTicker(nextProfile.watchlist);
@@ -1003,7 +1042,17 @@ export default function Home() {
       const response = await fetch(`${API_BASE_URL}/api/v1/reports/daily-briefing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ time_window: "week" }),
+        body: JSON.stringify({
+          time_window: "day",
+          domains: personalizationProfile.priorityTopics.length
+            ? personalizationProfile.priorityTopics
+            : dailyBriefingDefaultTopics,
+          regions: uniqueList([
+            personalizationProfile.location,
+            ...splitList(personalizationProfile.housingMarkets),
+          ]),
+          user_query: buildDailyBriefingPrompt(personalizationProfile),
+        }),
       });
 
       if (!response.ok) {
@@ -1218,7 +1267,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1440px] gap-4 p-4 lg:grid-cols-[82px_minmax(0,1fr)_390px] lg:gap-5 lg:p-6">
+      <div className="mx-auto grid w-full max-w-[1720px] gap-4 p-3 sm:p-4 lg:grid-cols-[148px_minmax(0,1fr)] lg:gap-5 lg:p-5 xl:p-6">
         <aside className="flex gap-2 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.32)] lg:min-h-[calc(100vh-118px)] lg:flex-col">
           {shellNavigation.map((item) => (
             <button
@@ -1226,13 +1275,14 @@ export default function Home() {
               type="button"
               title={item.title}
               onClick={() => setActiveView(item.view)}
-              className={`h-[54px] w-[54px] rounded-[10px] border bg-[#020617] font-mono text-xs font-black transition ${
+              className={`min-h-[58px] rounded-[10px] border bg-[#020617] px-3 text-left font-mono text-xs font-black transition ${
                 activeView === item.view
                   ? "border-cyan-300 text-cyan-200 shadow-[0_0_28px_rgba(34,211,238,0.16)]"
                   : "border-[#1d3558] text-slate-400 hover:border-cyan-300/50 hover:text-cyan-200"
               }`}
             >
-              {item.label}
+              <span className="block text-[0.7rem] uppercase text-slate-600">{item.label}</span>
+              <span className="mt-1 block text-sm text-inherit">{item.title}</span>
             </button>
           ))}
         </aside>
@@ -1247,7 +1297,7 @@ export default function Home() {
             </span>
           </div>
 
-          <div className="p-5 md:p-7">
+          <div className="mx-auto w-full max-w-[1440px] p-4 md:p-5 xl:p-6">
             {activeView === "Home" && (
               <OptionMHomeView
                 healthData={healthData}
@@ -1401,34 +1451,6 @@ export default function Home() {
           </div>
         </section>
 
-        {activeView === "Home" ? (
-          <HomeProfileRail
-            personalizationProfile={personalizationProfile}
-            sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
-            scheduleData={scheduleData}
-            reportListData={reportListData}
-            reportsLoading={reportsLoading}
-            openSettings={() => setActiveView("Settings")}
-          />
-        ) : (
-          <BriefingCardsPanel
-            personalizationProfile={personalizationProfile}
-            sourceStatusText={summarizeSourceStatus(healthData, ingestionLoading, ingestionError)}
-            scheduleData={scheduleData}
-            reportListData={reportListData}
-            reportsLoading={reportsLoading}
-            suggestionsData={suggestionsData}
-            suggestionsLoading={suggestionsLoading}
-            suggestionsError={suggestionsError}
-            generateDailyBriefing={generateDailyBriefing}
-            generateHousingReport={generateHousingReport}
-            generateMarketStrategy={generateMarketStrategy}
-            generateCompanyReport={generateCompanyReport}
-            generateMacroReport={generateMacroReport}
-            applySuggestion={applySuggestion}
-            openSettings={() => setActiveView("Settings")}
-          />
-        )}
       </div>
     </main>
   );
@@ -1954,214 +1976,6 @@ function MiniBarChart({ points, accent }: { points: number[]; accent: HomeVisual
   );
 }
 
-function HomeProfileRail({
-  personalizationProfile,
-  sourceStatusText,
-  scheduleData,
-  reportListData,
-  reportsLoading,
-  openSettings,
-}: {
-  personalizationProfile: PersonalizationProfile;
-  sourceStatusText: string;
-  scheduleData: DailyScheduleConfig | null;
-  reportListData: ReportListResponse | null;
-  reportsLoading: boolean;
-  openSettings: () => void;
-}) {
-  const latestReport = reportListData?.reports[0] ?? null;
-
-  return (
-    <aside className="grid content-start gap-4 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
-      <section className="rounded-[18px] border border-cyan-300/20 bg-[#020617]/80 p-4">
-        <p className="font-mono text-xs font-black uppercase text-lime-300">Profile</p>
-        <h2 className="mt-3 text-2xl font-black text-white">{personalizationProfile.profileName || "My VerityDesk"}</h2>
-        <p className="mt-3 text-sm leading-6 text-slate-400">
-          {personalizationProfile.personalNote || "Add a short note in Settings so answers and daily briefs know what matters to you."}
-        </p>
-        <button
-          type="button"
-          onClick={openSettings}
-          className="mt-4 min-h-10 rounded-lg border border-cyan-300/30 px-4 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
-        >
-          Tune Profile
-        </button>
-      </section>
-
-      <section className="rounded-[18px] border border-[#1d3558] bg-[#020617]/70 p-4">
-        <p className="font-mono text-xs font-black uppercase text-cyan-300">Status</p>
-        <div className="mt-4 grid gap-3">
-          <SourceStripRow label="Sources" value={sourceStatusText} />
-          <SourceStripRow label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
-          <SourceStripRow label="Next" value={formatDateTime(scheduleData?.next_run_at)} />
-          <SourceStripRow label="Location" value={personalizationProfile.location || "Not set"} />
-          <SourceStripRow label="Watchlist" value={compactListLabel(splitList(personalizationProfile.watchlist))} />
-        </div>
-      </section>
-
-      <section className="rounded-[18px] border border-[#1d3558] bg-[#020617]/70 p-4">
-        <p className="font-mono text-xs font-black uppercase text-pink-300">Latest saved</p>
-        <p className="mt-3 text-sm font-bold text-white">
-          {reportsLoading ? "Loading..." : latestReport?.title ?? "No report yet"}
-        </p>
-        <p className="mt-2 text-xs leading-5 text-slate-500">
-          {latestReport ? `Retrieved ${formatDateTime(latestReport.as_of ?? latestReport.created_at)}` : "Daily cards will fill in after refreshes and brief generation."}
-        </p>
-      </section>
-    </aside>
-  );
-}
-
-function BriefingCardsPanel({
-  personalizationProfile,
-  sourceStatusText,
-  scheduleData,
-  reportListData,
-  reportsLoading,
-  suggestionsData,
-  suggestionsLoading,
-  suggestionsError,
-  generateDailyBriefing,
-  generateHousingReport,
-  generateMarketStrategy,
-  generateCompanyReport,
-  generateMacroReport,
-  applySuggestion,
-  openSettings,
-}: {
-  personalizationProfile: PersonalizationProfile;
-  sourceStatusText: string;
-  scheduleData: DailyScheduleConfig | null;
-  reportListData: ReportListResponse | null;
-  reportsLoading: boolean;
-  suggestionsData: ProactiveSuggestionsResponse | null;
-  suggestionsLoading: boolean;
-  suggestionsError: string | null;
-  generateDailyBriefing: () => void;
-  generateHousingReport: () => void;
-  generateMarketStrategy: () => void;
-  generateCompanyReport: () => void;
-  generateMacroReport: () => void;
-  applySuggestion: (suggestion: ProactiveSuggestion) => void;
-  openSettings: () => void;
-}) {
-  const panels = buildDailyTopicPanels({
-    profile: personalizationProfile,
-    reports: reportListData?.reports ?? [],
-    generateDailyBriefing,
-    generateHousingReport,
-    generateMarketStrategy,
-    generateCompanyReport,
-    generateMacroReport,
-  });
-
-  return (
-    <aside className="grid content-start gap-4 rounded-[14px] border border-cyan-300/20 bg-[#07111f]/90 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-white">Today&apos;s Panels</h2>
-          <p className="mt-1 font-mono text-xs font-black uppercase text-slate-500">Saved daily intelligence</p>
-        </div>
-        <button type="button" onClick={openSettings} className="text-sm font-bold text-cyan-300">
-          Tune
-        </button>
-      </div>
-
-      {reportsLoading ? (
-        <div className="rounded-xl border border-[#1d3558] bg-[#020617]/80 p-4 text-sm text-slate-400">
-          Loading saved daily panels.
-        </div>
-      ) : (
-        panels.map((panel) => <DailyTopicPanelCard key={panel.title} panel={panel} />)
-      )}
-
-      <div className="rounded-xl border border-[#1d3558] bg-[#020617]/80 p-4">
-        <p className="font-mono text-xs font-black uppercase text-cyan-300">System</p>
-        <div className="mt-3 grid gap-2">
-          <SourceStripRow label="Sources" value={sourceStatusText} />
-          <SourceStripRow label="Daily run" value={scheduleData?.enabled ? "On" : "Off"} />
-          <SourceStripRow label="Next run" value={formatDateTime(scheduleData?.next_run_at)} />
-          <SourceStripRow label="Location" value={personalizationProfile.location || "Set in Settings"} />
-        </div>
-      </div>
-
-      <details className="rounded-xl border border-[#1d3558] bg-[#020617]/60 p-4">
-        <summary className="cursor-pointer font-mono text-xs font-black uppercase text-slate-400">Suggested next questions</summary>
-        {suggestionsLoading && <p className="mt-3 text-sm text-slate-400">Loading suggestions.</p>}
-        {suggestionsError && <p className="mt-3 text-sm text-red-200">{suggestionsError}</p>}
-        {!suggestionsLoading && !suggestionsError && (
-          <div className="mt-3 grid gap-2">
-            {(suggestionsData?.suggestions ?? []).slice(0, 3).map((suggestion) => (
-              <button
-                key={suggestion.id}
-                type="button"
-                onClick={() => applySuggestion(suggestion)}
-                className="rounded-lg border border-[#1d3558] px-3 py-2 text-left text-sm leading-5 text-slate-300 hover:border-cyan-300/50"
-              >
-                {suggestion.title}
-              </button>
-            ))}
-            {(!suggestionsData || suggestionsData.suggestions.length === 0) && (
-              <p className="text-sm text-slate-400">No suggestions available yet.</p>
-            )}
-          </div>
-        )}
-      </details>
-    </aside>
-  );
-}
-
-type DailyTopicPanel = {
-  title: string;
-  description: string;
-  report: ReportResponse | null;
-  borderClass: string;
-  dotClass: string;
-  onRefresh: () => void;
-};
-
-function DailyTopicPanelCard({ panel }: { panel: DailyTopicPanel }) {
-  const body = cleanAnswerText(panel.report?.summary ?? panel.report?.body);
-  const signalLabel = reportMetadataText(panel.report, "signal_label") ?? (panel.report ? "Developing" : "No panel yet");
-  const changeLabel = reportMetadataText(panel.report, "change_label") ?? "Waiting";
-
-  return (
-    <section className={`rounded-xl border bg-[#020617] p-4 ${panel.borderClass}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-lg font-bold text-white">{panel.title}</p>
-          <p className="mt-1 text-xs font-semibold uppercase text-slate-500">
-            {panel.report ? `Updated ${formatDateTime(panel.report.as_of ?? panel.report.created_at)}` : "Waiting for daily refresh"}
-          </p>
-        </div>
-        <span className={`mt-2 h-2 w-2 rounded-full ${panel.dotClass}`} />
-      </div>
-      <p className="mt-3 text-sm leading-5 text-slate-400">
-        {body ? compactText(body, 210) : panel.description}
-      </p>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-2">
-          <NeonChip variant={signalChipVariant(signalLabel)}>{signalLabel}</NeonChip>
-          <NeonChip>{`Change: ${changeLabel}`}</NeonChip>
-          {panel.report && <NeonChip>{panel.report.citations.length} sources</NeonChip>}
-        </div>
-        <button
-          type="button"
-          onClick={panel.onRefresh}
-          className="min-h-9 rounded-lg border border-cyan-300/30 px-3 text-xs font-black text-cyan-200 transition hover:border-cyan-300/70"
-        >
-          Refresh
-        </button>
-      </div>
-      {panel.report && (
-        <div className="mt-3">
-          <ReportEvidenceDrawer report={panel.report} />
-        </div>
-      )}
-    </section>
-  );
-}
-
 function reportMetadataText(report: ReportResponse | null | undefined, key: string) {
   const value = report?.metadata?.[key];
   return typeof value === "string" && value.trim() ? value : null;
@@ -2302,14 +2116,14 @@ function SetupProfileFlow({
                 id="setup-watchlist"
                 label="Watchlist"
                 value={draft.watchlist}
-                placeholder="SPY, QQQ, TLT"
+                placeholder={DEFAULT_DAILY_WATCHLIST}
                 onChange={(value) => updateDraft({ watchlist: value.toUpperCase() })}
               />
               <SettingsTextInput
                 id="setup-companies"
                 label="Companies"
                 value={draft.companies}
-                placeholder="Apple, Nvidia, Tesla"
+                placeholder={DEFAULT_DAILY_COMPANIES}
                 onChange={(value) => updateDraft({ companies: value })}
               />
               <SettingsTextInput
@@ -2376,7 +2190,7 @@ function SetupProfileFlow({
 
         <section className="grid gap-4 lg:grid-cols-3">
           <CheckboxGroup
-            title="Topics"
+            title="Daily brief topics"
             options={topicOptions}
             values={draft.priorityTopics}
             onToggle={(value) => toggleDraftOption("priorityTopics", value)}
@@ -2476,71 +2290,6 @@ function buildBriefingCards(profile: PersonalizationProfile) {
       ].join("\n"),
       borderClass: "border-orange-300/30",
       dotClass: "bg-orange-300 shadow-[0_0_24px_rgba(251,146,60,0.8)]",
-    },
-  ];
-}
-
-function buildDailyTopicPanels({
-  profile,
-  reports,
-  generateDailyBriefing,
-  generateHousingReport,
-  generateMarketStrategy,
-  generateCompanyReport,
-  generateMacroReport,
-}: {
-  profile: PersonalizationProfile;
-  reports: ReportResponse[];
-  generateDailyBriefing: () => void;
-  generateHousingReport: () => void;
-  generateMarketStrategy: () => void;
-  generateCompanyReport: () => void;
-  generateMacroReport: () => void;
-}): DailyTopicPanel[] {
-  const latestByType = latestReportByType(reports);
-  const location = profile.location || compactListLabel(splitList(profile.housingMarkets));
-  const watchlist = compactListLabel(splitList(profile.watchlist));
-
-  return [
-    {
-      title: "Daily Briefing",
-      description: "Today's personal intelligence summary will appear here after the daily refresh runs.",
-      report: latestByType.get("daily_briefing") ?? null,
-      borderClass: "border-lime-300/35",
-      dotClass: "bg-lime-300 shadow-[0_0_24px_rgba(163,230,53,0.8)]",
-      onRefresh: generateDailyBriefing,
-    },
-    {
-      title: "Local Housing Pulse",
-      description: `Rates, affordability, inventory, and local housing signals for ${location === "Not set" ? "your saved area" : location}.`,
-      report: latestByType.get("housing") ?? null,
-      borderClass: "border-cyan-300/30",
-      dotClass: "bg-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.8)]",
-      onRefresh: generateHousingReport,
-    },
-    {
-      title: "Market Setup",
-      description: "Indexes, rates, sector tone, volatility, commodities, and macro risk.",
-      report: latestByType.get("market_strategy") ?? null,
-      borderClass: "border-pink-300/30",
-      dotClass: "bg-pink-300 shadow-[0_0_24px_rgba(249,168,212,0.75)]",
-      onRefresh: generateMarketStrategy,
-    },
-    {
-      title: "Watchlist Moves",
-      description: `Catalysts, filings, news, and risk signals for ${watchlist === "Not set" ? "your saved watchlist" : watchlist}.`,
-      report: latestByType.get("company_research") ?? null,
-      borderClass: "border-orange-300/30",
-      dotClass: "bg-orange-300 shadow-[0_0_24px_rgba(253,186,116,0.75)]",
-      onRefresh: generateCompanyReport,
-    },
-    {
-      title: "Rates And Credit",
-      description: "Rates, yields, inflation pressure, credit conditions, Fed policy, and consumer stress.",
-      report: latestByType.get("macro") ?? null,
-      borderClass: "border-violet-300/30",
-      dotClass: "bg-violet-300 shadow-[0_0_24px_rgba(196,181,253,0.75)]",
-      onRefresh: generateMacroReport,
     },
   ];
 }
@@ -2702,16 +2451,216 @@ function latestReportByType(reports: ReportResponse[]) {
   return map;
 }
 
-function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
-  const promptContext = cardPromptContext(profile);
+function calculateDailyBriefScore(report: ReportResponse): DailyBriefScore {
+  const signalLabel = reportMetadataText(report, "signal_label") ?? "";
+  const changeLabel = reportMetadataText(report, "change_label") ?? "";
+  const citationCount = report.citations.length;
+  const confidenceScore = report.confidence === "high" ? 32 : report.confidence === "medium" ? 24 : 12;
+  const sourceScore = Math.min(24, citationCount * 2);
+  const signalScore = signalLabel === "High Signal" ? 22 : signalLabel === "Developing" ? 14 : signalLabel === "Watch Later" ? 8 : 4;
+  const changeScore = /worsening|improving|mixed|strengthening/i.test(changeLabel) ? 12 : 6;
+  const personalizationScore = Math.min(10, (report.tickers.length + report.domains.length) * 2);
+  const score = Math.max(0, Math.min(100, confidenceScore + sourceScore + signalScore + changeScore + personalizationScore));
+
+  if (score <= 30) {
+    return {
+      score,
+      label: "Quiet day",
+      tone: "Low urgency",
+      reason: "The brief has limited signal or thinner source support today. Skim the bottom line and only open cards that match your interests.",
+    };
+  }
+  if (score <= 60) {
+    return {
+      score,
+      label: "Normal day",
+      tone: "Useful context",
+      reason: "The brief has enough current evidence for a normal daily read. Focus on the cards tied to your saved topics and watchlist.",
+    };
+  }
+  if (score <= 80) {
+    return {
+      score,
+      label: "Important day",
+      tone: "High signal - mixed risk",
+      reason: "Multiple current signals are relevant to your topics, watchlist, or macro setup. Read the cards and watch for trend changes.",
+    };
+  }
+  return {
+    score,
+    label: "High attention day",
+    tone: "Material change likely",
+    reason: "The brief is flagging unusually strong source support, high relevance, or meaningful change. Review the deeper reads and citations.",
+  };
+}
+
+function buildDailyBriefCards(report: ReportResponse): DailyBriefCard[] {
+  const text = cleanAnswerText(report.body || report.summary) ?? "";
+  const sections = parseMarkdownSections(text);
+  const fallback = text || "No daily brief text is available yet.";
+  const marketTerms = report.tickers.length ? report.tickers.join(", ") : DEFAULT_DAILY_WATCHLIST;
 
   return [
-    "Give me today's personalized briefing.",
-    "Cover world news, market setup, rates and macro, local housing, watchlist companies, and major risks.",
-    "Use a simple structure: Bottom Line, Major Trends, What Changed Recently, Why It Matters To Me, What To Watch Next, and Uncertainty/Data Gaps.",
-    "Analyze cross-category trends in global risk, markets, rates/macro, housing, company/watchlist news, consumer/labor, credit, and commodities.",
-    "For each major trend, say whether it looks strengthening, weakening, mixed, or unclear.",
-    "Prioritize what matters to my saved profile and keep the answer easy to scan.",
+    makeDailyBriefCard({
+      id: "bottom-line",
+      title: "Bottom Line",
+      description: "The fastest read on what matters today and whether the day deserves attention.",
+      badge: "Start here",
+      accent: "lime",
+      sections,
+      fallback,
+      matchers: ["bottom line", "today in 30 seconds", "summary"],
+    }),
+    makeDailyBriefCard({
+      id: "world-news",
+      title: "World News",
+      description: "Major global developments separated from conflict and policy risk.",
+      badge: "Global context",
+      accent: "cyan",
+      sections,
+      fallback,
+      matchers: ["world news", "main world news", "global news", "world"],
+    }),
+    makeDailyBriefCard({
+      id: "geopolitics",
+      title: "Geopolitics",
+      description: "Conflict, sanctions, trade, alliances, energy risk, and international policy pressure.",
+      badge: "Risk map",
+      accent: "orange",
+      sections,
+      fallback,
+      matchers: ["geopolitics", "geopolitical", "geopolitics and u.s. signals"],
+    }),
+    makeDailyBriefCard({
+      id: "us-news",
+      title: "U.S. News",
+      description: "Domestic policy, economy, regulation, legal signals, and major U.S. events.",
+      badge: "U.S. focus",
+      accent: "pink",
+      sections,
+      fallback,
+      matchers: ["u.s. news", "us news", "u.s. signals", "u.s. policy", "united states"],
+    }),
+    makeDailyBriefCard({
+      id: "ai-tech",
+      title: "AI & Major Tech",
+      description: "AI models, chips, cloud, product moves, regulation, adoption, and major technology companies.",
+      badge: "AI radar",
+      accent: "violet",
+      sections,
+      fallback,
+      matchers: ["ai and major tech", "ai & major tech", "ai", "major tech", "technology"],
+    }),
+    makeDailyBriefCard({
+      id: "markets-watchlist",
+      title: "Markets & Watchlist",
+      description: `S&P 500 setup and concise read-throughs for ${marketTerms}.`,
+      badge: "Market setup",
+      accent: "lime",
+      sections,
+      fallback,
+      matchers: ["markets and watchlist", "markets", "watchlist", "s&p 500", "market setup"],
+    }),
+  ];
+}
+
+function makeDailyBriefCard({
+  id,
+  title,
+  description,
+  badge,
+  accent,
+  sections,
+  fallback,
+  matchers,
+}: {
+  id: string;
+  title: string;
+  description: string;
+  badge: string;
+  accent: DailyBriefCard["accent"];
+  sections: Map<string, string>;
+  fallback: string;
+  matchers: string[];
+}): DailyBriefCard {
+  const content = findSectionContent(sections, matchers) || fallback;
+  const summary = truncateMarkdown(content, 420);
+  return {
+    id,
+    title,
+    description,
+    badge,
+    accent,
+    summary,
+    details: content,
+  };
+}
+
+function parseMarkdownSections(text: string) {
+  const sections = new Map<string, string>();
+  const lines = text.split("\n");
+  let currentTitle = "summary";
+  let currentLines: string[] = [];
+
+  function flushSection() {
+    const content = currentLines.join("\n").trim();
+    if (content) {
+      sections.set(currentTitle.toLowerCase(), content);
+    }
+  }
+
+  lines.forEach((line) => {
+    const heading = markdownHeadingText(line);
+    if (heading) {
+      flushSection();
+      currentTitle = heading.replace(/:$/, "").trim();
+      currentLines = [];
+    } else {
+      currentLines.push(line);
+    }
+  });
+  flushSection();
+  return sections;
+}
+
+function findSectionContent(sections: Map<string, string>, matchers: string[]) {
+  for (const [title, content] of Array.from(sections.entries())) {
+    if (matchers.some((matcher) => title.includes(matcher.toLowerCase()))) {
+      return content;
+    }
+  }
+  return null;
+}
+
+function truncateMarkdown(text: string, maxLength: number) {
+  const compact = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .join("\n");
+  if (compact.length <= maxLength) {
+    return compact;
+  }
+  return `${compact.slice(0, maxLength).trim()}...`;
+}
+
+function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
+  const promptContext = cardPromptContext(profile);
+  const selectedTopics = profile.priorityTopics.length ? profile.priorityTopics : dailyBriefingDefaultTopics;
+  const watchlist = profile.watchlist || DEFAULT_DAILY_WATCHLIST;
+  const companies = profile.companies || DEFAULT_DAILY_COMPANIES;
+
+  return [
+    "Generate today's personalized daily brief in clean markdown.",
+    `Primary daily brief topics: ${selectedTopics.join(", ")}.`,
+    `Default market watchlist if the user has not overridden it: ${watchlist}.`,
+    `Default major company focus if the user has not overridden it: ${companies}.`,
+    "Prioritize main world news, geopolitical risk globally and in the U.S., major AI news, major tech company developments, S&P 500 setup, watchlist stock trends, rates/macro, housing, and the clearest risks.",
+    "If a setting is blank, use the selected/default topics to create a useful general brief instead of asking the user for more information.",
+    "Use this exact structure: ## Bottom Line, ## World News, ## Geopolitics, ## U.S. News, ## AI And Major Tech, ## Markets And Watchlist, ## What To Watch, ## Data Gaps.",
+    "Use bullets under each section. Bold the key terms, tickers, companies, places, and numbers that matter.",
+    "For each major trend, say whether it is strengthening, weakening, mixed, or unclear.",
     "Use live web research first, then use direct APIs and stored data to verify or add context.",
     "Do not give direct buy, sell, or hold recommendations.",
     promptContext,
@@ -3281,6 +3230,10 @@ function DailyBriefingView({
   const savedDailyBrief = reportListData?.reports.find((report) => report.report_type === "daily_briefing") ?? null;
   const activeBrief = dailyBriefingReport ?? savedDailyBrief;
   const briefText = cleanAnswerText(activeBrief?.body ?? activeBrief?.summary) ?? null;
+  const briefCards = activeBrief ? buildDailyBriefCards(activeBrief) : [];
+  const briefScore = activeBrief ? calculateDailyBriefScore(activeBrief) : null;
+  const [expandedBriefCardId, setExpandedBriefCardId] = useState<string | null>(null);
+  const expandedBriefCard = briefCards.find((card) => card.id === expandedBriefCardId) ?? null;
 
   return (
     <div className="grid gap-5 text-slate-100">
@@ -3330,10 +3283,34 @@ function DailyBriefingView({
         )}
         {activeBrief && (
           <div className="space-y-5">
-            <MarkdownAnswer text={briefText} />
+            <DailyBriefScorePanel report={activeBrief} score={briefScore} />
+            {expandedBriefCard && (
+              <DailyBriefExpandedRead
+                card={expandedBriefCard}
+                onClose={() => setExpandedBriefCardId(null)}
+              />
+            )}
+            <div className="grid gap-4 xl:grid-cols-3">
+              {briefCards.map((card) => (
+                <DailyBriefInsightCard
+                  key={card.id}
+                  card={card}
+                  isExpanded={expandedBriefCardId === card.id}
+                  onExpand={() => setExpandedBriefCardId(expandedBriefCardId === card.id ? null : card.id)}
+                />
+              ))}
+            </div>
             <p className="rounded-lg border border-[#1d3558] bg-[#020617]/70 p-3 text-xs leading-5 text-slate-400">
               {FINANCIAL_DISCLAIMER}
             </p>
+            <details className="rounded-[18px] border border-[#1d3558] bg-[#020617]/72 p-4">
+              <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">
+                View full markdown brief
+              </summary>
+              <div className="mt-4 rounded-xl border border-cyan-300/15 bg-[#020617]/70 p-4">
+                <MarkdownAnswer text={briefText} />
+              </div>
+            </details>
             <details className="rounded-[18px] border border-[#1d3558] bg-[#020617]/72 p-4">
               <summary className="cursor-pointer font-mono text-xs font-black uppercase text-cyan-300">
                 View citations
@@ -3352,6 +3329,143 @@ function DailyBriefingView({
         <LatestItemsList latestItemsData={latestItemsData} loading={ingestionLoading} />
       </details>
     </div>
+  );
+}
+
+function DailyBriefScorePanel({ report, score }: { report: ReportResponse; score: DailyBriefScore | null }) {
+  const signalLabel = reportMetadataText(report, "signal_label") ?? "Latest signal";
+  const changeLabel = reportMetadataText(report, "change_label") ?? "Change: latest";
+  const citationCount = report.citations.length;
+
+  return (
+    <section className="grid gap-4 rounded-[24px] border border-cyan-300/20 bg-[radial-gradient(circle_at_14%_42%,rgba(188,255,93,0.12),transparent_20rem),#020617]/74 p-4 xl:grid-cols-[minmax(300px,0.72fr)_minmax(0,1.28fr)]">
+      <div className="grid gap-4 rounded-[22px] border border-cyan-300/30 bg-[linear-gradient(145deg,rgba(34,211,238,0.12),rgba(244,114,182,0.08))] p-4 sm:grid-cols-[132px_minmax(0,1fr)] sm:items-center">
+        <div className="grid h-32 w-32 place-items-center rounded-full border border-white/20 bg-[conic-gradient(from_180deg,rgba(34,211,238,0.24),rgba(244,114,182,0.18),rgba(190,242,100,0.26),rgba(34,211,238,0.24))] text-center shadow-[0_0_48px_rgba(34,211,238,0.16)]">
+          <div className="grid h-24 w-24 place-items-center rounded-full bg-[#020617]/88">
+            <div>
+              <p className="font-mono text-[10px] font-black uppercase text-cyan-200">Brief score</p>
+              <p className="text-4xl font-black text-lime-300">{score?.score ?? "--"}</p>
+            </div>
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs font-black uppercase text-lime-300">{score?.label ?? "Waiting"}</p>
+          <h2 className="mt-2 text-2xl font-black text-white">{score?.tone ?? "No brief generated yet"}</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-300">{score?.reason ?? "Generate a daily brief to calculate the signal score."}</p>
+          <details className="mt-4">
+            <summary className="cursor-pointer text-sm font-black text-cyan-200">Score Ranges</summary>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <ScoreRangeCard range="0-30" label="Quiet" detail="Low urgency. Skim the bottom line and move on." />
+              <ScoreRangeCard range="31-60" label="Normal" detail="Useful daily context. Read the cards that match your interests." />
+              <ScoreRangeCard range="61-80" label="Important" detail="High-signal day. Read the full brief and watch trend changes." />
+              <ScoreRangeCard range="81-100" label="High attention" detail="Material change or elevated uncertainty. Review evidence and follow-ups." />
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <ConsoleMetric label="Market mood" value={changeLabel.replace(/^Change:\s*/i, "")} />
+        <ConsoleMetric label="Signal" value={signalLabel} />
+        <ConsoleMetric label="Sources" value={String(citationCount)} />
+        <ConsoleMetric label="Retrieved" value={formatDateTime(report.as_of ?? report.created_at)} />
+      </div>
+    </section>
+  );
+}
+
+function ScoreRangeCard({ range, label, detail }: { range: string; label: string; detail: string }) {
+  return (
+    <div className="rounded-xl border border-cyan-300/15 bg-[#020617]/72 p-3">
+      <p className="text-sm font-black text-white">
+        {range} - {label}
+      </p>
+      <p className="mt-1 text-xs leading-5 text-slate-400">{detail}</p>
+    </div>
+  );
+}
+
+function DailyBriefInsightCard({
+  card,
+  isExpanded,
+  onExpand,
+}: {
+  card: DailyBriefCard;
+  isExpanded: boolean;
+  onExpand: () => void;
+}) {
+  const accentClass = {
+    lime: "border-lime-300/55 text-lime-200 shadow-[0_0_28px_rgba(190,242,100,0.08)]",
+    cyan: "border-cyan-300/55 text-cyan-200 shadow-[0_0_28px_rgba(34,211,238,0.08)]",
+    pink: "border-pink-300/55 text-pink-200 shadow-[0_0_28px_rgba(244,114,182,0.08)]",
+    orange: "border-orange-300/55 text-orange-200 shadow-[0_0_28px_rgba(251,146,60,0.08)]",
+    violet: "border-violet-300/55 text-violet-200 shadow-[0_0_28px_rgba(167,139,250,0.08)]",
+  }[card.accent];
+  const dotClass = {
+    lime: "bg-lime-300",
+    cyan: "bg-cyan-300",
+    pink: "bg-pink-300",
+    orange: "bg-orange-300",
+    violet: "bg-violet-300",
+  }[card.accent];
+
+  return (
+    <article className={`rounded-[20px] border bg-[#020617]/72 p-4 ${accentClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-mono text-[11px] font-black uppercase text-slate-500">{card.badge}</p>
+          <h3 className="mt-2 text-xl font-black text-white">{card.title}</h3>
+        </div>
+        <span className={`h-3 w-3 shrink-0 rounded-full ${dotClass}`} />
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-400">{card.description}</p>
+      <div className="mt-4 rounded-xl border border-cyan-300/15 bg-[#07111f]/70 p-3">
+        <MarkdownAnswer text={card.summary} compact />
+      </div>
+      <button
+        type="button"
+        onClick={onExpand}
+        className={`mt-4 min-h-10 w-full rounded-lg border px-3 text-left font-mono text-xs font-black uppercase transition ${
+          isExpanded
+            ? "border-lime-300/60 bg-lime-300 text-[#102000]"
+            : "border-[#1d3558] bg-[#020617]/70 text-cyan-300 hover:border-cyan-300/55"
+        }`}
+      >
+        {isExpanded ? "Reading below" : "Open deeper read"}
+      </button>
+    </article>
+  );
+}
+
+function DailyBriefExpandedRead({ card, onClose }: { card: DailyBriefCard; onClose: () => void }) {
+  const accentClass = {
+    lime: "border-lime-300/40",
+    cyan: "border-cyan-300/40",
+    pink: "border-pink-300/40",
+    orange: "border-orange-300/40",
+    violet: "border-violet-300/40",
+  }[card.accent];
+
+  return (
+    <section className={`rounded-[24px] border bg-[#020617]/88 p-5 ${accentClass}`}>
+      <div className="flex flex-col gap-3 border-b border-[#1d3558] pb-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="font-mono text-xs font-black uppercase text-cyan-300">Deeper read</p>
+          <h2 className="mt-2 text-3xl font-black text-white">{card.title}</h2>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">{card.description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="min-h-10 rounded-lg border border-cyan-300/30 px-4 text-sm font-black text-cyan-200 transition hover:border-cyan-300/70"
+        >
+          Close
+        </button>
+      </div>
+      <div className="mt-4 max-h-[58vh] overflow-y-auto pr-2">
+        <MarkdownAnswer text={card.details} />
+      </div>
+    </section>
   );
 }
 
@@ -4593,6 +4707,7 @@ function SettingsView({
 }) {
   const schedule = scheduleData ?? defaultScheduleConfig();
   const [profileDraft, setProfileDraft] = useState<PersonalizationProfile>(personalizationProfile);
+  const [settingsTab, setSettingsTab] = useState<"profile" | "automation" | "intelligence" | "sources">("profile");
   const healthBySourceKey = useMemo(
     () => new Map(healthData?.sources.map((source) => [source.source_key, source]) ?? []),
     [healthData],
@@ -4658,6 +4773,29 @@ function SettingsView({
         </div>
       </section>
 
+      <div className="grid gap-2 rounded-xl border border-cyan-300/20 bg-[#020617]/70 p-2 md:grid-cols-4">
+        {[
+          ["profile", "Profile"],
+          ["automation", "Automation"],
+          ["intelligence", "Intelligence"],
+          ["sources", "Sources"],
+        ].map(([tab, label]) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setSettingsTab(tab as typeof settingsTab)}
+            className={`min-h-11 rounded-lg px-4 text-sm font-black transition ${
+              settingsTab === tab
+                ? "bg-cyan-300 text-[#061320]"
+                : "border border-[#1d3558] text-slate-300 hover:border-cyan-300/50 hover:text-cyan-200"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {settingsTab === "profile" && (
       <form onSubmit={submitProfile} className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
@@ -4725,14 +4863,14 @@ function SettingsView({
             id="profile-watchlist"
             label="Watchlist"
             value={profileDraft.watchlist}
-            placeholder="AAPL, MSFT, SPY, QQQ"
+            placeholder={DEFAULT_DAILY_WATCHLIST}
             onChange={(value) => updateProfile({ watchlist: value.toUpperCase() })}
           />
           <SettingsTextInput
             id="profile-companies"
             label="Companies"
             value={profileDraft.companies}
-            placeholder="Apple, Nvidia, Tesla"
+            placeholder={DEFAULT_DAILY_COMPANIES}
             onChange={(value) => updateProfile({ companies: value })}
           />
           <SettingsTextInput
@@ -4801,7 +4939,7 @@ function SettingsView({
 
         <div className="mt-5 grid gap-4 xl:grid-cols-3 text-slate-200">
           <CheckboxGroup
-            title="Topics to prioritize"
+            title="Daily brief topics"
             options={topicOptions}
             values={profileDraft.priorityTopics}
             onToggle={(value) => toggleProfileOption("priorityTopics", value)}
@@ -4826,7 +4964,9 @@ function SettingsView({
           <p className="mt-2 text-xs text-slate-500">Saved At {formatDateTime(profileSavedAt)}</p>
         </div>
       </form>
+      )}
 
+      {settingsTab === "automation" && (
       <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
@@ -4886,7 +5026,10 @@ function SettingsView({
         </div>
         {scheduleSaving && <p className="mt-4 text-sm text-slate-400">Saving schedule.</p>}
       </section>
+      )}
 
+      {settingsTab === "intelligence" && (
+      <>
       <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
@@ -4954,7 +5097,11 @@ function SettingsView({
           )}
         </div>
       </section>
+      </>
+      )}
 
+      {settingsTab === "sources" && (
+      <>
       <section className="rounded-xl border border-cyan-300/20 bg-[#07111f]/88 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
@@ -5018,6 +5165,8 @@ function SettingsView({
           API keys stay in the backend environment and are not exposed in the browser. If an answer falls back or a source fails, check backend logs and source health above.
         </p>
       </section>
+      </>
+      )}
     </div>
   );
 }
@@ -5599,14 +5748,15 @@ function defaultScheduleConfig(): DailyScheduleConfig {
 
 function defaultPersonalizationProfile(): PersonalizationProfile {
   return {
-    profileName: "",
-    personalNote: "",
+    profileName: "Daily intelligence",
+    personalNote:
+      "Prioritize concise daily intelligence on world news, geopolitics globally and in the U.S., major AI developments, major tech companies, S&P 500 conditions, and selected stock trends.",
     location: "",
     housingMarkets: "",
-    watchlist: "SPY, QQQ, TLT",
-    companies: "",
-    priorityTopics: ["Markets", "Housing", "U.S. economy"],
-    sectors: "",
+    watchlist: DEFAULT_DAILY_WATCHLIST,
+    companies: DEFAULT_DAILY_COMPANIES,
+    priorityTopics: dailyBriefingDefaultTopics,
+    sectors: "AI, semiconductors, cloud, consumer technology, rates, housing",
     housingInterests: ["Mortgage rates", "Affordability"],
     macroInterests: ["Inflation", "Interest rates", "Fed policy"],
     riskPreference: "balanced",
@@ -5629,10 +5779,10 @@ function loadPersonalizationProfile() {
   }
 
   try {
-    return normalizePersonalizationProfile({
+    return withDailyBriefingDefaults(normalizePersonalizationProfile({
       ...defaultPersonalizationProfile(),
       ...(JSON.parse(storedProfile) as Partial<PersonalizationProfile>),
-    });
+    }));
   } catch {
     return defaultPersonalizationProfile();
   }
@@ -5758,6 +5908,41 @@ function normalizePersonalizationProfile(profile: PersonalizationProfile): Perso
     answerFormat: profile.answerFormat || "brief",
     briefingTime: profile.briefingTime || "08:00",
   };
+}
+
+function withDailyBriefingDefaults(profile: PersonalizationProfile): PersonalizationProfile {
+  const watchlist = profile.watchlist.trim().toUpperCase();
+  const companies = profile.companies.trim();
+  const shouldUpgradeTopics =
+    profile.priorityTopics.length === 0 ||
+    profile.priorityTopics.every((topic) => LEGACY_DEFAULT_TOPICS.includes(topic));
+  return {
+    ...profile,
+    profileName: profile.profileName || "Daily intelligence",
+    personalNote: profile.personalNote || defaultPersonalizationProfile().personalNote,
+    watchlist: !watchlist || watchlist === LEGACY_DEFAULT_WATCHLIST ? DEFAULT_DAILY_WATCHLIST : profile.watchlist,
+    companies: companies || DEFAULT_DAILY_COMPANIES,
+    priorityTopics: shouldUpgradeTopics ? dailyBriefingDefaultTopics : profile.priorityTopics,
+    sectors: profile.sectors || "AI, semiconductors, cloud, consumer technology, rates, housing",
+  };
+}
+
+async function syncBackendPreferences(profile: PersonalizationProfile) {
+  try {
+    await fetch(`${API_BASE_URL}/api/v1/preferences`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        watchlist_tickers: splitList(profile.watchlist || DEFAULT_DAILY_WATCHLIST),
+        preferred_regions: uniqueList([
+          profile.location,
+          ...splitList(profile.housingMarkets),
+        ]),
+      }),
+    });
+  } catch {
+    // Backend sync is best-effort; local personalization still works offline.
+  }
 }
 
 function normalizeListText(value: string) {

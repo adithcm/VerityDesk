@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VerityDesk Daily Brief UI Options</title>
+  <style>
+    :root {
+      --bg: #05070f;
+      --panel: rgba(9, 18, 34, 0.82);
+      --panel-2: rgba(13, 29, 48, 0.72);
+      --line: rgba(97, 232, 255, 0.2);
+      --line-strong: rgba(97, 232, 255, 0.48);
+      --text: #f7fbff;
+      --muted: #9aa8bd;
+      --soft: #c8d6ee;
+      --cyan: #61e8ff;
+      --lime: #bcff5d;
+      --pink: #ff7ac7;
+      --orange: #ffb45d;
+      --violet: #a78bfa;
+      --red: #ff6b6b;
+      --shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 16% 8%, rgba(97, 232, 255, 0.18), transparent 28%),
+        radial-gradient(circle at 86% 12%, rgba(255, 122, 199, 0.12), transparent 24%),
+        linear-gradient(135deg, #05070f 0%, #071421 52%, #05070f 100%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .shell {
+      width: min(1520px, calc(100vw - 36px));
+      margin: 0 auto;
+      padding: 28px 0 44px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 22px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .mark {
+      width: 44px;
+      height: 44px;
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      color: var(--lime);
+      background: linear-gradient(145deg, rgba(97, 232, 255, 0.16), rgba(188, 255, 93, 0.08));
+      box-shadow: 0 0 30px rgba(97, 232, 255, 0.12);
+      font-weight: 900;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: clamp(28px, 3.2vw, 52px); letter-spacing: -0.02em; }
+    .eyebrow {
+      color: var(--cyan);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .muted { color: var(--muted); }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(2, 6, 23, 0.68);
+    }
+
+    .tab, .ghost, .solid {
+      min-height: 40px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      padding: 0 14px;
+      background: rgba(8, 17, 32, 0.86);
+      color: var(--soft);
+      font-weight: 850;
+      transition: 160ms ease;
+    }
+
+    .tab:hover, .ghost:hover { border-color: var(--line-strong); color: var(--text); }
+    .tab.active {
+      background: var(--cyan);
+      border-color: var(--cyan);
+      color: #04111b;
+      box-shadow: 0 0 34px rgba(97, 232, 255, 0.18);
+    }
+    .solid {
+      background: var(--lime);
+      border-color: var(--lime);
+      color: #102000;
+    }
+
+    .option { display: none; }
+    .option.active { display: block; }
+    .glass {
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: linear-gradient(155deg, rgba(7, 17, 31, 0.92), rgba(3, 8, 18, 0.78));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .brief-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brief-head p { max-width: 780px; line-height: 1.55; }
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(97, 232, 255, 0.04);
+    }
+
+    .metric {
+      min-height: 86px;
+      border: 1px solid rgba(97, 232, 255, 0.16);
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(2, 6, 23, 0.55);
+    }
+    .metric strong { display: block; margin-top: 9px; font-size: 23px; }
+    .metric span { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+    .score-hero {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.62fr) minmax(0, 1.38fr);
+      gap: 14px;
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--line);
+      background:
+        radial-gradient(circle at 14% 42%, rgba(188, 255, 93, 0.12), transparent 34%),
+        rgba(97, 232, 255, 0.04);
+    }
+    .score-card {
+      display: grid;
+      grid-template-columns: 132px minmax(0, 1fr);
+      align-items: center;
+      gap: 18px;
+      min-height: 160px;
+      border: 1px solid rgba(97, 232, 255, 0.28);
+      border-radius: 24px;
+      padding: 18px;
+      background:
+        radial-gradient(circle at 28% 50%, rgba(188, 255, 93, 0.15), transparent 36%),
+        linear-gradient(145deg, rgba(97, 232, 255, 0.12), rgba(255, 122, 199, 0.08));
+    }
+    .score-orb {
+      width: 132px;
+      height: 132px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background:
+        radial-gradient(circle, rgba(188, 255, 93, 0.18), transparent 30%),
+        conic-gradient(from 180deg, rgba(97, 232, 255, 0.22), rgba(255, 122, 199, 0.18), rgba(188, 255, 93, 0.24), rgba(97, 232, 255, 0.22));
+      box-shadow: inset 0 0 34px rgba(97, 232, 255, 0.12), 0 0 48px rgba(97, 232, 255, 0.16);
+    }
+    .score-orb strong { display: block; font-size: 38px; color: var(--lime); }
+    .score-copy p { margin-top: 8px; color: var(--soft); line-height: 1.5; }
+    .score-panel {
+      display: grid;
+      gap: 10px;
+      padding: 0;
+      background: transparent;
+    }
+    .score-ranges {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .range {
+      border: 1px solid rgba(97, 232, 255, 0.15);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(2, 6, 23, 0.52);
+    }
+    .range strong { display: block; margin-bottom: 5px; }
+    .range span { color: var(--muted); font-size: 13px; line-height: 1.4; }
+
+    .content { padding: 24px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 18px;
+      background: rgba(3, 8, 18, 0.66);
+    }
+    .card h3 { font-size: 20px; margin-bottom: 12px; }
+    .card p, .card li { color: var(--soft); line-height: 1.5; }
+    .card ul { margin: 12px 0 0; padding-left: 20px; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(97, 232, 255, 0.24);
+      color: var(--soft);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .lime { color: var(--lime); border-color: rgba(188, 255, 93, 0.42); }
+    .pink { color: var(--pink); border-color: rgba(255, 122, 199, 0.42); }
+    .orange { color: var(--orange); border-color: rgba(255, 180, 93, 0.42); }
+    .cyan { color: var(--cyan); border-color: rgba(97, 232, 255, 0.42); }
+    .hidden { display: none; }
+
+    .detail {
+      margin-top: 14px;
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(97, 232, 255, 0.14);
+      background: rgba(97, 232, 255, 0.05);
+    }
+
+    .timeline {
+      position: relative;
+      display: grid;
+      gap: 14px;
+      padding-left: 26px;
+    }
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 8px;
+      top: 6px;
+      bottom: 6px;
+      width: 2px;
+      background: linear-gradient(var(--cyan), var(--pink));
+    }
+    .event { position: relative; }
+    .event::before {
+      content: "";
+      position: absolute;
+      left: -24px;
+      top: 6px;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: var(--lime);
+      box-shadow: 0 0 22px rgba(188, 255, 93, 0.56);
+    }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .quadrant {
+      min-height: 260px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 18px;
+      background: rgba(2, 6, 23, 0.52);
+    }
+    .quadrant h3 { color: var(--cyan); }
+    .story {
+      display: grid;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.035);
+    }
+
+    .layer-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .layer { display: none; }
+    .layer.active { display: grid; gap: 14px; }
+
+    .signal-layout {
+      display: grid;
+      grid-template-columns: minmax(340px, 0.8fr) minmax(0, 1.2fr);
+      gap: 18px;
+    }
+    .dial {
+      display: grid;
+      place-items: center;
+      min-height: 350px;
+      border-radius: 28px;
+      border: 1px solid rgba(97, 232, 255, 0.26);
+      background:
+        radial-gradient(circle, rgba(188, 255, 93, 0.18), transparent 28%),
+        conic-gradient(from 180deg, rgba(97, 232, 255, 0.2), rgba(255, 122, 199, 0.18), rgba(188, 255, 93, 0.22), rgba(97, 232, 255, 0.2));
+    }
+    .dial-core {
+      width: 210px;
+      height: 210px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(2, 6, 23, 0.84);
+      box-shadow: inset 0 0 42px rgba(97, 232, 255, 0.12), 0 0 55px rgba(97, 232, 255, 0.16);
+    }
+    .dial-core strong { display: block; font-size: 38px; color: var(--lime); }
+
+    .source-drawer {
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(2, 6, 23, 0.72);
+    }
+    .source-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 10px 0;
+      border-top: 1px solid rgba(97, 232, 255, 0.12);
+      color: var(--soft);
+    }
+    .source-row:first-child { border-top: 0; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 14px; }
+    .preview-note {
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 900px) {
+      .topbar, .brief-head { flex-direction: column; align-items: stretch; }
+      .score-hero, .status-strip, .grid-3, .grid-2, .matrix, .signal-layout { grid-template-columns: 1fr; }
+      .score-card { grid-template-columns: 1fr; }
+      .shell { width: min(100% - 20px, 1520px); }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="topbar">
+      <div class="brand">
+        <div class="mark">V</div>
+        <div>
+          <p class="eyebrow">Daily brief design lab</p>
+          <h1>Make the brief feel readable, not heavy.</h1>
+        </div>
+      </div>
+      <div class="toolbar" aria-label="Design options">
+        <button class="tab active" data-option="cards">Cards</button>
+        <button class="tab" data-option="timeline">Timeline</button>
+        <button class="tab" data-option="matrix">Matrix</button>
+        <button class="tab" data-option="levels">Levels</button>
+        <button class="tab" data-option="command">Command</button>
+      </div>
+    </div>
+
+    <section id="cards" class="option active glass">
+      <div class="brief-head">
+        <div>
+          <p class="eyebrow">Option 1</p>
+          <h2>Executive Brief Cards</h2>
+          <p class="muted">Best default for daily use: headline first, short bullets second, depth only when expanded.</p>
+        </div>
+        <button class="solid" data-expand-all="cards">Expand All</button>
+      </div>
+      <div class="score-hero">
+        <div class="score-card">
+          <div class="score-orb">
+            <div>
+              <span class="eyebrow">Brief score</span>
+              <strong>72</strong>
+            </div>
+          </div>
+          <div class="score-copy">
+            <p class="eyebrow">Important day</p>
+            <h3>High signal · mixed risk</h3>
+            <p>The day is worth reading closely because geopolitical risk, S&P 500 setup, AI momentum, and your saved watchlist all have meaningful signals.</p>
+            <div class="actions"><button class="ghost" data-toggle="cards-score">Score Ranges</button></div>
+          </div>
+        </div>
+        <div class="score-panel">
+          <div class="status-strip">
+            <div class="metric"><span>Market mood</span><strong>Mixed</strong></div>
+            <div class="metric"><span>Geopolitics</span><strong>High</strong></div>
+            <div class="metric"><span>AI momentum</span><strong>Hot</strong></div>
+            <div class="metric"><span>Watchlist</span><strong>6 names</strong></div>
+          </div>
+          <div id="cards-score" class="score-ranges hidden">
+            <div class="range"><strong>0-30 · Quiet</strong><span>Low urgency. Skim the bottom line and move on.</span></div>
+            <div class="range"><strong>31-60 · Normal</strong><span>Useful daily context. Read the cards that match your interests.</span></div>
+            <div class="range"><strong>61-80 · Important</strong><span>High-signal day. Read the full brief and watch trend changes.</span></div>
+            <div class="range"><strong>81-100 · High attention</strong><span>Material change or elevated uncertainty. Review evidence and follow-ups.</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="content grid-3">
+        <article class="card">
+          <h3>Bottom Line</h3>
+          <p><strong>Risk is elevated</strong>, but tech leadership remains firm. Treat today as a signal check, not a decision day.</p>
+          <div class="badge-row"><span class="badge lime">High signal</span><span class="badge">16 sources</span></div>
+          <button class="ghost" data-toggle="cards-1">Why it matters</button>
+          <div id="cards-1" class="detail hidden">Focus on whether oil/rates confirm the risk move. If S&P 500 breadth weakens while megacap AI names hold, the market may be narrower than it looks.</div>
+        </article>
+        <article class="card">
+          <h3>World News</h3>
+          <p><strong>Global headlines</strong> are summarized separately from conflict and policy risk so the user can see the broad world picture first.</p>
+          <div class="badge-row"><span class="badge cyan">Broad context</span><span class="badge">Top 3 stories</span></div>
+          <button class="ghost" data-toggle="cards-world">Open detail</button>
+          <div id="cards-world" class="detail hidden">Show the major world developments, why they matter, and whether each story is likely to affect markets, policy, technology, or consumer conditions.</div>
+        </article>
+        <article class="card">
+          <h3>Geopolitics</h3>
+          <p><strong>Global tension</strong> gets its own card, separate from general world news, with focus on conflict, sanctions, energy, trade, and alliances.</p>
+          <div class="badge-row"><span class="badge orange">Change: worsening</span></div>
+          <button class="ghost" data-toggle="cards-2">Open detail</button>
+          <div id="cards-2" class="detail hidden">Show the top 2 geopolitical events, likely market or policy channels, and evidence quality. Sources stay collapsed unless requested.</div>
+        </article>
+        <article class="card">
+          <h3>U.S. News</h3>
+          <p><strong>U.S. policy, economy, and regulation</strong> are pulled into one readable card so domestic signals do not get buried.</p>
+          <div class="badge-row"><span class="badge pink">U.S. focus</span><span class="badge">Policy + economy</span></div>
+          <button class="ghost" data-toggle="cards-us">Open detail</button>
+          <div id="cards-us" class="detail hidden">Include federal policy, economic releases, legal/regulatory signals, major domestic events, and why they matter to the user's saved topics.</div>
+        </article>
+        <article class="card">
+          <h3>AI & Major Tech</h3>
+          <p><strong>AI infrastructure demand</strong> is summarized separately from general company news, focused on models, chips, cloud, products, regulation, and adoption.</p>
+          <div class="badge-row"><span class="badge cyan">Strengthening</span></div>
+          <button class="ghost" data-toggle="cards-3">Show sources</button>
+          <div id="cards-3" class="source-drawer hidden">
+            <div class="source-row"><span>Company news feeds</span><span>fresh</span></div>
+            <div class="source-row"><span>Market APIs</span><span>verified</span></div>
+          </div>
+        </article>
+        <article class="card">
+          <h3>Markets & Watchlist</h3>
+          <p><strong>SPY, AAPL, MSFT, NVDA, AMZN, and GOOGL</strong> get concise trend notes, not a long generic market paragraph.</p>
+          <div class="badge-row"><span class="badge lime">Trend focused</span><span class="badge">No buy/sell calls</span></div>
+          <button class="ghost" data-toggle="cards-market">Open detail</button>
+          <div id="cards-market" class="detail hidden">Show S&P 500 setup, rates/yields context, and one-line watchlist trend read-throughs with confidence labels and what would change the view.</div>
+        </article>
+      </div>
+    </section>
+
+    <section id="timeline" class="option glass">
+      <div class="brief-head">
+        <div>
+          <p class="eyebrow">Option 2</p>
+          <h2>Morning Brief Timeline</h2>
+          <p class="muted">Reads like a live intelligence stream. Good when the brief is chronological and event-driven.</p>
+        </div>
+        <button class="solid" data-collapse-group="timeline">Collapse Details</button>
+      </div>
+      <div class="content">
+        <div class="timeline">
+          <article class="event card">
+            <p class="eyebrow">08:00 · generated</p>
+            <h3>Today in 30 seconds</h3>
+            <p>Three stories matter: geopolitical risk, S&P 500 breadth, and AI infrastructure headlines.</p>
+            <div class="actions"><button class="ghost" data-toggle="time-1">2-minute read</button></div>
+            <div id="time-1" class="detail">This opens the deeper version while keeping the main flow uncluttered.</div>
+          </article>
+          <article class="event card">
+            <p class="eyebrow">Market setup</p>
+            <h3>S&P 500 signal check</h3>
+            <p>Watch whether megacap tech strength is broadening or hiding weakness elsewhere.</p>
+            <div class="actions"><button class="ghost" data-toggle="time-2">Related stocks</button></div>
+            <div id="time-2" class="detail hidden">SPY, AAPL, MSFT, NVDA, AMZN, GOOGL are shown with trend chips and source freshness.</div>
+          </article>
+          <article class="event card">
+            <p class="eyebrow">AI and technology</p>
+            <h3>AI capex remains the attention center</h3>
+            <p>Summarize product, model, regulation, chip, cloud, and enterprise adoption news.</p>
+            <div class="actions"><button class="ghost" data-toggle="time-3">Source notes</button></div>
+            <div id="time-3" class="detail hidden">Citations can stay hidden by default and open in this drawer.</div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="matrix" class="option glass">
+      <div class="brief-head">
+        <div>
+          <p class="eyebrow">Option 3</p>
+          <h2>Impact Matrix</h2>
+          <p class="muted">The brief becomes a prioritization tool: what needs attention now versus what can wait.</p>
+        </div>
+        <div class="toolbar">
+          <button class="tab active" data-filter="all">All</button>
+          <button class="tab" data-filter="market">Markets</button>
+          <button class="tab" data-filter="geo">Geo</button>
+          <button class="tab" data-filter="ai">AI</button>
+        </div>
+      </div>
+      <div class="content matrix">
+        <div class="quadrant">
+          <h3>High Impact · Immediate</h3>
+          <div class="story" data-kind="geo"><strong>Geopolitical escalation</strong><span class="muted">Can hit oil, defense, shipping, and risk appetite.</span></div>
+          <div class="story" data-kind="market"><strong>S&P 500 breadth check</strong><span class="muted">Megacap strength may be masking softness.</span></div>
+        </div>
+        <div class="quadrant">
+          <h3>High Impact · Watch Later</h3>
+          <div class="story" data-kind="ai"><strong>AI regulation signals</strong><span class="muted">Important for major tech, chips, and cloud platforms.</span></div>
+          <div class="story" data-kind="market"><strong>Fed commentary</strong><span class="muted">Rates path can reprice housing and equities.</span></div>
+        </div>
+        <div class="quadrant">
+          <h3>Interesting · Low Urgency</h3>
+          <div class="story" data-kind="ai"><strong>Product launches</strong><span class="muted">Track adoption, but avoid hype until usage data appears.</span></div>
+        </div>
+        <div class="quadrant">
+          <h3>Unclear · Needs Evidence</h3>
+          <div class="story" data-kind="geo"><strong>Rumors or thin reports</strong><span class="muted">Keep visible, but label evidence quality clearly.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="levels" class="option glass">
+      <div class="brief-head">
+        <div>
+          <p class="eyebrow">Option 4</p>
+          <h2>Brief With Levels</h2>
+          <p class="muted">Starts tiny, then lets the user choose how deep to go. Strongest option for avoiding text overload.</p>
+        </div>
+      </div>
+      <div class="content">
+        <div class="layer-tabs">
+          <button class="tab active" data-layer="thirty">30 seconds</button>
+          <button class="tab" data-layer="two">2 minutes</button>
+          <button class="tab" data-layer="deep">Deep dive</button>
+          <button class="tab" data-layer="sources">Sources</button>
+        </div>
+        <div id="thirty" class="layer active">
+          <article class="card"><h3>Today in 30 seconds</h3><ul><li><strong>Risk:</strong> geopolitics is the main uncertainty.</li><li><strong>Markets:</strong> S&P 500 leadership depends on megacap tech.</li><li><strong>AI:</strong> infrastructure demand remains the dominant theme.</li></ul></article>
+        </div>
+        <div id="two" class="layer">
+          <article class="card"><h3>2-minute version</h3><p>Expands each top signal into why it matters, what changed, and what would confirm or weaken the trend.</p></article>
+          <article class="card"><h3>Watchlist read-through</h3><p>SPY, AAPL, MSFT, NVDA, AMZN, and GOOGL get concise trend notes instead of long paragraphs.</p></article>
+        </div>
+        <div id="deep" class="layer">
+          <article class="card"><h3>Deep dive</h3><p>Full analyst memo with evidence, opposing signals, and specific data gaps. This is where the wall of text can live without dominating the default page.</p></article>
+        </div>
+        <div id="sources" class="layer">
+          <div class="source-drawer">
+            <div class="source-row"><span>Tavily web research</span><span>primary current layer</span></div>
+            <div class="source-row"><span>FRED / market APIs</span><span>verification layer</span></div>
+            <div class="source-row"><span>Stored ingestion</span><span>context layer</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="command" class="option glass">
+      <div class="brief-head">
+        <div>
+          <p class="eyebrow">Option 5</p>
+          <h2>Command Center Signals</h2>
+          <p class="muted">Most visual and attention-grabbing: starts with signals, then opens structured detail.</p>
+        </div>
+        <button class="solid" data-toggle="command-sources">View Evidence</button>
+      </div>
+      <div class="content signal-layout">
+        <div class="dial">
+          <div class="dial-core">
+            <div>
+              <span class="eyebrow">Brief score</span>
+              <strong>72</strong>
+              <span class="muted">High signal · mixed risk</span>
+            </div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <article class="card"><h3>Market Mood</h3><p><strong>Mixed.</strong> AI leaders are firm, but breadth needs confirmation.</p><div class="badge-row"><span class="badge cyan">Watch SPY</span></div></article>
+          <article class="card"><h3>Geo Risk</h3><p><strong>Elevated.</strong> Read-through is energy, defense, shipping, and inflation expectations.</p><div class="badge-row"><span class="badge orange">High attention</span></div></article>
+          <article class="card"><h3>AI Momentum</h3><p><strong>Strengthening.</strong> Track model launches, chip demand, cloud capex, and regulation.</p><div class="badge-row"><span class="badge lime">Strong</span></div></article>
+          <article class="card"><h3>Personal Relevance</h3><p><strong>High.</strong> Matches saved topics: world, U.S., geopolitics, AI, S&P 500, major tech.</p><div class="badge-row"><span class="badge pink">Personalized</span></div></article>
+        </div>
+      </div>
+      <div id="command-sources" class="content hidden">
+        <div class="source-drawer">
+          <div class="source-row"><span>16 citations hidden by default</span><span>open on demand</span></div>
+          <div class="source-row"><span>API statistics</span><span>shown as charts, not prose</span></div>
+          <div class="source-row"><span>Agent synthesis</span><span>markdown summary</span></div>
+        </div>
+      </div>
+    </section>
+
+    <p class="preview-note">Recommended direction: combine Option 4's levels with Option 5's visual signal header. That keeps the first screen light while preserving depth behind one click.</p>
+  </main>
+
+  <script>
+    const tabs = document.querySelectorAll("[data-option]");
+    const options = document.querySelectorAll(".option");
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        tabs.forEach((item) => item.classList.remove("active"));
+        options.forEach((item) => item.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById(tab.dataset.option).classList.add("active");
+      });
+    });
+
+    document.querySelectorAll("[data-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.getElementById(button.dataset.toggle).classList.toggle("hidden");
+      });
+    });
+
+    document.querySelectorAll("[data-expand-all]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(`#${button.dataset.expandAll} .hidden`).forEach((item) => item.classList.remove("hidden"));
+      });
+    });
+
+    document.querySelectorAll("[data-collapse-group]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(`#${button.dataset.collapseGroup} .detail`).forEach((item) => item.classList.add("hidden"));
+      });
+    });
+
+    document.querySelectorAll("[data-filter]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const filter = button.dataset.filter;
+        document.querySelectorAll("[data-filter]").forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        document.querySelectorAll(".story").forEach((story) => {
+          story.style.display = filter === "all" || story.dataset.kind === filter ? "grid" : "none";
+        });
+      });
+    });
+
+    document.querySelectorAll("[data-layer]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll("[data-layer]").forEach((item) => item.classList.remove("active"));
+        document.querySelectorAll(".layer").forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        document.getElementById(button.dataset.layer).classList.add("active");
+      });
+    });
+  </script>
+</body>
+</html>
