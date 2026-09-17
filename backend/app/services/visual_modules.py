@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import EconomicObservation, Report, SourceHealth, WatchItem
@@ -16,7 +16,9 @@ from app.services.ingestion_status import calculate_freshness_status, format_dat
 
 
 HOUSING_SERIES_IDS = {"MORTGAGE30US", "FHFAHPI", "MSPUS", "PERMIT", "HOUST", "HSN1F"}
+HOUSING_SERIES_PREFIXES = ("FREDDIE_PMMS:", "FHFA_HPI:", "CENSUS:HOUSING:", "FRED:HOUSING:")
 MACRO_SERIES_IDS = {"UNRATE", "CPIAUCSL", "FEDFUNDS", "DGS10", "RSAFS", "UMCSENT", "PAYEMS"}
+MACRO_SERIES_PREFIXES = ("FRED:MACRO:", "FRED:RATES:", "FRED:LABOR:", "CENSUS:ECONOMIC:")
 MARKET_SOURCE_KEYS = {"alpha-vantage", "finnhub", "newsapi", "bbc-news-rss", "gdelt-cloud"}
 COMPANY_SOURCE_KEYS = {"sec-edgar-rss", "sec-data-apis", "alpha-vantage", "finnhub", "newsapi"}
 
@@ -58,16 +60,18 @@ def list_source_health(session: Session) -> list[SourceHealth]:
 
 
 def latest_observations_by_series(session: Session) -> dict[str, EconomicObservation]:
+    latest_ids = (
+        select(func.max(EconomicObservation.id).label("latest_id"))
+        .group_by(EconomicObservation.series_id)
+        .subquery()
+    )
     observations = session.scalars(
         select(EconomicObservation)
         .options(joinedload(EconomicObservation.source))
+        .join(latest_ids, EconomicObservation.id == latest_ids.c.latest_id)
         .order_by(desc(EconomicObservation.retrieved_at), desc(EconomicObservation.released_at), desc(EconomicObservation.id))
-        .limit(120)
     ).all()
-    latest: dict[str, EconomicObservation] = {}
-    for observation in observations:
-        latest.setdefault(observation.series_id, observation)
-    return latest
+    return {observation.series_id: observation for observation in observations}
 
 
 def list_enabled_watch_items(session: Session) -> list[WatchItem]:
@@ -108,8 +112,16 @@ def build_housing_module(
     observations: dict[str, EconomicObservation],
 ) -> VisualModule:
     report = reports.get("housing")
-    housing_observations = [observation for series_id, observation in observations.items() if series_id in HOUSING_SERIES_IDS]
-    mortgage = observations.get("MORTGAGE30US")
+    housing_observations = [
+        observation
+        for series_id, observation in observations.items()
+        if series_matches(series_id, HOUSING_SERIES_IDS, HOUSING_SERIES_PREFIXES)
+    ]
+    mortgage = (
+        observations.get("FREDDIE_PMMS:30Y_FIXED")
+        or observations.get("MORTGAGE30US")
+        or observations.get("FREDDIE_PMMS:15Y_FIXED")
+    )
 
     return VisualModule(
         id="housing",
@@ -122,7 +134,7 @@ def build_housing_module(
         updated_at=format_datetime(latest_observation_time(housing_observations) or (report.as_of if report else None)),
         chart=chart_from_observations(housing_observations),
         stats=[stat_from_observation(observation) for observation in housing_observations[:4]],
-        sources=sources_from_health(filter_health(health_rows, {"fred-api", "freddie-mac-pmms", "fhfa-house-price-index", "us-census-economic-indicators"})),
+        sources=sources_from_health(filter_health(health_rows, {"fred-api", "freddie-mac-pmms", "fhfa-hpi", "census-economic-indicators"})),
         related_report_id=report.id if report else None,
         suggested_prompt="Explain the housing visual using my saved location and call out affordability, rates, inventory, and data gaps.",
     )
@@ -191,7 +203,11 @@ def build_macro_module(
     observations: dict[str, EconomicObservation],
 ) -> VisualModule:
     report = reports.get("macro")
-    macro_observations = [observation for series_id, observation in observations.items() if series_id in MACRO_SERIES_IDS]
+    macro_observations = [
+        observation
+        for series_id, observation in observations.items()
+        if series_matches(series_id, MACRO_SERIES_IDS, MACRO_SERIES_PREFIXES)
+    ]
     headline_observation = observations.get("FEDFUNDS") or observations.get("DGS10") or observations.get("UNRATE")
 
     return VisualModule(
@@ -217,6 +233,10 @@ def count_health(health_rows: list[SourceHealth], status: str) -> int:
 
 def filter_health(health_rows: list[SourceHealth], source_keys: set[str]) -> list[SourceHealth]:
     return [health for health in health_rows if health.source_key in source_keys]
+
+
+def series_matches(series_id: str, exact_ids: set[str], prefixes: tuple[str, ...]) -> bool:
+    return series_id in exact_ids or any(series_id.startswith(prefix) for prefix in prefixes)
 
 
 def sources_from_health(health_rows: list[SourceHealth], *, limit: int = 4) -> list[VisualSource]:
@@ -253,7 +273,7 @@ def chart_from_observations(observations: list[EconomicObservation]) -> VisualCh
 
 def stat_from_observation(observation: EconomicObservation) -> VisualStat:
     return VisualStat(
-        label=observation.series_id,
+        label=compact_observation_label(observation),
         value=format_observation_value(observation),
         detail=f"{observation.series_name} / {observation.period}",
     )
@@ -263,7 +283,25 @@ def format_observation_value(observation: EconomicObservation | None) -> str:
     if observation is None:
         return "--"
     value = f"{observation.value:.2f}".rstrip("0").rstrip(".")
-    return f"{value}{observation.unit or ''}"
+    unit = observation.unit or ""
+    if unit.lower() in {"percent", "%"}:
+        return f"{value}%"
+    if unit.lower() == "index":
+        return value
+    return f"{value} {unit}".strip()
+
+
+def compact_observation_label(observation: EconomicObservation) -> str:
+    name = observation.series_name or observation.series_id
+    replacements = {
+        "Freddie Mac PMMS - ": "",
+        "FHFA All-Transactions HPI - ": "HPI - ",
+        "30-Year Fixed-Rate Mortgage": "30Y mortgage",
+        "15-Year Fixed-Rate Mortgage": "15Y mortgage",
+    }
+    for old, new in replacements.items():
+        name = name.replace(old, new)
+    return name[:42]
 
 
 def latest_observation_time(observations: list[EconomicObservation]) -> datetime | None:
@@ -284,9 +322,29 @@ def latest_watch_time(watch_items: list[WatchItem]) -> datetime | None:
 def summary_from_report(report: Report | None, fallback: str) -> str:
     if report is None:
         return fallback
-    return report.summary or first_body_sentence(report.body) or fallback
+    return clean_visual_summary(report.summary or first_body_sentence(report.body)) or fallback
 
 
 def first_body_sentence(body: str) -> str:
     first_line = next((line.strip() for line in body.splitlines() if line.strip()), "")
-    return first_line[:260]
+    if first_line.startswith("#"):
+        non_heading = next((line.strip() for line in body.splitlines() if line.strip() and not line.strip().startswith("#")), "")
+        first_line = non_heading or first_line
+    return clean_visual_summary(first_line)[:260]
+
+
+def clean_visual_summary(value: str | None) -> str:
+    if not value:
+        return ""
+    lines = []
+    for line in value.splitlines():
+        clean = line.strip()
+        if not clean:
+            continue
+        clean = clean.lstrip("-* ").strip()
+        if clean.startswith("#") or clean.lower().startswith("coordinator selected"):
+            continue
+        lines.append(clean)
+        if len(" ".join(lines)) > 260:
+            break
+    return " ".join(lines).replace("**", "").strip()[:260]

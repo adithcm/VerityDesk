@@ -1822,7 +1822,7 @@ function HomeVisualModuleCard({ module, onOpen }: { module: HomeVisualModule; on
         <p className="mt-1 text-xs font-bold uppercase tracking-normal text-slate-500">{module.label}</p>
       </div>
       <MiniBarChart points={module.points} accent={module.accent} />
-      <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-400">{module.summary}</p>
+      <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-400">{cleanVisualSummary(module.summary)}</p>
       <p className="mt-4 font-mono text-[11px] font-black uppercase text-slate-500 group-hover:text-cyan-200">Open detail</p>
     </button>
   );
@@ -1851,7 +1851,7 @@ function VisualDrillDownView({
         <div>
           <p className="font-mono text-xs font-black uppercase text-slate-500">Visual detail / {module.status}</p>
           <h2 className="mt-2 text-4xl font-black leading-none text-white">{module.title}</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">{module.summary}</p>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">{cleanVisualSummary(module.summary)}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -2318,7 +2318,7 @@ function buildHomeVisualModules({
       title: "Daily Read",
       value: latestByType.has("daily_briefing") ? "Ready" : "Open",
       label: scheduleData?.enabled ? "Auto brief" : "Manual brief",
-      summary: latestByType.get("daily_briefing")?.summary ?? "A personal briefing will appear after the daily refresh and brief generation run.",
+      summary: cleanVisualSummary(latestByType.get("daily_briefing")?.summary ?? latestByType.get("daily_briefing")?.body) ?? "A personal briefing will appear after the daily refresh and brief generation run.",
       status: latestByType.has("daily_briefing") ? "Ready" : "Needs brief",
       accent: "lime",
       points: normalizeSparkPoints([freshCount, totalSources, reports.length, scheduleData?.enabled ? 8 : 3, needsCheck]),
@@ -2334,10 +2334,10 @@ function buildHomeVisualModules({
     {
       id: "housing",
       title: "Housing",
-      value: location === "Not set" ? "Set area" : "Local",
-      label: location === "Not set" ? "Location needed" : location,
-      summary: latestByType.get("housing")?.summary ?? "Tracks rates, affordability, housing markets, and local pressure points from your saved area.",
-      status: latestByType.has("housing") ? "Ready" : "No local data",
+      value: latestByType.has("housing") ? "Ready" : location === "Not set" ? "Set area" : "Local",
+      label: latestByType.has("housing") ? "latest housing report" : location === "Not set" ? "Location needed" : location,
+      summary: cleanVisualSummary(latestByType.get("housing")?.summary ?? latestByType.get("housing")?.body) ?? "Tracks rates, affordability, housing markets, and local pressure points from your saved area.",
+      status: latestByType.has("housing") ? "Ready" : "Needs data",
       accent: "cyan",
       points: normalizeSparkPoints([2, profile.housingMarkets ? 7 : 3, freshCount, 5, needsCheck + 2]),
       updatedAt: latestByType.get("housing")?.as_of ?? latestByType.get("housing")?.created_at ?? null,
@@ -2354,7 +2354,7 @@ function buildHomeVisualModules({
       title: "Markets",
       value: freshCount > 0 ? String(freshCount) : "--",
       label: "fresh sources",
-      summary: latestByType.get("market_strategy")?.summary ?? "Shows broad risk, rates, volatility, commodities, and sector tone from connected feeds.",
+      summary: cleanVisualSummary(latestByType.get("market_strategy")?.summary ?? latestByType.get("market_strategy")?.body) ?? "Shows broad risk, rates, volatility, commodities, and sector tone from connected feeds.",
       status: latestByType.has("market_strategy") ? "Ready" : "Needs refresh",
       accent: "pink",
       points: normalizeSparkPoints([freshCount, needsCheck + 1, totalSources, reports.length + 2, 6]),
@@ -2370,9 +2370,9 @@ function buildHomeVisualModules({
     {
       id: "companies",
       title: "Companies",
-      value: watchlist === "Not set" ? "--" : String(splitList(profile.watchlist).length),
-      label: watchlist === "Not set" ? "watchlist empty" : "tracked tickers",
-      summary: latestByType.get("company_research")?.summary ?? "Surfaces news, filings, catalysts, and watchlist changes for saved companies.",
+      value: latestByType.has("company_research") ? "Ready" : watchlist === "Not set" ? "--" : String(splitList(profile.watchlist).length),
+      label: latestByType.has("company_research") ? "latest company report" : watchlist === "Not set" ? "watchlist empty" : "tracked tickers",
+      summary: cleanVisualSummary(latestByType.get("company_research")?.summary ?? latestByType.get("company_research")?.body) ?? "Surfaces news, filings, catalysts, and watchlist changes for saved companies.",
       status: watchlist === "Not set" ? "Needs setup" : latestByType.has("company_research") ? "Ready" : "Watching",
       accent: "orange",
       points: normalizeSparkPoints([splitList(profile.watchlist).length + 1, reports.length, freshCount, 3, needsCheck + 1]),
@@ -2388,10 +2388,10 @@ function buildHomeVisualModules({
     {
       id: "macro",
       title: "Macro",
-      value: totalSources > 0 ? String(totalSources) : "--",
-      label: "source map",
-      summary: latestByType.get("macro")?.summary ?? "Connects inflation, rates, jobs, consumer, credit, and policy signals into one macro pulse.",
-      status: latestByType.has("macro") ? "Ready" : "Quiet",
+      value: latestByType.has("macro") ? "Ready" : totalSources > 0 ? String(totalSources) : "--",
+      label: latestByType.has("macro") ? "latest macro report" : "source map",
+      summary: cleanVisualSummary(latestByType.get("macro")?.summary ?? latestByType.get("macro")?.body) ?? "Connects inflation, rates, jobs, consumer, credit, and policy signals into one macro pulse.",
+      status: latestByType.has("macro") ? "Ready" : "Needs data",
       accent: "violet",
       points: normalizeSparkPoints([totalSources, freshCount, needsCheck, profile.macroInterests.length + 2, reports.length + 1]),
       updatedAt: latestByType.get("macro")?.as_of ?? latestByType.get("macro")?.created_at ?? null,
@@ -2439,6 +2439,21 @@ function mapVisualModuleFromApi(module: VisualModulesApiResponse["modules"][numb
 
 function normalizeSparkPoints(points: number[]) {
   return points.map((point) => Math.max(1, Math.round(point)));
+}
+
+function cleanVisualSummary(value: string | null | undefined) {
+  const lines = cleanAnswerText(value)
+    ?.split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("#"))
+    .filter((line) => !line.toLowerCase().startsWith("coordinator selected"))
+    .map((line) => line.replace(/^[-*]\s+/, "").replaceAll("**", "").trim())
+    .filter(Boolean);
+  if (!lines?.length) {
+    return null;
+  }
+  return lines.join(" ").slice(0, 260);
 }
 
 function latestReportByType(reports: ReportResponse[]) {
