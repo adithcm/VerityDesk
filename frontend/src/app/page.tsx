@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, ReactNode, useEffect, useMemo, useState } from "react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -957,6 +957,7 @@ export default function Home() {
 
     setAgentLoading(true);
     setAgentError(null);
+    setAgentQuery("");
     const inferredContext = inferAgentContext(trimmedQuery, personalizationProfile);
     const requestContext = useManualContext
       ? {
@@ -970,7 +971,6 @@ export default function Home() {
     setAgentIntent(requestContext.intent);
     setAgentDomain(requestContext.domain);
     setAgentTicker(requestContext.tickers.join(", "));
-    setAgentQuery(trimmedQuery);
     setActiveView("Agent Chat");
     const sessionBeforeRun = ensureActiveChatSession(chatSessions, activeChatSessionId, trimmedQuery);
     const userMessage: ChatMessage = {
@@ -2455,43 +2455,76 @@ function calculateDailyBriefScore(report: ReportResponse): DailyBriefScore {
   const signalLabel = reportMetadataText(report, "signal_label") ?? "";
   const changeLabel = reportMetadataText(report, "change_label") ?? "";
   const citationCount = report.citations.length;
-  const confidenceScore = report.confidence === "high" ? 32 : report.confidence === "medium" ? 24 : 12;
-  const sourceScore = Math.min(24, citationCount * 2);
-  const signalScore = signalLabel === "High Signal" ? 22 : signalLabel === "Developing" ? 14 : signalLabel === "Watch Later" ? 8 : 4;
-  const changeScore = /worsening|improving|mixed|strengthening/i.test(changeLabel) ? 12 : 6;
-  const personalizationScore = Math.min(10, (report.tickers.length + report.domains.length) * 2);
-  const score = Math.max(0, Math.min(100, confidenceScore + sourceScore + signalScore + changeScore + personalizationScore));
+  const bodyText = `${report.title} ${report.summary ?? ""} ${report.body}`.toLowerCase();
+  const confidenceScore = report.confidence === "high" ? 16 : report.confidence === "medium" ? 11 : 6;
+  const sourceScore = Math.min(18, Math.round(citationCount * 1.2));
+  const signalScore = signalLabel === "High Signal" ? 16 : signalLabel === "Developing" ? 10 : signalLabel === "Watch Later" ? 5 : 2;
+  const changeScore = /worsening|improving|strengthening/i.test(changeLabel) ? 8 : /mixed/i.test(changeLabel) ? 5 : 3;
+  const personalizationScore = Math.min(8, (report.tickers.length + report.domains.length) * 1.5);
+  const severeEventScore = severeDailyBriefSignal(bodyText);
+  const rawScore = Math.round(confidenceScore + sourceScore + signalScore + changeScore + personalizationScore + severeEventScore);
+  const score = Math.max(0, Math.min(100, rawScore));
+  const category = dailyBriefScoreCategory(score);
+  const scoreReason = [
+    `${titleCase(report.confidence)} confidence`,
+    `${citationCount} source${citationCount === 1 ? "" : "s"}`,
+    signalLabel || "latest signal",
+    changeLabel || "latest change state",
+    report.tickers.length || report.domains.length ? "matches saved topics/watchlist" : "general relevance",
+    severeEventScore ? "contains severe/high-impact event language" : "no world-changing severity signal",
+    rawScore > 100 ? "score capped at 100" : null,
+  ].filter(Boolean).join(" · ");
 
-  if (score <= 30) {
-    return {
-      score,
-      label: "Quiet day",
-      tone: "Low urgency",
-      reason: "The brief has limited signal or thinner source support today. Skim the bottom line and only open cards that match your interests.",
-    };
-  }
-  if (score <= 60) {
-    return {
-      score,
-      label: "Normal day",
-      tone: "Useful context",
-      reason: "The brief has enough current evidence for a normal daily read. Focus on the cards tied to your saved topics and watchlist.",
-    };
-  }
-  if (score <= 80) {
-    return {
-      score,
-      label: "Important day",
-      tone: "High signal - mixed risk",
-      reason: "Multiple current signals are relevant to your topics, watchlist, or macro setup. Read the cards and watch for trend changes.",
-    };
-  }
   return {
     score,
-    label: "High attention day",
-    tone: "Material change likely",
-    reason: "The brief is flagging unusually strong source support, high relevance, or meaningful change. Review the deeper reads and citations.",
+    label: category.label,
+    tone: category.tone,
+    reason: `${category.detail} Why: ${scoreReason}.`,
   };
+}
+
+function severeDailyBriefSignal(text: string) {
+  const severeTerms = [
+    "invasion",
+    "missile strike",
+    "war declared",
+    "major escalation",
+    "financial crisis",
+    "market crash",
+    "bank failure",
+    "emergency rate cut",
+    "emergency meeting",
+    "default",
+    "sovereign crisis",
+    "major cyberattack",
+    "pandemic",
+    "nuclear",
+    "constitutional crisis",
+  ];
+  const moderateTerms = ["strike", "sanction", "tariff", "shutdown", "rate shock", "oil shock", "ceasefire", "antitrust"];
+  if (severeTerms.some((term) => text.includes(term))) {
+    return 28;
+  }
+  if (moderateTerms.some((term) => text.includes(term))) {
+    return 12;
+  }
+  return 0;
+}
+
+function dailyBriefScoreCategory(score: number) {
+  const categories = [
+    { max: 9, label: "Almost no signal", tone: "Background noise", detail: "Very little in the brief appears urgent or well-supported." },
+    { max: 19, label: "Very quiet", tone: "Low attention", detail: "A calm day with limited personally relevant signal." },
+    { max: 29, label: "Quiet", tone: "Skim only", detail: "Useful context exists, but nothing demands much attention." },
+    { max: 39, label: "Light activity", tone: "Normal scan", detail: "Some concrete updates are present, but impact appears limited." },
+    { max: 49, label: "Normal day", tone: "Worth reading", detail: "A standard daily brief with several relevant items." },
+    { max: 59, label: "Active day", tone: "Read the cards", detail: "Multiple specific items are relevant enough to review." },
+    { max: 69, label: "Important", tone: "Watch trend changes", detail: "The brief has strong source support or meaningful change." },
+    { max: 79, label: "High signal", tone: "Pay attention", detail: "Several developments may affect your saved topics or broader market context." },
+    { max: 89, label: "Very high signal", tone: "Review deeply", detail: "Major developments or elevated uncertainty deserve a deeper read." },
+    { max: 100, label: "World-changing", tone: "Exceptional event", detail: "Reserved for severe global, market, policy, or systemic events with strong evidence." },
+  ];
+  return categories.find((category) => score <= category.max) ?? categories[categories.length - 1];
 }
 
 function buildDailyBriefCards(report: ReportResponse): DailyBriefCard[] {
@@ -2623,6 +2656,35 @@ function parseMarkdownSections(text: string) {
   return sections;
 }
 
+function parseMarkdownSectionList(text: string) {
+  const sections: Array<{ title: string; body: string }> = [];
+  const lines = text.split("\n");
+  let currentTitle = "Answer";
+  let currentLines: string[] = [];
+  let sawHeading = false;
+
+  function flushSection() {
+    const body = currentLines.join("\n").trim();
+    if (body) {
+      sections.push({ title: currentTitle, body });
+    }
+  }
+
+  lines.forEach((line) => {
+    const heading = markdownHeadingText(line);
+    if (heading) {
+      flushSection();
+      currentTitle = heading.replace(/:$/, "").trim();
+      currentLines = [];
+      sawHeading = true;
+    } else {
+      currentLines.push(line);
+    }
+  });
+  flushSection();
+  return sawHeading ? sections : [{ title: "Answer", body: text }];
+}
+
 function findSectionContent(sections: Map<string, string>, matchers: string[]) {
   for (const [title, content] of Array.from(sections.entries())) {
     if (matchers.some((matcher) => title.includes(matcher.toLowerCase()))) {
@@ -2657,6 +2719,9 @@ function buildDailyBriefingPrompt(profile: PersonalizationProfile) {
     `Default market watchlist if the user has not overridden it: ${watchlist}.`,
     `Default major company focus if the user has not overridden it: ${companies}.`,
     "Prioritize main world news, geopolitical risk globally and in the U.S., major AI news, major tech company developments, S&P 500 setup, watchlist stock trends, rates/macro, housing, and the clearest risks.",
+    "Do not stay high-level. Each news section must name the specific events taking place today or recently, including the people, companies, governments, countries, products, policies, data releases, or conflicts involved when the evidence supports it.",
+    "For World News, Geopolitics, U.S. News, and AI And Major Tech, include 2-4 concrete high-priority events per section when available. For each event, explain what happened, why it matters, who is affected, and what to watch next.",
+    "If a category has no specific current event in the evidence, say that clearly and explain the data gap instead of filling it with generic trend language.",
     "If a setting is blank, use the selected/default topics to create a useful general brief instead of asking the user for more information.",
     "Use this exact structure: ## Bottom Line, ## World News, ## Geopolitics, ## U.S. News, ## AI And Major Tech, ## Markets And Watchlist, ## What To Watch, ## Data Gaps.",
     "Use bullets under each section. Bold the key terms, tickers, companies, places, and numbers that matter.",
@@ -3355,10 +3420,16 @@ function DailyBriefScorePanel({ report, score }: { report: ReportResponse; score
           <details className="mt-4">
             <summary className="cursor-pointer text-sm font-black text-cyan-200">Score Ranges</summary>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <ScoreRangeCard range="0-30" label="Quiet" detail="Low urgency. Skim the bottom line and move on." />
-              <ScoreRangeCard range="31-60" label="Normal" detail="Useful daily context. Read the cards that match your interests." />
-              <ScoreRangeCard range="61-80" label="Important" detail="High-signal day. Read the full brief and watch trend changes." />
-              <ScoreRangeCard range="81-100" label="High attention" detail="Material change or elevated uncertainty. Review evidence and follow-ups." />
+              <ScoreRangeCard range="0-9" label="Almost no signal" detail="Very little appears urgent or well-supported." />
+              <ScoreRangeCard range="10-19" label="Very quiet" detail="Low attention day with limited personal relevance." />
+              <ScoreRangeCard range="20-29" label="Quiet" detail="Skim the bottom line and only open relevant cards." />
+              <ScoreRangeCard range="30-39" label="Light activity" detail="Some concrete updates, but limited impact." />
+              <ScoreRangeCard range="40-49" label="Normal day" detail="Standard daily read with several relevant items." />
+              <ScoreRangeCard range="50-59" label="Active day" detail="Multiple items are worth reviewing." />
+              <ScoreRangeCard range="60-69" label="Important" detail="Strong support or meaningful change." />
+              <ScoreRangeCard range="70-79" label="High signal" detail="Developments may affect saved topics or market context." />
+              <ScoreRangeCard range="80-89" label="Very high signal" detail="Major developments or elevated uncertainty." />
+              <ScoreRangeCard range="90-100" label="World-changing" detail="Reserved for severe global, market, policy, or systemic events." />
             </div>
           </details>
         </div>
@@ -3431,7 +3502,7 @@ function DailyBriefInsightCard({
             : "border-[#1d3558] bg-[#020617]/70 text-cyan-300 hover:border-cyan-300/55"
         }`}
       >
-        {isExpanded ? "Reading below" : "Open deeper read"}
+        {isExpanded ? "Reading above" : "Open deeper read"}
       </button>
     </article>
   );
@@ -4119,10 +4190,16 @@ function AgentChatView({
         explanation: "Using your Advanced overrides for this request.",
       }
     : inferredContext;
+  function handleAgentQueryKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-      <aside className="rounded-[20px] border border-cyan-300/20 bg-[#07111f]/88 p-4">
+    <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
+      <aside className="max-h-[78vh] overflow-y-auto rounded-[20px] border border-cyan-300/20 bg-[#07111f]/88 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="font-mono text-xs font-black uppercase text-cyan-300">Chats</p>
@@ -4160,7 +4237,7 @@ function AgentChatView({
         </div>
       </aside>
 
-      <section className="rounded-[20px] border border-cyan-300/20 bg-[#07111f]/92 p-4">
+      <section className="grid max-h-[82vh] min-h-[720px] grid-rows-[auto_minmax(0,1fr)_auto_auto_auto] rounded-[20px] border border-cyan-300/20 bg-[#07111f]/92 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="font-mono text-xs font-black uppercase text-lime-300">Agent Chat</p>
@@ -4170,7 +4247,7 @@ function AgentChatView({
           {agentResponse && <NeonChip>Confidence: {agentResponse.confidence}</NeonChip>}
         </div>
 
-        <div className="mt-5 grid gap-3">
+        <div className="mt-5 grid content-start gap-3 overflow-y-auto rounded-[18px] border border-[#1d3558] bg-[#020617]/45 p-4">
           {activeSession?.messages.length ? (
             activeSession.messages.map((message) => (
               <ChatMessageBubble key={message.id} message={message} />
@@ -4186,7 +4263,7 @@ function AgentChatView({
           {agentError && <p className="rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-200">{agentError}</p>}
         </div>
 
-        <form onSubmit={submitAgentQuery} className="mt-5 rounded-[18px] border border-cyan-300/25 bg-[#020617]/86 p-4">
+        <form onSubmit={submitAgentQuery} className="mt-4 rounded-[18px] border border-cyan-300/25 bg-[#020617]/86 p-4">
           <label className="sr-only" htmlFor="agent-query">Question</label>
           <textarea
             id="agent-query"
@@ -4195,8 +4272,9 @@ function AgentChatView({
               setAgentQuery(event.target.value);
               setManualAgentContext(false);
             }}
+            onKeyDown={handleAgentQueryKeyDown}
             placeholder="Ask a follow-up or start a new question..."
-            className="min-h-28 w-full resize-y border-0 bg-transparent text-base leading-7 text-white outline-none placeholder:text-slate-600"
+            className="max-h-40 min-h-20 w-full resize-y border-0 bg-transparent text-base leading-7 text-white outline-none placeholder:text-slate-600"
           />
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#1d3558] pt-4">
             <div className="flex flex-wrap gap-2">
@@ -4284,7 +4362,7 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[86%] rounded-[18px] border p-4 ${
+        className={`max-w-[92%] rounded-[18px] border p-4 ${
           isUser
             ? "border-lime-300/25 bg-lime-300/10 text-slate-100"
             : "border-cyan-300/20 bg-[#020617]/78 text-slate-300"
@@ -4292,9 +4370,32 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
       >
         <p className="font-mono text-[10px] font-black uppercase text-slate-500">{isUser ? "You" : "VerityDesk"} / {formatDateTime(message.createdAt)}</p>
         <div className="mt-2">
-          <MarkdownAnswer text={message.content} />
+          {isUser ? <MarkdownAnswer text={message.content} /> : <AssistantChatAnswer text={message.content} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AssistantChatAnswer({ text }: { text: string }) {
+  const sections = parseMarkdownSectionList(cleanAnswerText(text) ?? text);
+
+  if (sections.length <= 1) {
+    return <MarkdownAnswer text={text} />;
+  }
+
+  return (
+    <div className="grid gap-3">
+      {sections.map((section, index) => (
+        <section key={`${section.title}-${index}`} className="rounded-xl border border-cyan-300/15 bg-[#07111f]/70 p-3">
+          <h3 className="font-mono text-xs font-black uppercase text-cyan-200">
+            {renderInlineMarkdown(section.title)}
+          </h3>
+          <div className="mt-2">
+            <MarkdownAnswer text={section.body} compact />
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

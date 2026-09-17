@@ -146,7 +146,10 @@ def build_prompt(agent_name: str, instructions: str, evidence: str) -> str:
     return (
         f"You are {agent_name}, a careful research agent for a local market intelligence app.\n"
         "Use only the provided evidence. Do not invent facts. Do not give direct buy, sell, or hold instructions. "
-        "Keep the answer concise and include uncertainty when evidence is thin. For final synthesis, write clean Markdown "
+        "Keep the answer concise and include uncertainty when evidence is thin. Prioritize specific named events over "
+        "generic trend summaries when the evidence includes current news. Include the who/what/where/when/why-it-matters "
+        "for high-priority events, especially world news, geopolitics, U.S. news, AI, company, market, housing, and policy items. "
+        "For final synthesis, write clean Markdown "
         "with short sections such as ## Bottom Line, ## What Changed, ## Major Trends, ## Why It Matters To You, "
         "## What To Watch, and ## Confidence And Gaps. Use **bold** for the most important terms, keep bullets short, "
         "and do not dump citations into the main answer; citations are handled separately.\n\n"

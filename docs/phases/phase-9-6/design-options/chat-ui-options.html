@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VerityDesk Chat UI Options</title>
+  <style>
+    :root {
+      --bg: #05070f;
+      --panel: rgba(7, 17, 31, 0.92);
+      --panel2: rgba(2, 6, 23, 0.72);
+      --line: rgba(97, 232, 255, 0.22);
+      --line2: rgba(97, 232, 255, 0.44);
+      --text: #f7fbff;
+      --muted: #91a0b6;
+      --soft: #cbd8ee;
+      --cyan: #61e8ff;
+      --lime: #bcff5d;
+      --pink: #ff7ac7;
+      --orange: #ffb45d;
+      --violet: #a78bfa;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 15% 8%, rgba(97, 232, 255, 0.18), transparent 28%),
+        radial-gradient(circle at 86% 12%, rgba(255, 122, 199, 0.12), transparent 24%),
+        linear-gradient(135deg, #05070f 0%, #071421 54%, #05070f 100%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, textarea { font: inherit; }
+    button { cursor: pointer; }
+    h1, h2, h3, p { margin: 0; }
+
+    .shell {
+      width: min(1540px, calc(100vw - 36px));
+      margin: 0 auto;
+      padding: 28px 0 44px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .mark {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line2);
+      border-radius: 14px;
+      background: linear-gradient(145deg, rgba(97, 232, 255, 0.16), rgba(188, 255, 93, 0.08));
+      color: var(--lime);
+      font-weight: 950;
+    }
+
+    h1 { font-size: clamp(30px, 3.2vw, 54px); letter-spacing: -0.02em; line-height: 0.95; }
+    .eyebrow {
+      color: var(--cyan);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+    .muted { color: var(--muted); }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(2, 6, 23, 0.68);
+    }
+
+    .tab, .ghost, .solid {
+      min-height: 40px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      padding: 0 14px;
+      background: rgba(8, 17, 32, 0.86);
+      color: var(--soft);
+      font-weight: 850;
+      transition: 160ms ease;
+    }
+    .tab.active {
+      background: var(--cyan);
+      border-color: var(--cyan);
+      color: #04111b;
+    }
+    .solid {
+      background: var(--lime);
+      border-color: var(--lime);
+      color: #102000;
+    }
+    .ghost:hover { border-color: var(--line2); color: white; }
+
+    .option { display: none; }
+    .option.active { display: block; }
+    .glass {
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: linear-gradient(155deg, rgba(7, 17, 31, 0.92), rgba(3, 8, 18, 0.78));
+      overflow: hidden;
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.44);
+    }
+
+    .option-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 22px;
+      border-bottom: 1px solid var(--line);
+    }
+    .option-head p { max-width: 780px; line-height: 1.55; }
+
+    .chat-layout {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      min-height: 710px;
+    }
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: rgba(2, 6, 23, 0.48);
+      padding: 16px;
+    }
+    .history {
+      display: grid;
+      gap: 9px;
+      margin-top: 14px;
+    }
+    .history button {
+      min-height: 54px;
+      border: 1px solid rgba(97, 232, 255, 0.14);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.035);
+      color: var(--soft);
+      padding: 10px;
+      text-align: left;
+      font-weight: 760;
+    }
+    .history button.active { border-color: var(--lime); color: white; }
+
+    .chat-main {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      min-height: 710px;
+    }
+    .messages {
+      overflow-y: auto;
+      padding: 22px;
+      max-height: 620px;
+      scroll-behavior: smooth;
+    }
+    .message {
+      display: grid;
+      gap: 10px;
+      max-width: 960px;
+      margin-bottom: 16px;
+    }
+    .message.user {
+      max-width: 760px;
+      margin-left: auto;
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(97, 232, 255, 0.1);
+      border: 1px solid rgba(97, 232, 255, 0.2);
+    }
+    .answer-card {
+      border: 1px solid rgba(97, 232, 255, 0.18);
+      border-radius: 20px;
+      background: rgba(2, 6, 23, 0.58);
+      padding: 18px;
+    }
+    .answer-card h3 { margin-bottom: 12px; font-size: 22px; }
+    .answer-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .section {
+      border: 1px solid rgba(97, 232, 255, 0.14);
+      border-radius: 16px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.035);
+    }
+    .section h4 { margin: 0 0 8px; color: var(--cyan); }
+    .section p, .section li { color: var(--soft); line-height: 1.5; }
+    .section ul { margin: 8px 0 0; padding-left: 18px; }
+    .inputbar {
+      border-top: 1px solid var(--line);
+      padding: 14px;
+      background: rgba(2, 6, 23, 0.72);
+    }
+    .composer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 10px;
+      background: rgba(2, 6, 23, 0.78);
+    }
+    textarea {
+      min-height: 56px;
+      max-height: 150px;
+      resize: vertical;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: white;
+      line-height: 1.45;
+    }
+
+    .memo-body {
+      display: grid;
+      gap: 14px;
+      padding: 22px;
+    }
+    .memo-card {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(2, 6, 23, 0.68);
+      padding: 20px;
+    }
+    .memo-card h3 { font-size: 26px; margin-bottom: 12px; }
+    .memo-sections {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .split-layout {
+      display: grid;
+      grid-template-columns: minmax(340px, 0.78fr) minmax(0, 1.22fr);
+      min-height: 710px;
+    }
+    .split-left {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      border-right: 1px solid var(--line);
+    }
+    .workspace {
+      padding: 22px;
+      overflow-y: auto;
+      max-height: 710px;
+    }
+    .wide-reader {
+      border: 1px solid rgba(97, 232, 255, 0.22);
+      border-radius: 24px;
+      background: rgba(2, 6, 23, 0.68);
+      padding: 22px;
+    }
+
+    .preview-list {
+      display: grid;
+      gap: 14px;
+      padding: 22px;
+    }
+    .preview-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      border: 1px solid rgba(97, 232, 255, 0.18);
+      border-radius: 18px;
+      background: rgba(2, 6, 23, 0.58);
+      padding: 16px;
+    }
+    .full-answer {
+      margin-top: 16px;
+      border: 1px solid rgba(188, 255, 93, 0.32);
+      border-radius: 22px;
+      background: rgba(2, 6, 23, 0.75);
+      padding: 18px;
+    }
+
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(97, 232, 255, 0.26);
+      color: var(--soft);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .lime { color: var(--lime); border-color: rgba(188, 255, 93, 0.42); }
+    .pink { color: var(--pink); border-color: rgba(255, 122, 199, 0.42); }
+    .orange { color: var(--orange); border-color: rgba(255, 180, 93, 0.42); }
+    .hidden { display: none; }
+
+    @media (max-width: 950px) {
+      .topbar, .option-head { flex-direction: column; align-items: stretch; }
+      .chat-layout, .split-layout, .answer-grid, .memo-sections { grid-template-columns: 1fr; }
+      .sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+      .shell { width: min(100% - 20px, 1540px); }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="topbar">
+      <div class="brand">
+        <div class="mark">V</div>
+        <div>
+          <p class="eyebrow">Chat design lab</p>
+          <h1>Make long answers easy to read.</h1>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="tab active" data-option="codex">Codex Chat</button>
+        <button class="tab" data-option="memo">Memo Chat</button>
+        <button class="tab" data-option="split">Split Workspace</button>
+        <button class="tab" data-option="compact">Compact Preview</button>
+      </div>
+    </div>
+
+    <section id="codex" class="option active glass">
+      <div class="option-head">
+        <div>
+          <p class="eyebrow">Option A</p>
+          <h2>ChatGPT / Codex Style</h2>
+          <p class="muted">Scrollable chat history, fixed input, Enter sends, Shift+Enter adds a line. Best default for familiarity.</p>
+        </div>
+        <button class="solid" data-demo-submit="codex-input">Try Send</button>
+      </div>
+      <div class="chat-layout">
+        <aside class="sidebar">
+          <p class="eyebrow">Previous chats</p>
+          <div class="history">
+            <button class="active">Arizona housing market</button>
+            <button>AI stock trends</button>
+            <button>S&P 500 today</button>
+            <button>Mortgage rate check</button>
+          </div>
+        </aside>
+        <div class="chat-main">
+          <div class="messages" id="codex-messages">
+            <div class="message user">What is happening in Arizona housing and how does it connect to rates?</div>
+            <div class="message">
+              <div class="answer-card">
+                <p class="eyebrow">Answer</p>
+                <h3>Arizona housing is mainly an affordability story.</h3>
+                <div class="answer-grid">
+                  <div class="section"><h4>Bottom Line</h4><p><strong>Mortgage rates</strong> are still the pressure point. Demand can recover only if payments ease or income catches up.</p></div>
+                  <div class="section"><h4>Key Signals</h4><ul><li>Rates remain elevated.</li><li>Inventory matters by city.</li><li>Affordability is the constraint.</li></ul></div>
+                  <div class="section"><h4>Why It Matters</h4><p>Higher payments limit buyer pools and can keep sellers cautious.</p></div>
+                  <div class="section"><h4>Watch Next</h4><p>Track mortgage rates, active listings, price cuts, and days on market.</p></div>
+                </div>
+                <div class="badge-row"><span class="badge lime">Markdown sections</span><span class="badge">Sources hidden</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="inputbar">
+            <div class="composer">
+              <textarea id="codex-input" placeholder="Ask anything. Enter sends, Shift+Enter adds a new line."></textarea>
+              <button class="solid" data-send="codex-input" data-target="codex-messages">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="memo" class="option glass">
+      <div class="option-head">
+        <div>
+          <p class="eyebrow">Option B</p>
+          <h2>Analyst Memo Chat</h2>
+          <p class="muted">Every response is transformed into a professional memo card with stronger headings and more visual sections.</p>
+        </div>
+      </div>
+      <div class="memo-body">
+        <div class="memo-card">
+          <p class="eyebrow">User question</p>
+          <h3>How are my AI watchlist stocks trending?</h3>
+        </div>
+        <div class="memo-card">
+          <p class="eyebrow">VerityDesk memo</p>
+          <h3>AI leadership is still concentrated, but the risk is breadth.</h3>
+          <div class="memo-sections">
+            <div class="section"><h4>Bottom Line</h4><p>NVDA and MSFT remain central to the AI narrative.</p></div>
+            <div class="section"><h4>Signals</h4><p>Cloud capex, chip demand, model releases, and regulation.</p></div>
+            <div class="section"><h4>Trend</h4><p><strong>Strengthening</strong>, but sensitive to rates and valuation.</p></div>
+            <div class="section"><h4>Risk</h4><p>Overcrowding, guidance misses, export limits.</p></div>
+            <div class="section"><h4>Evidence</h4><p>Collapsed citations and API checks.</p></div>
+          </div>
+        </div>
+        <div class="inputbar">
+          <div class="composer">
+            <textarea id="memo-input" placeholder="Ask for a memo-style answer."></textarea>
+            <button class="solid" data-send="memo-input" data-target="memo-demo">Send</button>
+          </div>
+        </div>
+        <div id="memo-demo"></div>
+      </div>
+    </section>
+
+    <section id="split" class="option glass">
+      <div class="option-head">
+        <div>
+          <p class="eyebrow">Option C</p>
+          <h2>Split Answer Workspace</h2>
+          <p class="muted">Chat stays compact on the left. The full answer opens wide on the right so long analysis does not crush the conversation.</p>
+        </div>
+      </div>
+      <div class="split-layout">
+        <div class="split-left">
+          <div class="messages">
+            <div class="message user">Explain today's market setup.</div>
+            <div class="message"><div class="answer-card"><h3>Short preview</h3><p class="muted">Mixed risk. Tech leadership is firm, but rates and geopolitics matter today.</p><button class="ghost" data-toggle="split-reader">Open full answer</button></div></div>
+          </div>
+          <div class="inputbar">
+            <div class="composer">
+              <textarea id="split-input" placeholder="Ask a follow up."></textarea>
+              <button class="solid" data-send="split-input" data-target="split-demo">Send</button>
+            </div>
+          </div>
+        </div>
+        <div class="workspace">
+          <div id="split-reader" class="wide-reader">
+            <p class="eyebrow">Full answer</p>
+            <h2>Market setup: mixed risk, AI leadership, rates sensitivity.</h2>
+            <div class="answer-grid">
+              <div class="section"><h4>Bottom Line</h4><p>Risk appetite depends on whether breadth follows mega-cap tech.</p></div>
+              <div class="section"><h4>S&P 500</h4><p>Watch trend confirmation, breadth, yields, and volatility.</p></div>
+              <div class="section"><h4>AI / Tech</h4><p>NVDA, MSFT, AMZN, GOOGL remain the key read-throughs.</p></div>
+              <div class="section"><h4>Uncertainty</h4><p>Need live market levels and source confirmation.</p></div>
+            </div>
+          </div>
+          <div id="split-demo"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="compact" class="option glass">
+      <div class="option-head">
+        <div>
+          <p class="eyebrow">Option D</p>
+          <h2>Compact Chat + Full Answer</h2>
+          <p class="muted">Chat remains lightweight. Each answer preview is short, and a wide full-answer panel opens only when needed.</p>
+        </div>
+      </div>
+      <div class="preview-list">
+        <div class="preview-row">
+          <div>
+            <p class="eyebrow">Preview</p>
+            <h3>Housing pressure is mostly rate-driven.</h3>
+            <p class="muted">Three bullets appear here. Full evidence and nuance stays one click away.</p>
+          </div>
+          <button class="solid" data-toggle="compact-full">Open full answer</button>
+        </div>
+        <div id="compact-full" class="full-answer hidden">
+          <p class="eyebrow">Full answer</p>
+          <h2>Arizona housing: affordability, inventory, and mortgage rates.</h2>
+          <div class="answer-grid">
+            <div class="section"><h4>Bottom Line</h4><p>Affordability is the central constraint.</p></div>
+            <div class="section"><h4>Local Signals</h4><ul><li>Inventory by metro.</li><li>Days on market.</li><li>Price reductions.</li></ul></div>
+            <div class="section"><h4>What To Watch</h4><p>Mortgage rates, listings, builder incentives, employment.</p></div>
+            <div class="section"><h4>Sources</h4><p>Collapsed evidence drawer with source freshness.</p></div>
+          </div>
+        </div>
+        <div class="inputbar">
+          <div class="composer">
+            <textarea id="compact-input" placeholder="Ask, then press Enter to send."></textarea>
+            <button class="solid" data-send="compact-input" data-target="compact-demo">Send</button>
+          </div>
+        </div>
+        <div id="compact-demo"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const tabs = document.querySelectorAll("[data-option]");
+    const options = document.querySelectorAll(".option");
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        tabs.forEach((item) => item.classList.remove("active"));
+        options.forEach((item) => item.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById(tab.dataset.option).classList.add("active");
+      });
+    });
+
+    function appendDemoAnswer(inputId, targetId) {
+      const input = document.getElementById(inputId);
+      const target = document.getElementById(targetId);
+      const value = input.value.trim();
+      if (!value || !target) return;
+      const wrapper = document.createElement("div");
+      wrapper.className = "message";
+      wrapper.innerHTML = `
+        <div class="message user">${value.replace(/</g, "&lt;")}</div>
+        <div class="answer-card">
+          <p class="eyebrow">Generated preview</p>
+          <h3>Answer formatted into readable sections.</h3>
+          <div class="answer-grid">
+            <div class="section"><h4>Bottom Line</h4><p>The response starts with the most important takeaway.</p></div>
+            <div class="section"><h4>Key Signals</h4><ul><li>Signal one.</li><li>Signal two.</li><li>Signal three.</li></ul></div>
+            <div class="section"><h4>Why It Matters</h4><p>The model explains the user-specific implication.</p></div>
+            <div class="section"><h4>What To Watch</h4><p>Next indicators and uncertainty are called out clearly.</p></div>
+          </div>
+        </div>`;
+      target.appendChild(wrapper);
+      input.value = "";
+      target.scrollIntoView({ block: "end", behavior: "smooth" });
+    }
+
+    document.querySelectorAll("[data-send]").forEach((button) => {
+      button.addEventListener("click", () => appendDemoAnswer(button.dataset.send, button.dataset.target));
+    });
+
+    document.querySelectorAll("textarea").forEach((input) => {
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          const button = document.querySelector(`[data-send="${input.id}"]`);
+          if (button) appendDemoAnswer(button.dataset.send, button.dataset.target);
+        }
+      });
+    });
+
+    document.querySelectorAll("[data-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.getElementById(button.dataset.toggle).classList.toggle("hidden");
+      });
+    });
+
+    document.querySelectorAll("[data-demo-submit]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const input = document.getElementById(button.dataset.demoSubmit);
+        input.value = "What should I watch in markets today?";
+        const send = document.querySelector(`[data-send="${input.id}"]`);
+        appendDemoAnswer(send.dataset.send, send.dataset.target);
+      });
+    });
+  </script>
+</body>
+</html>

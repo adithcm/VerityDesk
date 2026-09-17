@@ -204,7 +204,7 @@ def test_evidence_packet_records_live_web_skipped_status(monkeypatch) -> None:
     assert any(item.source_kind == "direct_api" for item in packet.items)
 
 
-def test_evidence_packet_uses_one_shared_live_web_search(monkeypatch) -> None:
+def test_evidence_packet_uses_multiple_focused_live_web_searches(monkeypatch) -> None:
     calls: list[str] = []
 
     def fake_run_live_web_search(request):
@@ -224,7 +224,8 @@ def test_evidence_packet_uses_one_shared_live_web_search(monkeypatch) -> None:
 
         packet = build_evidence_packet(context=context, plan=plan, session=session)
 
-    assert len(calls) == 1
+    assert len(calls) > 1
+    assert len(calls) <= 4
     assert packet.retrieval_statuses[0].channel == "live_web"
     assert any(item.source_kind == "live_web" for item in packet.items)
 
