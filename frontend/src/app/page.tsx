@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, ReactNode, useEffect, useMemo, useState } from "react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -957,6 +957,7 @@ export default function Home() {
 
     setAgentLoading(true);
     setAgentError(null);
+    setAgentQuery("");
     const inferredContext = inferAgentContext(trimmedQuery, personalizationProfile);
     const requestContext = useManualContext
       ? {
@@ -970,7 +971,6 @@ export default function Home() {
     setAgentIntent(requestContext.intent);
     setAgentDomain(requestContext.domain);
     setAgentTicker(requestContext.tickers.join(", "));
-    setAgentQuery(trimmedQuery);
     setActiveView("Agent Chat");
     const sessionBeforeRun = ensureActiveChatSession(chatSessions, activeChatSessionId, trimmedQuery);
     const userMessage: ChatMessage = {
@@ -2623,6 +2623,35 @@ function parseMarkdownSections(text: string) {
   return sections;
 }
 
+function parseMarkdownSectionList(text: string) {
+  const sections: Array<{ title: string; body: string }> = [];
+  const lines = text.split("\n");
+  let currentTitle = "Answer";
+  let currentLines: string[] = [];
+  let sawHeading = false;
+
+  function flushSection() {
+    const body = currentLines.join("\n").trim();
+    if (body) {
+      sections.push({ title: currentTitle, body });
+    }
+  }
+
+  lines.forEach((line) => {
+    const heading = markdownHeadingText(line);
+    if (heading) {
+      flushSection();
+      currentTitle = heading.replace(/:$/, "").trim();
+      currentLines = [];
+      sawHeading = true;
+    } else {
+      currentLines.push(line);
+    }
+  });
+  flushSection();
+  return sawHeading ? sections : [{ title: "Answer", body: text }];
+}
+
 function findSectionContent(sections: Map<string, string>, matchers: string[]) {
   for (const [title, content] of Array.from(sections.entries())) {
     if (matchers.some((matcher) => title.includes(matcher.toLowerCase()))) {
@@ -4119,10 +4148,16 @@ function AgentChatView({
         explanation: "Using your Advanced overrides for this request.",
       }
     : inferredContext;
+  function handleAgentQueryKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-      <aside className="rounded-[20px] border border-cyan-300/20 bg-[#07111f]/88 p-4">
+    <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
+      <aside className="max-h-[78vh] overflow-y-auto rounded-[20px] border border-cyan-300/20 bg-[#07111f]/88 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="font-mono text-xs font-black uppercase text-cyan-300">Chats</p>
@@ -4160,7 +4195,7 @@ function AgentChatView({
         </div>
       </aside>
 
-      <section className="rounded-[20px] border border-cyan-300/20 bg-[#07111f]/92 p-4">
+      <section className="grid max-h-[82vh] min-h-[720px] grid-rows-[auto_minmax(0,1fr)_auto_auto_auto] rounded-[20px] border border-cyan-300/20 bg-[#07111f]/92 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="font-mono text-xs font-black uppercase text-lime-300">Agent Chat</p>
@@ -4170,7 +4205,7 @@ function AgentChatView({
           {agentResponse && <NeonChip>Confidence: {agentResponse.confidence}</NeonChip>}
         </div>
 
-        <div className="mt-5 grid gap-3">
+        <div className="mt-5 grid content-start gap-3 overflow-y-auto rounded-[18px] border border-[#1d3558] bg-[#020617]/45 p-4">
           {activeSession?.messages.length ? (
             activeSession.messages.map((message) => (
               <ChatMessageBubble key={message.id} message={message} />
@@ -4186,7 +4221,7 @@ function AgentChatView({
           {agentError && <p className="rounded-lg border border-red-300/30 bg-red-950/30 p-3 text-sm text-red-200">{agentError}</p>}
         </div>
 
-        <form onSubmit={submitAgentQuery} className="mt-5 rounded-[18px] border border-cyan-300/25 bg-[#020617]/86 p-4">
+        <form onSubmit={submitAgentQuery} className="mt-4 rounded-[18px] border border-cyan-300/25 bg-[#020617]/86 p-4">
           <label className="sr-only" htmlFor="agent-query">Question</label>
           <textarea
             id="agent-query"
@@ -4195,8 +4230,9 @@ function AgentChatView({
               setAgentQuery(event.target.value);
               setManualAgentContext(false);
             }}
+            onKeyDown={handleAgentQueryKeyDown}
             placeholder="Ask a follow-up or start a new question..."
-            className="min-h-28 w-full resize-y border-0 bg-transparent text-base leading-7 text-white outline-none placeholder:text-slate-600"
+            className="max-h-40 min-h-20 w-full resize-y border-0 bg-transparent text-base leading-7 text-white outline-none placeholder:text-slate-600"
           />
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#1d3558] pt-4">
             <div className="flex flex-wrap gap-2">
@@ -4284,7 +4320,7 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[86%] rounded-[18px] border p-4 ${
+        className={`max-w-[92%] rounded-[18px] border p-4 ${
           isUser
             ? "border-lime-300/25 bg-lime-300/10 text-slate-100"
             : "border-cyan-300/20 bg-[#020617]/78 text-slate-300"
@@ -4292,9 +4328,32 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
       >
         <p className="font-mono text-[10px] font-black uppercase text-slate-500">{isUser ? "You" : "VerityDesk"} / {formatDateTime(message.createdAt)}</p>
         <div className="mt-2">
-          <MarkdownAnswer text={message.content} />
+          {isUser ? <MarkdownAnswer text={message.content} /> : <AssistantChatAnswer text={message.content} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AssistantChatAnswer({ text }: { text: string }) {
+  const sections = parseMarkdownSectionList(cleanAnswerText(text) ?? text);
+
+  if (sections.length <= 1) {
+    return <MarkdownAnswer text={text} />;
+  }
+
+  return (
+    <div className="grid gap-3">
+      {sections.map((section, index) => (
+        <section key={`${section.title}-${index}`} className="rounded-xl border border-cyan-300/15 bg-[#07111f]/70 p-3">
+          <h3 className="font-mono text-xs font-black uppercase text-cyan-200">
+            {renderInlineMarkdown(section.title)}
+          </h3>
+          <div className="mt-2">
+            <MarkdownAnswer text={section.body} compact />
+          </div>
+        </section>
+      ))}
     </div>
   );
 }
