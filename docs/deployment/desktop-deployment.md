@@ -47,6 +47,36 @@ VERITYDESK_DESKTOP_DATA_DIR=/tmp/veritydesk-data make desktop-dev
 
 This does not affect the normal developer Postgres flow used by `make app-dev`.
 
+## Desktop API Key Config
+
+The desktop app reads API keys from:
+
+```text
+~/Library/Application Support/VerityDesk/config.env
+```
+
+The desktop shell creates this file with blank values if it does not already exist. Fill it in with the keys you want the app to use:
+
+```bash
+OPENAI_API_KEY=...
+TAVILY_API_KEY=...
+FRED_API_KEY=...
+CENSUS_API_KEY=...
+ALPHA_VANTAGE_API_KEY=...
+FINNHUB_API_KEY=...
+NEWSAPI_KEY=...
+```
+
+The keys are passed to the backend process only. They are not bundled into the frontend.
+
+You can override the config file path during development:
+
+```bash
+VERITYDESK_DESKTOP_CONFIG_PATH=/tmp/veritydesk-config.env make desktop-dev
+```
+
+Later security upgrade: move this config into macOS Keychain or an in-app key manager backed by Keychain.
+
 ## Remaining Phase 10 Work
 
 - Add Electron runtime shell.

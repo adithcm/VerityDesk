@@ -9,6 +9,7 @@ const FRONTEND_PORT = process.env.VERITYDESK_FRONTEND_PORT || "3000";
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const FRONTEND_URL = `http://127.0.0.1:${FRONTEND_PORT}`;
 const DATABASE_FILENAME = "veritydesk.db";
+const CONFIG_FILENAME = "config.env";
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const frontendDir = path.join(repoRoot, "frontend");
@@ -32,18 +33,85 @@ function sqliteDatabaseUrl(databasePath) {
   return `sqlite:///${databasePath}`;
 }
 
+function parseEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return {};
+  }
+
+  const parsed = {};
+  const content = fs.readFileSync(filePath, "utf8");
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex === -1) {
+      continue;
+    }
+
+    const key = line.slice(0, separatorIndex).trim();
+    let value = line.slice(separatorIndex + 1).trim();
+    if (!key) {
+      continue;
+    }
+    if (
+      (value.startsWith("\"") && value.endsWith("\"")) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    parsed[key] = value;
+  }
+
+  return parsed;
+}
+
+function ensureConfigFile(configPath) {
+  if (fs.existsSync(configPath)) {
+    return;
+  }
+
+  const template = [
+    "# VerityDesk local desktop config",
+    "# Fill in the keys you want the desktop app to use.",
+    "# Do not commit this file to GitHub.",
+    "",
+    "OPENAI_API_KEY=",
+    "OPENAI_MODEL=gpt-5-mini",
+    "TAVILY_API_KEY=",
+    "LIVE_WEB_SEARCH_PROVIDER=tavily",
+    "FRED_API_KEY=",
+    "CENSUS_API_KEY=",
+    "ALPHA_VANTAGE_API_KEY=",
+    "FINNHUB_API_KEY=",
+    "NEWSAPI_KEY=",
+    "GDELT_API_KEY=",
+    "OWNER_EMAIL=",
+    "INVESTORAGENT_USER_AGENT=VerityDesk/0.1 contact@example.com",
+    "",
+  ].join("\n");
+
+  fs.writeFileSync(configPath, template, { mode: 0o600 });
+}
+
 function desktopRuntimePaths() {
   const dataDir = process.env.VERITYDESK_DESKTOP_DATA_DIR || app.getPath("userData");
   const logsDir = process.env.VERITYDESK_DESKTOP_LOG_DIR || path.join(app.getPath("logs"), APP_NAME);
   const databasePath = path.join(dataDir, DATABASE_FILENAME);
+  const configPath = process.env.VERITYDESK_DESKTOP_CONFIG_PATH || path.join(dataDir, CONFIG_FILENAME);
 
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(logsDir, { recursive: true });
+  ensureConfigFile(configPath);
 
   return {
     dataDir,
     logsDir,
     databasePath,
+    configPath,
+    configEnv: parseEnvFile(configPath),
     databaseUrl: process.env.VERITYDESK_DESKTOP_DATABASE_URL || sqliteDatabaseUrl(databasePath),
   };
 }
@@ -51,6 +119,7 @@ function desktopRuntimePaths() {
 function childEnv(runtimePaths, extra = {}) {
   return {
     ...process.env,
+    ...runtimePaths.configEnv,
     PATH: `${localNodeBin}:${process.env.PATH || ""}`,
     DATABASE_URL: runtimePaths.databaseUrl,
     FRONTEND_ORIGIN: FRONTEND_URL,
@@ -124,6 +193,7 @@ async function startServices() {
 
   console.log(`[desktop] data directory: ${runtimePaths.dataDir}`);
   console.log(`[desktop] database: ${runtimePaths.databasePath}`);
+  console.log(`[desktop] config: ${runtimePaths.configPath}`);
 
   await runProcess("migrations", alembicBin, ["upgrade", "head"], runtimePaths, { cwd: backendDir });
 

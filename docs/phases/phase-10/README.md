@@ -15,7 +15,7 @@ Development will continue to support Docker/Postgres because it is useful for da
 1. [10.1 Deployment architecture](milestones/10.1-deployment-architecture.md)
 2. [10.2 Desktop runtime shell](milestones/10.2-desktop-runtime-shell.md)
 3. [10.3 Packaged database mode](milestones/10.3-packaged-database-mode.md)
-4. 10.4 API key and local config handling
+4. [10.4 API key and local config handling](milestones/10.4-api-key-and-local-config.md)
 5. 10.5 Production builds
 6. 10.6 macOS app packaging
 7. 10.7 End-to-end deployment test
