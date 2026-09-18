@@ -470,20 +470,35 @@ Detailed plan: [Phase 9.6](../phases/phase-9-6/README.md).
 
 ## Phase 10: Local Desktop App
 
-Status: Planned
+Status: In progress
 
 Purpose: package the local web app as a native-feeling macOS desktop app after the Option M visual product implementation is reliable.
 
 Deliverables:
 
-- Tauri app shell.
+- Electron app shell for the first desktop packaging pass.
 - macOS `.app` build.
-- macOS `.dmg` build.
-- App icon.
-- Local backend startup behavior.
-- Background refresh behavior so daily jobs can run when the UI window is not open, as long as the installed app/background service is active.
-- Desktop menu basics.
-- Local storage path handling.
+- App name: VerityDesk.
+- Local backend startup and shutdown behavior.
+- Packaged database mode that does not require Docker Desktop or Postgres.app.
+- Dev Postgres support preserved through `DATABASE_URL`.
+- Local storage path handling for database, logs, and config.
+- Automatic database migrations on packaged app startup.
+- API key/config handling outside frontend code.
+- Clean simple install/run/database documentation.
+
+Milestones:
+
+- [Milestone 10.1: Deployment architecture](../phases/phase-10/milestones/10.1-deployment-architecture.md).
+- Milestone 10.2: Desktop runtime shell.
+- Milestone 10.3: Packaged database mode.
+- Milestone 10.4: API key and local config handling.
+- Milestone 10.5: Production builds.
+- Milestone 10.6: macOS app packaging.
+- Milestone 10.7: End-to-end deployment test.
+- Milestone 10.8: Clean simple documentation.
+
+Detailed plan: [Phase 10](../phases/phase-10/README.md).
 
 ## Phase 11: Portable Deployment
 
