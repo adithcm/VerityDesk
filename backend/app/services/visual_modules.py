@@ -26,8 +26,8 @@ QUOTE_METRIC_CHANGE_PERCENT = "CHANGE_PERCENT"
 QUOTE_METRIC_PRICE = "PRICE"
 
 
-def get_visual_modules(session: Session) -> VisualModulesResponse:
-    reports = latest_reports_by_type(session)
+def get_visual_modules(session: Session, *, user_id: int | None = None) -> VisualModulesResponse:
+    reports = latest_reports_by_type(session, user_id=user_id)
     health_rows = list_source_health(session)
     observations = latest_observations_by_series(session)
     observation_history = recent_observations_by_series(session)
@@ -45,8 +45,11 @@ def get_visual_modules(session: Session) -> VisualModulesResponse:
     return VisualModulesResponse(modules=modules, total=len(modules), generated_at=generated_at)
 
 
-def latest_reports_by_type(session: Session) -> dict[str, Report]:
-    reports = session.scalars(select(Report).order_by(desc(Report.created_at), desc(Report.id)).limit(40)).all()
+def latest_reports_by_type(session: Session, *, user_id: int | None = None) -> dict[str, Report]:
+    statement = select(Report).order_by(desc(Report.created_at), desc(Report.id)).limit(40)
+    if user_id is not None:
+        statement = statement.where(Report.user_id == user_id)
+    reports = session.scalars(statement).all()
     latest: dict[str, Report] = {}
     for report in reports:
         if report.status == "archived":

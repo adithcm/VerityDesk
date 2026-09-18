@@ -190,6 +190,7 @@ class Report(TimestampMixin, Base):
     __tablename__ = "reports"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     report_type: Mapped[str] = mapped_column(String(80), index=True)
     status: Mapped[str] = mapped_column(String(80), default="draft", index=True)
     title: Mapped[str] = mapped_column(String(255), index=True)
@@ -240,13 +241,43 @@ class AgentRun(TimestampMixin, Base):
     error: Mapped[str | None] = mapped_column(Text)
 
 
+class User(TimestampMixin, Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(255))
+    password_hash: Mapped[str] = mapped_column(String(512))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    setup_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    settings: Mapped["UserSettings | None"] = relationship(back_populates="user")
+    sessions: Mapped[list["UserSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
+class UserSession(TimestampMixin, Base):
+    __tablename__ = "user_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship(back_populates="sessions")
+
+
 class UserSettings(TimestampMixin, Base):
     __tablename__ = "user_settings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
     watchlist_tickers: Mapped[list[str]] = mapped_column(JSON, default=list)
     preferred_regions: Mapped[list[str]] = mapped_column(JSON, default=list)
     enabled_sources: Mapped[list[str]] = mapped_column(JSON, default=list)
+    profile_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     daily_briefing_time: Mapped[str | None] = mapped_column(String(40))
     daily_schedule_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     daily_schedule_timezone: Mapped[str] = mapped_column(String(80), default="local")
@@ -260,6 +291,8 @@ class UserSettings(TimestampMixin, Base):
     llm_provider: Mapped[str] = mapped_column(String(80), default="openai")
     api_key_status: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     disclaimer_acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User | None] = relationship(back_populates="settings")
 
 
 class WatchItem(TimestampMixin, Base):

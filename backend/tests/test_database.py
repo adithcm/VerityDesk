@@ -33,6 +33,8 @@ EXPECTED_TABLES = {
     "sources",
     "source_health",
     "user_settings",
+    "user_sessions",
+    "users",
 }
 
 
