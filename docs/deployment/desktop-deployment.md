@@ -77,6 +77,17 @@ VERITYDESK_DESKTOP_CONFIG_PATH=/tmp/veritydesk-config.env make desktop-dev
 
 Later security upgrade: move this config into macOS Keychain or an in-app key manager backed by Keychain.
 
+## Production-Like Desktop Run
+
+Before packaging the final `.app`, test the desktop shell against a built frontend:
+
+```bash
+make desktop-build
+make desktop-prod
+```
+
+`make desktop-build` runs the Next.js production build and desktop syntax checks. `make desktop-prod` starts Electron in production mode, which uses `next start` instead of `next dev`.
+
 ## Remaining Phase 10 Work
 
 - Add Electron runtime shell.

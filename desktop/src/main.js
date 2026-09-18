@@ -10,6 +10,7 @@ const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const FRONTEND_URL = `http://127.0.0.1:${FRONTEND_PORT}`;
 const DATABASE_FILENAME = "veritydesk.db";
 const CONFIG_FILENAME = "config.env";
+const DESKTOP_MODE = process.env.VERITYDESK_DESKTOP_MODE || "dev";
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const frontendDir = path.join(repoRoot, "frontend");
@@ -190,17 +191,22 @@ async function startServices() {
 
   const npmCommand = commandPath(localNpm, "npm");
   const runtimePaths = desktopRuntimePaths();
+  const frontendArgs =
+    DESKTOP_MODE === "production"
+      ? ["run", "start", "--", "--hostname", "127.0.0.1", "--port", FRONTEND_PORT]
+      : ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", FRONTEND_PORT];
 
   console.log(`[desktop] data directory: ${runtimePaths.dataDir}`);
   console.log(`[desktop] database: ${runtimePaths.databasePath}`);
   console.log(`[desktop] config: ${runtimePaths.configPath}`);
+  console.log(`[desktop] mode: ${DESKTOP_MODE}`);
 
   await runProcess("migrations", alembicBin, ["upgrade", "head"], runtimePaths, { cwd: backendDir });
 
   spawnProcess("backend", uvicornBin, ["app.main:app", "--host", "127.0.0.1", "--port", BACKEND_PORT], runtimePaths, {
     cwd: backendDir,
   });
-  spawnProcess("frontend", npmCommand, ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", FRONTEND_PORT], runtimePaths, {
+  spawnProcess("frontend", npmCommand, frontendArgs, runtimePaths, {
     cwd: frontendDir,
   });
 

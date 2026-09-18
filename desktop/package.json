@@ -6,10 +6,10 @@
   "main": "src/main.js",
   "scripts": {
     "dev": "electron .",
+    "prod": "VERITYDESK_DESKTOP_MODE=production electron .",
     "check": "node --check src/main.js && node --check src/preload.js"
   },
   "devDependencies": {
     "electron": "^39.2.7"
   }
 }
-
