@@ -190,6 +190,7 @@ class Report(TimestampMixin, Base):
     __tablename__ = "reports"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     report_type: Mapped[str] = mapped_column(String(80), index=True)
     status: Mapped[str] = mapped_column(String(80), default="draft", index=True)
     title: Mapped[str] = mapped_column(String(255), index=True)

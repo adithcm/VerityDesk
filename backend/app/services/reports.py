@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import Citation, Report, Source
+from app.db.models import Citation, Report, Source, User
 from app.schemas.agent import AgentCitation, AgentQueryRequest, AgentQueryResponse
 from app.schemas.preferences import UserPreferencesResponse
 from app.schemas.report import (
@@ -120,9 +120,10 @@ MACRO_REPORT_DOMAINS = [
 ]
 
 
-def create_report(session: Session, request: ReportCreateRequest) -> ReportResponse:
+def create_report(session: Session, request: ReportCreateRequest, *, user_id: int | None = None) -> ReportResponse:
     now = datetime.now(UTC)
     report = Report(
+        user_id=user_id,
         report_type=request.report_type,
         status="draft",
         title=request.title or default_report_title(request, now),
@@ -148,9 +149,10 @@ def create_report(session: Session, request: ReportCreateRequest) -> ReportRespo
     return report_to_response(report)
 
 
-def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> ReportResponse:
+def generate_daily_briefing(session: Session, request: DailyBriefingRequest, *, user_id: int | None = None) -> ReportResponse:
     now = datetime.now(UTC)
-    preferences = read_user_preferences(session)
+    user = session.get(User, user_id) if user_id is not None else None
+    preferences = read_user_preferences(session, user)
     domains = request.domains or DAILY_BRIEFING_DOMAINS
     regions = request.regions or preferences.preferred_regions
     tickers = preferences.watchlist_tickers or DEFAULT_DAILY_WATCHLIST
@@ -168,6 +170,7 @@ def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> 
     agent_response = run_agent_query(agent_request, session)
 
     report = Report(
+        user_id=user_id,
         report_type="daily_briefing",
         status="generated",
         title=request.title or default_report_title(ReportCreateRequest(report_type="daily_briefing"), now),
@@ -193,7 +196,7 @@ def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> 
             "requires_guardrail_review": agent_response.requires_guardrail_review,
             "follow_up_questions": agent_response.follow_up_questions,
             "risks": agent_response.risks,
-            **build_panel_signal_metadata(session, "daily_briefing", agent_response),
+            **build_panel_signal_metadata(session, "daily_briefing", agent_response, user_id=user_id),
         },
     )
     session.add(report)
@@ -201,7 +204,7 @@ def generate_daily_briefing(session: Session, request: DailyBriefingRequest) -> 
     add_report_citations(session, report, agent_response.citations)
     session.commit()
     session.refresh(report)
-    return get_report(session, report.id)
+    return get_report(session, report.id, user_id=user_id)
 
 
 def build_personalized_daily_briefing_query(preferences: UserPreferencesResponse) -> str:
@@ -229,7 +232,7 @@ def build_personalized_daily_briefing_query(preferences: UserPreferencesResponse
     )
 
 
-def generate_company_research(session: Session, request: CompanyResearchRequest) -> ReportResponse:
+def generate_company_research(session: Session, request: CompanyResearchRequest, *, user_id: int | None = None) -> ReportResponse:
     now = datetime.now(UTC)
     tickers = normalize_symbols([request.ticker] if request.ticker else [])
     companies = [request.company.strip()] if request.company and request.company.strip() else []
@@ -253,6 +256,7 @@ def generate_company_research(session: Session, request: CompanyResearchRequest)
     agent_response = run_agent_query(agent_request, session)
 
     report = Report(
+        user_id=user_id,
         report_type="company_research",
         status="generated",
         title=request.title or default_report_title(
@@ -278,7 +282,7 @@ def generate_company_research(session: Session, request: CompanyResearchRequest)
             "requires_guardrail_review": agent_response.requires_guardrail_review,
             "follow_up_questions": agent_response.follow_up_questions,
             "risks": agent_response.risks,
-            **build_panel_signal_metadata(session, "company_research", agent_response),
+            **build_panel_signal_metadata(session, "company_research", agent_response, user_id=user_id),
         },
     )
     session.add(report)
@@ -286,10 +290,10 @@ def generate_company_research(session: Session, request: CompanyResearchRequest)
     add_report_citations(session, report, agent_response.citations)
     session.commit()
     session.refresh(report)
-    return get_report(session, report.id)
+    return get_report(session, report.id, user_id=user_id)
 
 
-def generate_market_strategy(session: Session, request: MarketStrategyRequest) -> ReportResponse:
+def generate_market_strategy(session: Session, request: MarketStrategyRequest, *, user_id: int | None = None) -> ReportResponse:
     now = datetime.now(UTC)
     tickers = normalize_symbols(request.tickers)
     domains = request.domains or MARKET_STRATEGY_DOMAINS
@@ -310,6 +314,7 @@ def generate_market_strategy(session: Session, request: MarketStrategyRequest) -
     agent_response = run_agent_query(agent_request, session)
 
     report = Report(
+        user_id=user_id,
         report_type="market_strategy",
         status="generated",
         title=request.title or default_report_title(
@@ -336,7 +341,7 @@ def generate_market_strategy(session: Session, request: MarketStrategyRequest) -
             "follow_up_questions": agent_response.follow_up_questions,
             "risks": agent_response.risks,
             "scenario_sections_expected": ["base", "upside", "downside"],
-            **build_panel_signal_metadata(session, "market_strategy", agent_response),
+            **build_panel_signal_metadata(session, "market_strategy", agent_response, user_id=user_id),
         },
     )
     session.add(report)
@@ -344,10 +349,10 @@ def generate_market_strategy(session: Session, request: MarketStrategyRequest) -
     add_report_citations(session, report, agent_response.citations)
     session.commit()
     session.refresh(report)
-    return get_report(session, report.id)
+    return get_report(session, report.id, user_id=user_id)
 
 
-def generate_housing_report(session: Session, request: HousingReportRequest) -> ReportResponse:
+def generate_housing_report(session: Session, request: HousingReportRequest, *, user_id: int | None = None) -> ReportResponse:
     now = datetime.now(UTC)
     domains = request.domains or HOUSING_REPORT_DOMAINS
     query = request.user_query or (
@@ -367,6 +372,7 @@ def generate_housing_report(session: Session, request: HousingReportRequest) -> 
 
     report = build_generated_report(
         report_type="housing",
+        user_id=user_id,
         title=request.title or default_report_title(ReportCreateRequest(report_type="housing"), now),
         domains=domains,
         tickers=[],
@@ -379,7 +385,7 @@ def generate_housing_report(session: Session, request: HousingReportRequest) -> 
             "time_window": request.time_window,
             "generation_stage": "housing",
             "expected_sections": ["mortgage_rates", "affordability", "supply_demand", "risks"],
-            **build_panel_signal_metadata(session, "housing", agent_response),
+            **build_panel_signal_metadata(session, "housing", agent_response, user_id=user_id),
         },
     )
     session.add(report)
@@ -387,10 +393,10 @@ def generate_housing_report(session: Session, request: HousingReportRequest) -> 
     add_report_citations(session, report, agent_response.citations)
     session.commit()
     session.refresh(report)
-    return get_report(session, report.id)
+    return get_report(session, report.id, user_id=user_id)
 
 
-def generate_macro_report(session: Session, request: MacroReportRequest) -> ReportResponse:
+def generate_macro_report(session: Session, request: MacroReportRequest, *, user_id: int | None = None) -> ReportResponse:
     now = datetime.now(UTC)
     domains = request.domains or MACRO_REPORT_DOMAINS
     query = request.user_query or (
@@ -410,6 +416,7 @@ def generate_macro_report(session: Session, request: MacroReportRequest) -> Repo
 
     report = build_generated_report(
         report_type="macro",
+        user_id=user_id,
         title=request.title or default_report_title(ReportCreateRequest(report_type="macro"), now),
         domains=domains,
         tickers=[],
@@ -422,7 +429,7 @@ def generate_macro_report(session: Session, request: MacroReportRequest) -> Repo
             "time_window": request.time_window,
             "generation_stage": "macro",
             "expected_sections": ["rates", "labor", "policy", "credit", "risks"],
-            **build_panel_signal_metadata(session, "macro", agent_response),
+            **build_panel_signal_metadata(session, "macro", agent_response, user_id=user_id),
         },
     )
     session.add(report)
@@ -430,13 +437,15 @@ def generate_macro_report(session: Session, request: MacroReportRequest) -> Repo
     add_report_citations(session, report, agent_response.citations)
     session.commit()
     session.refresh(report)
-    return get_report(session, report.id)
+    return get_report(session, report.id, user_id=user_id)
 
 
-def list_reports(session: Session, *, limit: int = 25, report_type: str | None = None) -> ReportListResponse:
+def list_reports(session: Session, *, limit: int = 25, report_type: str | None = None, user_id: int | None = None) -> ReportListResponse:
     statement = select(Report).options(joinedload(Report.citations)).order_by(desc(Report.created_at), desc(Report.id))
     if report_type:
         statement = statement.where(Report.report_type == report_type)
+    if user_id is not None:
+        statement = statement.where(Report.user_id == user_id)
     statement = statement.where(Report.status != "archived")
 
     reports = session.scalars(statement.limit(limit)).unique().all()
@@ -446,19 +455,20 @@ def list_reports(session: Session, *, limit: int = 25, report_type: str | None =
     )
 
 
-def get_report(session: Session, report_id: int) -> ReportResponse:
-    report = session.scalar(
-        select(Report).options(joinedload(Report.citations).joinedload(Citation.source)).where(Report.id == report_id)
-    )
+def get_report(session: Session, report_id: int, *, user_id: int | None = None) -> ReportResponse:
+    statement = select(Report).options(joinedload(Report.citations).joinedload(Citation.source)).where(Report.id == report_id)
+    if user_id is not None:
+        statement = statement.where(Report.user_id == user_id)
+    report = session.scalar(statement)
     if report is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
     return report_to_response(report)
 
 
-def delete_report(session: Session, report_id: int) -> ReportDeleteResponse:
+def delete_report(session: Session, report_id: int, *, user_id: int | None = None) -> ReportDeleteResponse:
     report = session.get(Report, report_id)
-    if report is None:
+    if report is None or (user_id is not None and report.user_id != user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
     session.delete(report)
@@ -466,20 +476,20 @@ def delete_report(session: Session, report_id: int) -> ReportDeleteResponse:
     return ReportDeleteResponse(id=report_id, deleted=True)
 
 
-def archive_report(session: Session, report_id: int) -> ReportResponse:
+def archive_report(session: Session, report_id: int, *, user_id: int | None = None) -> ReportResponse:
     report = session.get(Report, report_id)
-    if report is None:
+    if report is None or (user_id is not None and report.user_id != user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
     report.status = "archived"
     session.commit()
     session.refresh(report)
-    return get_report(session, report.id)
+    return get_report(session, report.id, user_id=user_id)
 
 
-def regenerate_report(session: Session, report_id: int) -> ReportResponse:
+def regenerate_report(session: Session, report_id: int, *, user_id: int | None = None) -> ReportResponse:
     report = session.get(Report, report_id)
-    if report is None:
+    if report is None or (user_id is not None and report.user_id != user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
     metadata = report.report_metadata or {}
@@ -489,63 +499,53 @@ def regenerate_report(session: Session, report_id: int) -> ReportResponse:
     title = f"{report.title} Refresh"
 
     if report.report_type == "daily_briefing":
-        return generate_daily_briefing(
-            session,
-            DailyBriefingRequest(
-                title=title,
-                domains=report.domains,
-                regions=regions,
-                time_window=time_window,
-                user_query=user_query,
-            ),
+        request = DailyBriefingRequest(
+            title=title,
+            domains=report.domains,
+            regions=regions,
+            time_window=time_window,
+            user_query=user_query,
         )
+        return generate_daily_briefing(session, request, user_id=user_id) if user_id is not None else generate_daily_briefing(session, request)
     if report.report_type == "company_research":
-        return generate_company_research(
-            session,
-            CompanyResearchRequest(
-                title=title,
-                ticker=(report.tickers or [None])[0],
-                company=(report.companies or [None])[0],
-                domains=report.domains,
-                regions=regions,
-                time_window=time_window,
-                user_query=user_query,
-            ),
+        request = CompanyResearchRequest(
+            title=title,
+            ticker=(report.tickers or [None])[0],
+            company=(report.companies or [None])[0],
+            domains=report.domains,
+            regions=regions,
+            time_window=time_window,
+            user_query=user_query,
         )
+        return generate_company_research(session, request, user_id=user_id) if user_id is not None else generate_company_research(session, request)
     if report.report_type == "market_strategy":
-        return generate_market_strategy(
-            session,
-            MarketStrategyRequest(
-                title=title,
-                domains=report.domains,
-                tickers=report.tickers,
-                regions=regions,
-                time_window=time_window,
-                user_query=user_query,
-            ),
+        request = MarketStrategyRequest(
+            title=title,
+            domains=report.domains,
+            tickers=report.tickers,
+            regions=regions,
+            time_window=time_window,
+            user_query=user_query,
         )
+        return generate_market_strategy(session, request, user_id=user_id) if user_id is not None else generate_market_strategy(session, request)
     if report.report_type == "housing":
-        return generate_housing_report(
-            session,
-            HousingReportRequest(
-                title=title,
-                domains=report.domains,
-                regions=regions,
-                time_window=time_window,
-                user_query=user_query,
-            ),
+        request = HousingReportRequest(
+            title=title,
+            domains=report.domains,
+            regions=regions,
+            time_window=time_window,
+            user_query=user_query,
         )
+        return generate_housing_report(session, request, user_id=user_id) if user_id is not None else generate_housing_report(session, request)
     if report.report_type == "macro":
-        return generate_macro_report(
-            session,
-            MacroReportRequest(
-                title=title,
-                domains=report.domains,
-                regions=regions,
-                time_window=time_window,
-                user_query=user_query,
-            ),
+        request = MacroReportRequest(
+            title=title,
+            domains=report.domains,
+            regions=regions,
+            time_window=time_window,
+            user_query=user_query,
         )
+        return generate_macro_report(session, request, user_id=user_id) if user_id is not None else generate_macro_report(session, request)
 
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Report type cannot be regenerated")
 
@@ -572,6 +572,7 @@ def add_report_citations(session: Session, report: Report, citations: list[Agent
 def build_generated_report(
     *,
     report_type: str,
+    user_id: int | None = None,
     title: str,
     domains: list[str],
     tickers: list[str],
@@ -589,6 +590,7 @@ def build_generated_report(
         "risks": agent_response.risks,
     }
     return Report(
+        user_id=user_id,
         report_type=report_type,
         status="generated",
         title=title,
@@ -609,8 +611,10 @@ def build_panel_signal_metadata(
     session: Session,
     report_type: str,
     agent_response: AgentQueryResponse,
+    *,
+    user_id: int | None = None,
 ) -> dict[str, Any]:
-    previous_report = latest_previous_report(session, report_type)
+    previous_report = latest_previous_report(session, report_type, user_id=user_id)
     signal_label = classify_signal(agent_response)
     change_label = classify_change(previous_report, agent_response.summary)
     source_count = len(agent_response.citations)
@@ -625,13 +629,11 @@ def build_panel_signal_metadata(
     }
 
 
-def latest_previous_report(session: Session, report_type: str) -> Report | None:
-    return session.scalar(
-        select(Report)
-        .where(Report.report_type == report_type, Report.status == "generated")
-        .order_by(desc(Report.as_of), desc(Report.id))
-        .limit(1)
-    )
+def latest_previous_report(session: Session, report_type: str, *, user_id: int | None = None) -> Report | None:
+    statement = select(Report).where(Report.report_type == report_type, Report.status == "generated")
+    if user_id is not None:
+        statement = statement.where(Report.user_id == user_id)
+    return session.scalar(statement.order_by(desc(Report.as_of), desc(Report.id)).limit(1))
 
 
 def classify_signal(agent_response: AgentQueryResponse) -> str:

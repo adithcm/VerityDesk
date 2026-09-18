@@ -353,6 +353,10 @@ type AuthResponse = {
   user: AuthUser;
 };
 
+type ApiErrorPayload = {
+  detail?: unknown;
+};
+
 type InferredAgentContext = {
   intent: AgentIntent;
   domain: string;
@@ -613,19 +617,39 @@ export default function Home() {
   async function submitAuth(mode: "login" | "register", payload: { email: string; password: string; displayName?: string }) {
     setAuthLoading(true);
     setAuthError(null);
+    const email = payload.email.trim();
+    const displayName = payload.displayName?.trim();
+    if (!email) {
+      setAuthError("Email is required.");
+      setAuthLoading(false);
+      setAuthLoaded(true);
+      return;
+    }
+    if (payload.password.length < 8) {
+      setAuthError("Password must be at least 8 characters.");
+      setAuthLoading(false);
+      setAuthLoaded(true);
+      return;
+    }
+    if (mode === "register" && !displayName) {
+      setAuthError("Name is required to create an account.");
+      setAuthLoading(false);
+      setAuthLoaded(true);
+      return;
+    }
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/${mode}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: payload.email,
+          email,
           password: payload.password,
-          display_name: payload.displayName || payload.email.split("@")[0],
+          display_name: displayName || email.split("@")[0],
         }),
       });
-      const data = (await response.json()) as AuthResponse | { detail?: string };
+      const data = (await response.json()) as AuthResponse | ApiErrorPayload;
       if (!response.ok) {
-        throw new Error("detail" in data && data.detail ? data.detail : "Could not authenticate");
+        throw new Error(readableApiError(data, "Could not authenticate"));
       }
       const authData = data as AuthResponse;
       window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authData.token);
@@ -727,8 +751,8 @@ export default function Home() {
     }
     const savedProfile = authUser ? profileFromAuthUser(authUser) : loadPersonalizationProfile();
     const setupComplete = authUser?.setup_complete ?? isSetupComplete(savedProfile);
-    const savedChatSessions = loadChatSessions();
-    const savedActiveChatId = loadActiveChatSessionId(savedChatSessions);
+    const savedChatSessions = loadChatSessions(authUser?.id);
+    const savedActiveChatId = loadActiveChatSessionId(savedChatSessions, authUser?.id);
     setPersonalizationProfile(savedProfile);
     localStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(savedProfile));
     if (authToken) {
@@ -771,11 +795,11 @@ export default function Home() {
   function persistChatSessions(nextSessions: ChatSession[], nextActiveId: string | null = activeChatSessionId) {
     setChatSessions(nextSessions);
     setActiveChatSessionId(nextActiveId);
-    localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(nextSessions));
+    localStorage.setItem(chatSessionsStorageKey(authUser?.id), JSON.stringify(nextSessions));
     if (nextActiveId) {
-      localStorage.setItem(ACTIVE_CHAT_SESSION_STORAGE_KEY, nextActiveId);
+      localStorage.setItem(activeChatSessionStorageKey(authUser?.id), nextActiveId);
     } else {
-      localStorage.removeItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
+      localStorage.removeItem(activeChatSessionStorageKey(authUser?.id));
     }
   }
 
@@ -818,7 +842,10 @@ export default function Home() {
     setVisualModulesError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/visuals/modules`, { cache: "no-store" });
+      const response = await fetch(`${API_BASE_URL}/api/v1/visuals/modules`, {
+        cache: "no-store",
+        headers: authorizedHeaders(),
+      });
       if (!response.ok) {
         throw new Error(`Visual module request failed with status ${response.status}`);
       }
@@ -835,7 +862,10 @@ export default function Home() {
     setReportsError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/reports?limit=50`, { cache: "no-store" });
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports?limit=50`, {
+        cache: "no-store",
+        headers: authorizedHeaders(),
+      });
       if (!response.ok) {
         throw new Error(`Report request failed with status ${response.status}`);
       }
@@ -993,7 +1023,10 @@ export default function Home() {
     setReportsError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/reports/${reportId}`, { cache: "no-store" });
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/${reportId}`, {
+        cache: "no-store",
+        headers: authorizedHeaders(),
+      });
       if (!response.ok) {
         throw new Error(`Report detail request failed with status ${response.status}`);
       }
@@ -1012,7 +1045,10 @@ export default function Home() {
     try {
       const response = await fetch(
         `${API_BASE_URL}/api/v1/reports/${reportId}${action === "delete" ? "" : `/${action}`}`,
-        { method: action === "delete" ? "DELETE" : "POST" },
+        {
+          method: action === "delete" ? "DELETE" : "POST",
+          headers: authorizedHeaders(),
+        },
       );
       if (!response.ok) {
         throw new Error(`Report ${action} failed with status ${response.status}`);
@@ -1176,7 +1212,7 @@ export default function Home() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/reports/daily-briefing`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authorizedHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           time_window: "day",
           domains: personalizationProfile.priorityTopics.length
@@ -1214,7 +1250,7 @@ export default function Home() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/reports/company-research`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authorizedHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           ticker: companyTicker.trim() || null,
           company: companyName.trim() || null,
@@ -1245,7 +1281,7 @@ export default function Home() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/reports/market-strategy`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authorizedHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ tickers: ["SPY", "QQQ", "TLT"], time_window: "month" }),
       });
 
@@ -1272,7 +1308,7 @@ export default function Home() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/reports/housing`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authorizedHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ regions: ["US"], time_window: "quarter" }),
       });
 
@@ -1299,7 +1335,7 @@ export default function Home() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/reports/macro`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authorizedHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ regions: ["US"], time_window: "quarter" }),
       });
 
@@ -2234,6 +2270,9 @@ function SetupProfileFlow({
   onSkip: () => void;
 }) {
   const [draft, setDraft] = useState<PersonalizationProfile>(profile);
+  const [setupStep, setSetupStep] = useState(0);
+  const setupSteps = ["Basics", "Interests", "Briefing"];
+  const lastStep = setupSteps.length - 1;
 
   useEffect(() => {
     setDraft(profile);
@@ -2255,6 +2294,10 @@ function SetupProfileFlow({
 
   function submitSetup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (setupStep < lastStep) {
+      setSetupStep((current) => Math.min(current + 1, lastStep));
+      return;
+    }
     onSave(normalizePersonalizationProfile(draft));
   }
 
@@ -2279,75 +2322,171 @@ function SetupProfileFlow({
             onClick={onSkip}
             className="min-h-10 rounded-lg border border-[#1d3558] px-4 text-sm font-black text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-200"
           >
-            Skip For Now
+            Skip For Later
           </button>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
+        <div className="grid gap-3 rounded-xl border border-[#1d3558] bg-[#020617]/58 p-2 sm:grid-cols-3">
+          {setupSteps.map((step, index) => (
+            <button
+              key={step}
+              type="button"
+              onClick={() => setSetupStep(index)}
+              className={`min-h-11 rounded-lg px-3 text-left text-sm font-black transition ${
+                setupStep === index
+                  ? "bg-cyan-300 text-[#03111f]"
+                  : "border border-[#1d3558] text-slate-400 hover:border-cyan-300/50 hover:text-cyan-200"
+              }`}
+            >
+              <span className="font-mono text-[11px] uppercase opacity-75">Step {index + 1}</span>
+              <span className="block">{step}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <section className="rounded-xl border border-cyan-300/20 bg-[#020617]/70 p-4">
-            <p className="font-mono text-xs font-black uppercase text-cyan-300">Profile</p>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <SettingsTextInput
-                id="setup-profile-name"
-                label="Profile name"
-                value={draft.profileName}
-                placeholder="Adith's briefing"
-                onChange={(value) => updateDraft({ profileName: value })}
-              />
-              <SettingsTextInput
-                id="setup-location"
-                label="Primary location"
-                value={draft.location}
-                placeholder="Phoenix, AZ"
-                onChange={(value) => updateDraft({ location: value })}
-              />
-              <SettingsTextInput
-                id="setup-housing"
-                label="Housing markets"
-                value={draft.housingMarkets}
-                placeholder="Phoenix, Scottsdale, Tucson"
-                onChange={(value) => updateDraft({ housingMarkets: value })}
-              />
-              <SettingsTextInput
-                id="setup-watchlist"
-                label="Watchlist"
-                value={draft.watchlist}
-                placeholder={DEFAULT_DAILY_WATCHLIST}
-                onChange={(value) => updateDraft({ watchlist: value.toUpperCase() })}
-              />
-              <SettingsTextInput
-                id="setup-companies"
-                label="Companies"
-                value={draft.companies}
-                placeholder={DEFAULT_DAILY_COMPANIES}
-                onChange={(value) => updateDraft({ companies: value })}
-              />
-              <SettingsTextInput
-                id="setup-sectors"
-                label="Sectors"
-                value={draft.sectors}
-                placeholder="AI, homebuilders, banks"
-                onChange={(value) => updateDraft({ sectors: value })}
-              />
-            </div>
-            <label className="mt-4 block text-sm font-bold text-slate-200" htmlFor="setup-note">
-              What should VerityDesk know?
-              <textarea
-                id="setup-note"
-                value={draft.personalNote}
-                onChange={(event) => updateDraft({ personalNote: event.target.value })}
-                placeholder="Example: Keep answers practical. I care about Arizona housing, mortgage rates, broad market risk, and long-term tech."
-                className="mt-2 min-h-28 w-full resize-y rounded-xl border border-[#1d3558] bg-[#020617] px-4 py-3 text-sm leading-6 text-slate-300 outline-none focus:border-cyan-300"
-              />
-            </label>
+            {setupStep === 0 && (
+              <>
+                <p className="font-mono text-xs font-black uppercase text-cyan-300">Basics</p>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <SettingsTextInput
+                    id="setup-profile-name"
+                    label="Profile name"
+                    value={draft.profileName}
+                    placeholder="My briefing"
+                    onChange={(value) => updateDraft({ profileName: value })}
+                  />
+                  <SettingsTextInput
+                    id="setup-location"
+                    label="Primary location"
+                    value={draft.location}
+                    placeholder="City, state, or country"
+                    onChange={(value) => updateDraft({ location: value })}
+                  />
+                  <SettingsTextInput
+                    id="setup-housing"
+                    label="Housing markets"
+                    value={draft.housingMarkets}
+                    placeholder="Cities or regions to follow"
+                    onChange={(value) => updateDraft({ housingMarkets: value })}
+                  />
+                  <SettingsTextInput
+                    id="setup-watchlist"
+                    label="Watchlist"
+                    value={draft.watchlist}
+                    placeholder="Optional tickers, comma-separated"
+                    onChange={(value) => updateDraft({ watchlist: value.toUpperCase() })}
+                  />
+                  <SettingsTextInput
+                    id="setup-companies"
+                    label="Companies"
+                    value={draft.companies}
+                    placeholder="Optional companies, comma-separated"
+                    onChange={(value) => updateDraft({ companies: value })}
+                  />
+                  <SettingsTextInput
+                    id="setup-sectors"
+                    label="Sectors"
+                    value={draft.sectors}
+                    placeholder="Optional sectors or industries"
+                    onChange={(value) => updateDraft({ sectors: value })}
+                  />
+                </div>
+              </>
+            )}
+
+            {setupStep === 1 && (
+              <>
+                <p className="font-mono text-xs font-black uppercase text-cyan-300">Interests</p>
+                <label className="mt-4 block text-sm font-bold text-slate-200" htmlFor="setup-note">
+                  What should VerityDesk know?
+                  <textarea
+                    id="setup-note"
+                    value={draft.personalNote}
+                    onChange={(event) => updateDraft({ personalNote: event.target.value })}
+                    placeholder="Example: Keep answers practical. I care about local housing, mortgage rates, broad market risk, and long-term tech."
+                    className="mt-2 min-h-28 w-full resize-y rounded-xl border border-[#1d3558] bg-[#020617] px-4 py-3 text-sm leading-6 text-slate-300 outline-none focus:border-cyan-300"
+                  />
+                </label>
+                <div className="mt-4 grid gap-4 xl:grid-cols-3">
+                  <CheckboxGroup
+                    title="Daily brief topics"
+                    options={topicOptions}
+                    values={draft.priorityTopics}
+                    onToggle={(value) => toggleDraftOption("priorityTopics", value)}
+                  />
+                  <CheckboxGroup
+                    title="Housing"
+                    options={housingInterestOptions}
+                    values={draft.housingInterests}
+                    onToggle={(value) => toggleDraftOption("housingInterests", value)}
+                  />
+                  <CheckboxGroup
+                    title="Macro"
+                    options={macroInterestOptions}
+                    values={draft.macroInterests}
+                    onToggle={(value) => toggleDraftOption("macroInterests", value)}
+                  />
+                </div>
+              </>
+            )}
+
+            {setupStep === 2 && (
+              <>
+                <p className="font-mono text-xs font-black uppercase text-cyan-300">Briefing style</p>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <SettingsSelect
+                    id="setup-briefing-style"
+                    label="Briefing detail"
+                    value={draft.briefingStyle}
+                    onChange={(value) => updateDraft({ briefingStyle: value as PersonalizationProfile["briefingStyle"] })}
+                    options={[
+                      ["quick", "Quick"],
+                      ["balanced", "Balanced"],
+                      ["detailed", "Detailed"],
+                    ]}
+                  />
+                  <SettingsTextInput
+                    id="setup-briefing-time"
+                    label="Preferred briefing time"
+                    type="time"
+                    value={draft.briefingTime}
+                    onChange={(value) => updateDraft({ briefingTime: value })}
+                  />
+                  <SettingsSelect
+                    id="setup-risk"
+                    label="Risk preference"
+                    value={draft.riskPreference}
+                    onChange={(value) => updateDraft({ riskPreference: value as PersonalizationProfile["riskPreference"] })}
+                    options={[
+                      ["conservative", "Conservative"],
+                      ["balanced", "Balanced"],
+                      ["aggressive", "Aggressive"],
+                    ]}
+                  />
+                  <SettingsSelect
+                    id="setup-answer-format"
+                    label="Answer format"
+                    value={draft.answerFormat}
+                    onChange={(value) => updateDraft({ answerFormat: value as PersonalizationProfile["answerFormat"] })}
+                    options={[
+                      ["brief", "Brief"],
+                      ["decision_memo", "Decision memo"],
+                      ["watchlist", "Watchlist"],
+                    ]}
+                  />
+                </div>
+              </>
+            )}
           </section>
 
-          <section className="grid gap-4">
+          <section className="grid content-start gap-4">
             <div className="rounded-xl border border-lime-300/25 bg-[linear-gradient(135deg,rgba(163,230,53,0.12),transparent_42%),#020617] p-4">
-              <p className="font-mono text-xs font-black uppercase text-lime-300">Local access</p>
-              <h2 className="mt-2 text-xl font-bold text-white">Saved on this Mac</h2>
+              <p className="font-mono text-xs font-black uppercase text-lime-300">Account profile</p>
+              <h2 className="mt-2 text-xl font-bold text-white">Saved per user</h2>
               <p className="mt-2 text-sm leading-6 text-slate-400">
-                This setup creates a local profile for personalization. A simple local passcode or full account login can be added when cloud sync becomes necessary.
+                These preferences are stored with your account and can be changed later in Settings.
               </p>
             </div>
             <div className="rounded-xl border border-cyan-300/20 bg-[#020617]/70 p-4">
@@ -2358,63 +2497,30 @@ function SetupProfileFlow({
                 <SourceStripRow label="Briefing time" value={formatScheduleTime(scheduleData)} />
               </div>
             </div>
-            <div className="rounded-xl border border-[#1d3558] bg-[#020617]/70 p-4">
-              <p className="font-mono text-xs font-black uppercase text-slate-500">Output style</p>
-              <div className="mt-3 grid gap-3">
-                <SettingsSelect
-                  id="setup-briefing-style"
-                  label="Briefing detail"
-                  value={draft.briefingStyle}
-                  onChange={(value) => updateDraft({ briefingStyle: value as PersonalizationProfile["briefingStyle"] })}
-                  options={[
-                    ["quick", "Quick"],
-                    ["balanced", "Balanced"],
-                    ["detailed", "Detailed"],
-                  ]}
-                />
-                <SettingsTextInput
-                  id="setup-briefing-time"
-                  label="Preferred briefing time"
-                  type="time"
-                  value={draft.briefingTime}
-                  onChange={(value) => updateDraft({ briefingTime: value })}
-                />
-              </div>
-            </div>
           </section>
         </div>
-
-        <section className="grid gap-4 lg:grid-cols-3">
-          <CheckboxGroup
-            title="Daily brief topics"
-            options={topicOptions}
-            values={draft.priorityTopics}
-            onToggle={(value) => toggleDraftOption("priorityTopics", value)}
-          />
-          <CheckboxGroup
-            title="Housing"
-            options={housingInterestOptions}
-            values={draft.housingInterests}
-            onToggle={(value) => toggleDraftOption("housingInterests", value)}
-          />
-          <CheckboxGroup
-            title="Macro"
-            options={macroInterestOptions}
-            values={draft.macroInterests}
-            onToggle={(value) => toggleDraftOption("macroInterests", value)}
-          />
-        </section>
 
         <div className="flex flex-col gap-3 border-t border-[#1d3558] pt-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm leading-6 text-slate-400">
             You can change all of this later in Settings.
           </p>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            {setupStep > 0 && (
+              <button
+                type="button"
+                onClick={() => setSetupStep((current) => Math.max(current - 1, 0))}
+                className="min-h-11 rounded-lg border border-[#1d3558] px-5 text-sm font-black text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-200"
+              >
+                Back
+              </button>
+            )}
           <button
             type="submit"
             className="min-h-11 rounded-lg bg-lime-300 px-5 text-sm font-black text-[#102000]"
           >
-            Save And Start
+              {setupStep === lastStep ? "Save And Start" : "Next"}
           </button>
+          </div>
         </div>
       </form>
     </div>
@@ -3007,6 +3113,56 @@ function titleCase(value: string) {
     .filter(Boolean)
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(" ");
+}
+
+function readableApiError(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object") {
+    return fallback;
+  }
+
+  const detail = (payload as ApiErrorPayload).detail;
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+        if (!item || typeof item !== "object") {
+          return null;
+        }
+
+        const record = item as Record<string, unknown>;
+        const message = typeof record.msg === "string" ? record.msg : null;
+        const loc = Array.isArray(record.loc) ? record.loc : [];
+        const field = loc.length > 0 ? loc[loc.length - 1] : null;
+        if (!message) {
+          return null;
+        }
+        if (field === "password" && message.toLowerCase().includes("at least 8 characters")) {
+          return "Password must be at least 8 characters.";
+        }
+        if (typeof field === "string") {
+          return `${titleCase(field)}: ${message}`;
+        }
+        return message;
+      })
+      .filter((message): message is string => Boolean(message));
+
+    return messages.length > 0 ? messages.join(" ") : fallback;
+  }
+
+  if (detail && typeof detail === "object") {
+    const message = (detail as Record<string, unknown>).msg;
+    if (typeof message === "string") {
+      return message;
+    }
+  }
+
+  return fallback;
 }
 
 function DashboardView({
@@ -6141,12 +6297,20 @@ function isSetupComplete(profile: PersonalizationProfile) {
   return window.localStorage.getItem(SETUP_COMPLETE_STORAGE_KEY) === "true" || Boolean(profile.profileName || profile.location || profile.personalNote);
 }
 
-function loadChatSessions(): ChatSession[] {
+function chatSessionsStorageKey(userId?: number | null) {
+  return userId ? `${CHAT_SESSIONS_STORAGE_KEY}.user.${userId}` : CHAT_SESSIONS_STORAGE_KEY;
+}
+
+function activeChatSessionStorageKey(userId?: number | null) {
+  return userId ? `${ACTIVE_CHAT_SESSION_STORAGE_KEY}.user.${userId}` : ACTIVE_CHAT_SESSION_STORAGE_KEY;
+}
+
+function loadChatSessions(userId?: number | null): ChatSession[] {
   if (typeof window === "undefined") {
     return [];
   }
 
-  const storedSessions = window.localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
+  const storedSessions = window.localStorage.getItem(chatSessionsStorageKey(userId));
   if (!storedSessions) {
     return [];
   }
@@ -6162,12 +6326,12 @@ function loadChatSessions(): ChatSession[] {
   }
 }
 
-function loadActiveChatSessionId(sessions: ChatSession[]) {
+function loadActiveChatSessionId(sessions: ChatSession[], userId?: number | null) {
   if (typeof window === "undefined") {
     return null;
   }
 
-  const storedId = window.localStorage.getItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
+  const storedId = window.localStorage.getItem(activeChatSessionStorageKey(userId));
   if (storedId && sessions.some((session) => session.id === storedId)) {
     return storedId;
   }
@@ -6265,7 +6429,7 @@ function withDailyBriefingDefaults(profile: PersonalizationProfile): Personaliza
 }
 
 function profileFromAuthUser(user: AuthUser): PersonalizationProfile {
-  return withDailyBriefingDefaults(normalizePersonalizationProfile({
+  const profile = normalizePersonalizationProfile({
     profileName: user.profile.profile_name || user.display_name,
     personalNote: user.profile.personal_note,
     location: user.profile.location,
@@ -6282,7 +6446,8 @@ function profileFromAuthUser(user: AuthUser): PersonalizationProfile {
     ignoredTopics: user.profile.ignored_topics,
     briefingStyle: user.profile.briefing_style,
     briefingTime: user.profile.briefing_time,
-  }));
+  });
+  return user.setup_complete ? withDailyBriefingDefaults(profile) : profile;
 }
 
 function profileToAuthPayload(profile: PersonalizationProfile): AuthProfileResponse {

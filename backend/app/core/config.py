@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:3000"
     log_level: str = "INFO"
     investoragent_user_agent: str = "InvestorAgent/0.1 contact@example.com"
+    owner_email: str | None = None
     openai_api_key: str | None = None
     openai_model: str = "gpt-5-mini"
     fred_api_key: str | None = None

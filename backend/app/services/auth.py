@@ -9,6 +9,7 @@ from fastapi import Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.models import User, UserSession, UserSettings
 from app.schemas.auth import AuthProfile, UserResponse
 from app.services.personalization import get_or_create_preferences, preferences_to_response
@@ -18,7 +19,7 @@ SESSION_TTL_DAYS = 30
 PASSWORD_ITERATIONS = 200_000
 
 
-DEFAULT_PROFILE = AuthProfile(
+OWNER_PROFILE = AuthProfile(
     profile_name="Adith's intelligence desk",
     personal_note=(
         "Prioritize concise daily intelligence on world news, geopolitical news globally and in the U.S., "
@@ -32,6 +33,25 @@ DEFAULT_PROFILE = AuthProfile(
     sectors="AI, semiconductors, cloud, consumer technology, rates, housing",
     housing_interests=["Mortgage rates", "Affordability"],
     macro_interests=["Inflation", "Interest rates", "Fed policy"],
+    risk_preference="balanced",
+    investing_style="long_term",
+    answer_format="brief",
+    briefing_style="balanced",
+    briefing_time="08:00",
+)
+
+
+GENERIC_PROFILE = AuthProfile(
+    profile_name="My intelligence desk",
+    personal_note="",
+    location="",
+    housing_markets="",
+    watchlist="",
+    companies="",
+    priority_topics=[],
+    sectors="",
+    housing_interests=[],
+    macro_interests=[],
     risk_preference="balanced",
     investing_style="long_term",
     answer_format="brief",
@@ -74,15 +94,16 @@ def create_user(session: Session, *, email: str, password: str, display_name: st
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account already exists for this email")
 
+    owner_account = is_owner_email(normalized_email)
     user = User(
         email=normalized_email,
         display_name=display_name.strip(),
         password_hash=hash_password(password),
-        setup_complete=True,
+        setup_complete=owner_account,
     )
     session.add(user)
     session.flush()
-    seed_user_settings(session, user)
+    seed_user_settings(session, user, owner_account=owner_account)
     token = create_session_token(session, user)
     session.commit()
     session.refresh(user)
@@ -140,6 +161,12 @@ def current_user_from_authorization(session: Session, authorization: str | None)
     return user
 
 
+def optional_user_from_authorization(session: Session, authorization: str | None) -> User | None:
+    if not authorization:
+        return None
+    return current_user_from_authorization(session, authorization)
+
+
 def require_user(authorization: str | None = Header(default=None)) -> str | None:
     return authorization
 
@@ -153,19 +180,27 @@ def revoke_token(session: Session, authorization: str | None) -> None:
         session.commit()
 
 
-def seed_user_settings(session: Session, user: User) -> UserSettings:
+def is_owner_email(email: str) -> bool:
+    owner_email = get_settings().owner_email
+    return bool(owner_email and email == owner_email.strip().lower())
+
+
+def seed_user_settings(session: Session, user: User, *, owner_account: bool | None = None) -> UserSettings:
+    owner_account = is_owner_email(user.email) if owner_account is None else owner_account
+    profile = OWNER_PROFILE if owner_account else GENERIC_PROFILE
     settings = get_or_create_preferences(session, user)
-    settings.watchlist_tickers = ["SPY", "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA"]
-    settings.preferred_regions = ["Phoenix, AZ", "Scottsdale, AZ", "Tucson, AZ", "United States"]
+    settings.watchlist_tickers = ["SPY", "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA"] if owner_account else []
+    settings.preferred_regions = ["Phoenix, AZ", "Scottsdale, AZ", "Tucson, AZ", "United States"] if owner_account else []
     settings.enabled_sources = []
-    settings.daily_briefing_time = "08:00"
-    settings.profile_metadata = DEFAULT_PROFILE.model_dump()
+    settings.daily_briefing_time = profile.briefing_time
+    settings.profile_metadata = profile.model_dump()
     return settings
 
 
 def user_to_response(session: Session, user: User) -> UserResponse:
     settings = get_or_create_preferences(session, user)
-    profile = AuthProfile(**(settings.profile_metadata or DEFAULT_PROFILE.model_dump()))
+    fallback_profile = OWNER_PROFILE if is_owner_email(user.email) else GENERIC_PROFILE
+    profile = AuthProfile(**(settings.profile_metadata or fallback_profile.model_dump()))
     return UserResponse(
         id=user.id,
         email=user.email,
