@@ -491,7 +491,7 @@ Milestones:
 
 - [Milestone 10.1: Deployment architecture](../phases/phase-10/milestones/10.1-deployment-architecture.md).
 - [Milestone 10.2: Desktop runtime shell](../phases/phase-10/milestones/10.2-desktop-runtime-shell.md).
-- Milestone 10.3: Packaged database mode.
+- [Milestone 10.3: Packaged database mode](../phases/phase-10/milestones/10.3-packaged-database-mode.md).
 - Milestone 10.4: API key and local config handling.
 - Milestone 10.5: Production builds.
 - Milestone 10.6: macOS app packaging.

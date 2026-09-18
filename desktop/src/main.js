@@ -8,6 +8,7 @@ const BACKEND_PORT = process.env.VERITYDESK_BACKEND_PORT || "8000";
 const FRONTEND_PORT = process.env.VERITYDESK_FRONTEND_PORT || "3000";
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const FRONTEND_URL = `http://127.0.0.1:${FRONTEND_PORT}`;
+const DATABASE_FILENAME = "veritydesk.db";
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const frontendDir = path.join(repoRoot, "frontend");
@@ -21,25 +22,50 @@ const alembicBin = path.join(repoRoot, ".venv", "bin", "alembic");
 const children = new Set();
 let mainWindow = null;
 
+app.setName(APP_NAME);
+
 function commandPath(preferredPath, fallback) {
   return fs.existsSync(preferredPath) ? preferredPath : fallback;
 }
 
-function childEnv(extra = {}) {
+function sqliteDatabaseUrl(databasePath) {
+  return `sqlite:///${databasePath}`;
+}
+
+function desktopRuntimePaths() {
+  const dataDir = process.env.VERITYDESK_DESKTOP_DATA_DIR || app.getPath("userData");
+  const logsDir = process.env.VERITYDESK_DESKTOP_LOG_DIR || path.join(app.getPath("logs"), APP_NAME);
+  const databasePath = path.join(dataDir, DATABASE_FILENAME);
+
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(logsDir, { recursive: true });
+
+  return {
+    dataDir,
+    logsDir,
+    databasePath,
+    databaseUrl: process.env.VERITYDESK_DESKTOP_DATABASE_URL || sqliteDatabaseUrl(databasePath),
+  };
+}
+
+function childEnv(runtimePaths, extra = {}) {
   return {
     ...process.env,
     PATH: `${localNodeBin}:${process.env.PATH || ""}`,
+    DATABASE_URL: runtimePaths.databaseUrl,
     FRONTEND_ORIGIN: FRONTEND_URL,
     NEXT_PUBLIC_API_BASE_URL: BACKEND_URL,
     VERITYDESK_DESKTOP: "1",
+    VERITYDESK_DESKTOP_DATA_DIR: runtimePaths.dataDir,
+    VERITYDESK_DESKTOP_LOG_DIR: runtimePaths.logsDir,
     ...extra,
   };
 }
 
-function spawnProcess(label, command, args, options = {}) {
+function spawnProcess(label, command, args, runtimePaths, options = {}) {
   const child = spawn(command, args, {
     cwd: options.cwd || repoRoot,
-    env: childEnv(options.env),
+    env: childEnv(runtimePaths, options.env),
     stdio: ["ignore", "pipe", "pipe"],
   });
 
@@ -58,9 +84,9 @@ function spawnProcess(label, command, args, options = {}) {
   return child;
 }
 
-async function runProcess(label, command, args, options = {}) {
+async function runProcess(label, command, args, runtimePaths, options = {}) {
   await new Promise((resolve, reject) => {
-    const child = spawnProcess(label, command, args, options);
+    const child = spawnProcess(label, command, args, runtimePaths, options);
     child.on("exit", (code) => {
       if (code === 0) {
         resolve();
@@ -94,13 +120,17 @@ async function startServices() {
   }
 
   const npmCommand = commandPath(localNpm, "npm");
+  const runtimePaths = desktopRuntimePaths();
 
-  await runProcess("migrations", alembicBin, ["upgrade", "head"], { cwd: backendDir });
+  console.log(`[desktop] data directory: ${runtimePaths.dataDir}`);
+  console.log(`[desktop] database: ${runtimePaths.databasePath}`);
 
-  spawnProcess("backend", uvicornBin, ["app.main:app", "--host", "127.0.0.1", "--port", BACKEND_PORT], {
+  await runProcess("migrations", alembicBin, ["upgrade", "head"], runtimePaths, { cwd: backendDir });
+
+  spawnProcess("backend", uvicornBin, ["app.main:app", "--host", "127.0.0.1", "--port", BACKEND_PORT], runtimePaths, {
     cwd: backendDir,
   });
-  spawnProcess("frontend", npmCommand, ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", FRONTEND_PORT], {
+  spawnProcess("frontend", npmCommand, ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", FRONTEND_PORT], runtimePaths, {
     cwd: frontendDir,
   });
 
@@ -178,4 +208,3 @@ if (!gotLock) {
 
   app.on("before-quit", stopServices);
 }
-
