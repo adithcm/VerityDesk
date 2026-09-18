@@ -1,0 +1,181 @@
+const { app, BrowserWindow, dialog, shell } = require("electron");
+const { spawn } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+
+const APP_NAME = "VerityDesk";
+const BACKEND_PORT = process.env.VERITYDESK_BACKEND_PORT || "8000";
+const FRONTEND_PORT = process.env.VERITYDESK_FRONTEND_PORT || "3000";
+const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
+const FRONTEND_URL = `http://127.0.0.1:${FRONTEND_PORT}`;
+
+const repoRoot = path.resolve(__dirname, "..", "..");
+const frontendDir = path.join(repoRoot, "frontend");
+const backendDir = path.join(repoRoot, "backend");
+const localNodeBin = path.join(repoRoot, ".runtime", "node-v22.23.2-darwin-arm64", "bin");
+const localNpm = path.join(localNodeBin, "npm");
+const pythonBin = path.join(repoRoot, ".venv", "bin", "python");
+const uvicornBin = path.join(repoRoot, ".venv", "bin", "uvicorn");
+const alembicBin = path.join(repoRoot, ".venv", "bin", "alembic");
+
+const children = new Set();
+let mainWindow = null;
+
+function commandPath(preferredPath, fallback) {
+  return fs.existsSync(preferredPath) ? preferredPath : fallback;
+}
+
+function childEnv(extra = {}) {
+  return {
+    ...process.env,
+    PATH: `${localNodeBin}:${process.env.PATH || ""}`,
+    FRONTEND_ORIGIN: FRONTEND_URL,
+    NEXT_PUBLIC_API_BASE_URL: BACKEND_URL,
+    VERITYDESK_DESKTOP: "1",
+    ...extra,
+  };
+}
+
+function spawnProcess(label, command, args, options = {}) {
+  const child = spawn(command, args, {
+    cwd: options.cwd || repoRoot,
+    env: childEnv(options.env),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  children.add(child);
+  child.stdout.on("data", (data) => console.log(`[${label}] ${data.toString().trimEnd()}`));
+  child.stderr.on("data", (data) => console.error(`[${label}] ${data.toString().trimEnd()}`));
+  child.on("exit", (code, signal) => {
+    children.delete(child);
+    console.log(`[${label}] exited with code ${code ?? "null"} signal ${signal ?? "null"}`);
+  });
+  child.on("error", (error) => {
+    children.delete(child);
+    console.error(`[${label}] failed to start`, error);
+  });
+
+  return child;
+}
+
+async function runProcess(label, command, args, options = {}) {
+  await new Promise((resolve, reject) => {
+    const child = spawnProcess(label, command, args, options);
+    child.on("exit", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`${label} exited with code ${code}`));
+    });
+    child.on("error", reject);
+  });
+}
+
+async function waitForUrl(url, timeoutMs = 90000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // Service is still starting.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 750));
+  }
+  throw new Error(`Timed out waiting for ${url}`);
+}
+
+async function startServices() {
+  if (!fs.existsSync(uvicornBin) || !fs.existsSync(alembicBin) || !fs.existsSync(pythonBin)) {
+    throw new Error("Missing Python environment. Run: python3 -m venv .venv && .venv/bin/pip install -e backend[dev]");
+  }
+
+  const npmCommand = commandPath(localNpm, "npm");
+
+  await runProcess("migrations", alembicBin, ["upgrade", "head"], { cwd: backendDir });
+
+  spawnProcess("backend", uvicornBin, ["app.main:app", "--host", "127.0.0.1", "--port", BACKEND_PORT], {
+    cwd: backendDir,
+  });
+  spawnProcess("frontend", npmCommand, ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", FRONTEND_PORT], {
+    cwd: frontendDir,
+  });
+
+  await waitForUrl(`${BACKEND_URL}/health`);
+  await waitForUrl(FRONTEND_URL);
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1440,
+    height: 960,
+    minWidth: 1100,
+    minHeight: 720,
+    title: APP_NAME,
+    backgroundColor: "#020617",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  mainWindow.loadURL(FRONTEND_URL);
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+}
+
+function stopServices() {
+  for (const child of children) {
+    if (!child.killed) {
+      child.kill("SIGTERM");
+    }
+  }
+}
+
+async function boot() {
+  try {
+    await startServices();
+    createWindow();
+  } catch (error) {
+    console.error(error);
+    await dialog.showMessageBox({
+      type: "error",
+      title: `${APP_NAME} failed to start`,
+      message: `${APP_NAME} could not start.`,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+    app.quit();
+  }
+}
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.focus();
+    }
+  });
+
+  app.whenReady().then(boot);
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit();
+    }
+  });
+
+  app.on("before-quit", stopServices);
+}
+

@@ -1,0 +1,15 @@
+{
+  "name": "veritydesk-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VerityDesk macOS desktop shell.",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "check": "node --check src/main.js && node --check src/preload.js"
+  },
+  "devDependencies": {
+    "electron": "^39.2.7"
+  }
+}
+

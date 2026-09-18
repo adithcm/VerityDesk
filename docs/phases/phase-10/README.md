@@ -29,4 +29,3 @@ Development will continue to support Docker/Postgres because it is useful for da
 - The app can run daily refreshes while it is open.
 - User data persists across close/reopen and app updates.
 - Docker is not required for the packaged desktop app.
-
