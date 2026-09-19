@@ -18,8 +18,8 @@ Development will continue to support Docker/Postgres because it is useful for da
 4. [10.4 API key and local config handling](milestones/10.4-api-key-and-local-config.md)
 5. [10.5 Production builds](milestones/10.5-production-builds.md)
 6. [10.6 macOS app packaging](milestones/10.6-macos-app-packaging.md)
-7. 10.7 End-to-end deployment test
-8. 10.8 Clean simple documentation
+7. [10.7 Deployment validation](milestones/10.7-deployment-validation.md)
+8. [10.8 Clean simple documentation](milestones/10.8-clean-simple-documentation.md)
 
 ## Final User Experience Target
 

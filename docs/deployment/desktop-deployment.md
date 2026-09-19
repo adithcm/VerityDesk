@@ -110,11 +110,11 @@ The app does not package `.env` or `config.env`; it reads API keys from:
 ~/Library/Application Support/VerityDesk/config.env
 ```
 
-## Remaining Phase 10 Work
+For the short end-user guide, see [Desktop User Guide](desktop-user-guide.md).
 
-- Add Electron runtime shell.
-- Add packaged database startup mode.
-- Add packaged API key/config handling.
-- Add production build and packaging scripts.
-- Generate a macOS `.app`.
-- Write clean user-facing install/run docs.
+## Future Polish
+
+- Apple Developer ID signing.
+- Notarized DMG installer.
+- Smaller bundled runtime.
+- macOS Keychain-backed API key storage.

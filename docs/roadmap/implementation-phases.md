@@ -495,8 +495,8 @@ Milestones:
 - [Milestone 10.4: API key and local config handling](../phases/phase-10/milestones/10.4-api-key-and-local-config.md).
 - [Milestone 10.5: Production builds](../phases/phase-10/milestones/10.5-production-builds.md).
 - [Milestone 10.6: macOS app packaging](../phases/phase-10/milestones/10.6-macos-app-packaging.md).
-- Milestone 10.7: End-to-end deployment test.
-- Milestone 10.8: Clean simple documentation.
+- [Milestone 10.7: Deployment validation](../phases/phase-10/milestones/10.7-deployment-validation.md).
+- [Milestone 10.8: Clean simple documentation](../phases/phase-10/milestones/10.8-clean-simple-documentation.md).
 
 Detailed plan: [Phase 10](../phases/phase-10/README.md).
 
