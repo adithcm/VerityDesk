@@ -13,6 +13,9 @@ node_modules/
 out/
 *.tsbuildinfo
 npm-debug.log*
+desktop/dist/
+desktop/release/
+desktop/assets/*.iconset/
 
 # Local data and secrets
 .env

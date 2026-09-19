@@ -10,16 +10,14 @@ const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const FRONTEND_URL = `http://127.0.0.1:${FRONTEND_PORT}`;
 const DATABASE_FILENAME = "veritydesk.db";
 const CONFIG_FILENAME = "config.env";
-const DESKTOP_MODE = process.env.VERITYDESK_DESKTOP_MODE || "dev";
+const DESKTOP_MODE = process.env.VERITYDESK_DESKTOP_MODE || (app.isPackaged ? "production" : "dev");
 
-const repoRoot = path.resolve(__dirname, "..", "..");
-const frontendDir = path.join(repoRoot, "frontend");
-const backendDir = path.join(repoRoot, "backend");
-const localNodeBin = path.join(repoRoot, ".runtime", "node-v22.23.2-darwin-arm64", "bin");
+const runtimeRoot = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, "..", "..");
+const frontendDir = path.join(runtimeRoot, "frontend");
+const backendDir = path.join(runtimeRoot, "backend");
+const localNodeBin = path.join(runtimeRoot, ".runtime", "node-v22.23.2-darwin-arm64", "bin");
 const localNpm = path.join(localNodeBin, "npm");
-const pythonBin = path.join(repoRoot, ".venv", "bin", "python");
-const uvicornBin = path.join(repoRoot, ".venv", "bin", "uvicorn");
-const alembicBin = path.join(repoRoot, ".venv", "bin", "alembic");
+const pythonBin = path.join(runtimeRoot, ".venv", "bin", "python");
 
 const children = new Set();
 let mainWindow = null;
@@ -134,7 +132,7 @@ function childEnv(runtimePaths, extra = {}) {
 
 function spawnProcess(label, command, args, runtimePaths, options = {}) {
   const child = spawn(command, args, {
-    cwd: options.cwd || repoRoot,
+    cwd: options.cwd || runtimeRoot,
     env: childEnv(runtimePaths, options.env),
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -185,7 +183,7 @@ async function waitForUrl(url, timeoutMs = 90000) {
 }
 
 async function startServices() {
-  if (!fs.existsSync(uvicornBin) || !fs.existsSync(alembicBin) || !fs.existsSync(pythonBin)) {
+  if (!fs.existsSync(pythonBin)) {
     throw new Error("Missing Python environment. Run: python3 -m venv .venv && .venv/bin/pip install -e backend[dev]");
   }
 
@@ -200,10 +198,11 @@ async function startServices() {
   console.log(`[desktop] database: ${runtimePaths.databasePath}`);
   console.log(`[desktop] config: ${runtimePaths.configPath}`);
   console.log(`[desktop] mode: ${DESKTOP_MODE}`);
+  console.log(`[desktop] runtime root: ${runtimeRoot}`);
 
-  await runProcess("migrations", alembicBin, ["upgrade", "head"], runtimePaths, { cwd: backendDir });
+  await runProcess("migrations", pythonBin, ["-m", "alembic", "upgrade", "head"], runtimePaths, { cwd: backendDir });
 
-  spawnProcess("backend", uvicornBin, ["app.main:app", "--host", "127.0.0.1", "--port", BACKEND_PORT], runtimePaths, {
+  spawnProcess("backend", pythonBin, ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", BACKEND_PORT], runtimePaths, {
     cwd: backendDir,
   });
   spawnProcess("frontend", npmCommand, frontendArgs, runtimePaths, {

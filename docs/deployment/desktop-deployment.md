@@ -88,6 +88,28 @@ make desktop-prod
 
 `make desktop-build` runs the Next.js production build and desktop syntax checks. `make desktop-prod` starts Electron in production mode, which uses `next start` instead of `next dev`.
 
+## Build The macOS App
+
+Create the first local `.app` bundle:
+
+```bash
+make desktop-pack-mac
+```
+
+The app appears at:
+
+```text
+desktop/dist/mac-arm64/VerityDesk.app
+```
+
+This app is currently unsigned. If macOS blocks it, use right-click Open or approve it in System Settings. Signing and notarization are future distribution polish.
+
+The app does not package `.env` or `config.env`; it reads API keys from:
+
+```text
+~/Library/Application Support/VerityDesk/config.env
+```
+
 ## Remaining Phase 10 Work
 
 - Add Electron runtime shell.

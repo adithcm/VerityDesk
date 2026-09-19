@@ -494,7 +494,7 @@ Milestones:
 - [Milestone 10.3: Packaged database mode](../phases/phase-10/milestones/10.3-packaged-database-mode.md).
 - [Milestone 10.4: API key and local config handling](../phases/phase-10/milestones/10.4-api-key-and-local-config.md).
 - [Milestone 10.5: Production builds](../phases/phase-10/milestones/10.5-production-builds.md).
-- Milestone 10.6: macOS app packaging.
+- [Milestone 10.6: macOS app packaging](../phases/phase-10/milestones/10.6-macos-app-packaging.md).
 - Milestone 10.7: End-to-end deployment test.
 - Milestone 10.8: Clean simple documentation.
 
