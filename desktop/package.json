@@ -1,0 +1,77 @@
+{
+  "name": "veritydesk-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "author": "Adithya C",
+  "description": "VerityDesk macOS desktop shell.",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "prod": "VERITYDESK_DESKTOP_MODE=production electron .",
+    "check": "node --check src/main.js && node --check src/preload.js",
+    "pack:mac": "electron-builder --mac dir",
+    "dist:mac": "electron-builder --mac dmg"
+  },
+  "build": {
+    "appId": "com.veritydesk.app",
+    "productName": "VerityDesk",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "asar": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "package.json",
+      "src/**/*",
+      "assets/veritydesk-icon.icns"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "app/**/*",
+          "alembic/**/*",
+          "alembic.ini",
+          "pyproject.toml"
+        ]
+      },
+      {
+        "from": "../frontend",
+        "to": "frontend",
+        "filter": [
+          ".next/**/*",
+          "public/**/*",
+          "package.json",
+          "next.config.js"
+        ]
+      },
+      {
+        "from": "../frontend/node_modules",
+        "to": "frontend/node_modules"
+      },
+      {
+        "from": "../.venv",
+        "to": ".venv"
+      },
+      {
+        "from": "../.runtime",
+        "to": ".runtime"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.finance",
+      "icon": "assets/veritydesk-icon.icns",
+      "target": [
+        "dir"
+      ]
+    },
+    "dmg": {
+      "sign": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^39.2.7",
+    "electron-builder": "^26.15.3"
+  }
+}
