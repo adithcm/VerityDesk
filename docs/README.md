@@ -5,6 +5,7 @@ InvestorAgent documentation is organized by roadmap and implementation phase.
 ## Roadmap
 
 - [Implementation Phases](roadmap/implementation-phases.md)
+- [Project History](project-history/README.md)
 
 ## Core Documentation
 

@@ -276,6 +276,7 @@ Current branch focus:
 - [Desktop deployment details](docs/deployment/desktop-deployment.md)
 - [Postgres multiuser local setup](docs/deployment/postgres-multiuser-local.md)
 - [Implementation phases](docs/roadmap/implementation-phases.md)
+- [Project history](docs/project-history/README.md)
 - [Phase 10 desktop deployment](docs/phases/phase-10/README.md)
 
 ## Future Work
