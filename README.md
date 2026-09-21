@@ -268,6 +268,7 @@ Current branch focus:
 ## Documentation Map
 
 - [Architecture](docs/architecture/README.md)
+- [Agent framework](docs/agents/README.md)
 - [Desktop user guide](docs/deployment/desktop-user-guide.md)
 - [Desktop deployment details](docs/deployment/desktop-deployment.md)
 - [Postgres multiuser local setup](docs/deployment/postgres-multiuser-local.md)
@@ -276,7 +277,6 @@ Current branch focus:
 
 Planned documentation in this branch:
 
-- `docs/agents/`
 - `docs/data-sources/`
 - `docs/database/`
 
