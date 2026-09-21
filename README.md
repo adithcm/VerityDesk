@@ -271,6 +271,7 @@ Current branch focus:
 - [Agent framework](docs/agents/README.md)
 - [Data sources and APIs](docs/data-sources/README.md)
 - [Database and persistence](docs/database/README.md)
+- [Deployment](docs/deployment/README.md)
 - [Desktop user guide](docs/deployment/desktop-user-guide.md)
 - [Desktop deployment details](docs/deployment/desktop-deployment.md)
 - [Postgres multiuser local setup](docs/deployment/postgres-multiuser-local.md)

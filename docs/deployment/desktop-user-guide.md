@@ -1,6 +1,6 @@
 # VerityDesk Desktop User Guide
 
-This is the simple local guide for the first macOS desktop build.
+This is the simple local guide for the first macOS desktop build. For architecture and packaging details, see [Deployment](README.md).
 
 ## Open The App
 
@@ -96,4 +96,3 @@ The packaged desktop app does not require Docker or Postgres.
 - There is no public installer/notarization yet.
 - The app bundle is large because it includes Python, Node, backend, frontend, and dependencies.
 - Keychain-based API key storage is planned later.
-

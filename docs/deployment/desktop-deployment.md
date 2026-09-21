@@ -1,8 +1,8 @@
 # VerityDesk Desktop Deployment
 
-Status: Draft for Phase 10
+Status: Local desktop deployment complete
 
-This document tracks the first installable macOS desktop version of VerityDesk.
+This document tracks the first installable macOS desktop version of VerityDesk. For the shorter overview, see [Deployment](README.md).
 
 ## What The Desktop App Should Do
 
