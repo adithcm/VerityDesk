@@ -11,6 +11,7 @@ InvestorAgent documentation is organized by roadmap and implementation phase.
 - [Architecture](architecture/README.md)
 - [Agent Framework](agents/README.md)
 - [Data Sources And APIs](data-sources/README.md)
+- [Database And Persistence](database/README.md)
 - [Desktop User Guide](deployment/desktop-user-guide.md)
 - [Desktop Deployment](deployment/desktop-deployment.md)
 - [Postgres Multiuser Local Setup](deployment/postgres-multiuser-local.md)
