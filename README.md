@@ -267,6 +267,7 @@ Current branch focus:
 
 ## Documentation Map
 
+- [Architecture](docs/architecture/README.md)
 - [Desktop user guide](docs/deployment/desktop-user-guide.md)
 - [Desktop deployment details](docs/deployment/desktop-deployment.md)
 - [Postgres multiuser local setup](docs/deployment/postgres-multiuser-local.md)
@@ -275,7 +276,6 @@ Current branch focus:
 
 Planned documentation in this branch:
 
-- `docs/architecture/`
 - `docs/agents/`
 - `docs/data-sources/`
 - `docs/database/`
@@ -290,4 +290,3 @@ Planned documentation in this branch:
 - Portfolio-aware research mode.
 - Alerts, widgets, notifications, and report export.
 - Hosted/cloud deployment path for multi-device sync.
-

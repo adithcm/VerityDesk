@@ -6,6 +6,13 @@ InvestorAgent documentation is organized by roadmap and implementation phase.
 
 - [Implementation Phases](roadmap/implementation-phases.md)
 
+## Core Documentation
+
+- [Architecture](architecture/README.md)
+- [Desktop User Guide](deployment/desktop-user-guide.md)
+- [Desktop Deployment](deployment/desktop-deployment.md)
+- [Postgres Multiuser Local Setup](deployment/postgres-multiuser-local.md)
+
 ## Phases
 
 - [Phase 1](phases/phase-1/README.md)
@@ -19,6 +26,7 @@ InvestorAgent documentation is organized by roadmap and implementation phase.
 - [Phase 9](phases/phase-9/README.md)
 - [Phase 9.5](phases/phase-9-5/README.md)
 - [Phase 9.6](phases/phase-9-6/README.md)
+- [Phase 10](phases/phase-10/README.md)
 
 ## Convention
 
