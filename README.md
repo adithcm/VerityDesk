@@ -263,7 +263,7 @@ Completed:
 
 Current branch focus:
 
-- Documentation polish for interview/repo review.
+- Documentation polish for interview and repo review.
 
 ## Documentation Map
 

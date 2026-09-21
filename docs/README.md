@@ -1,6 +1,6 @@
 # Documentation
 
-InvestorAgent documentation is organized by roadmap and implementation phase.
+VerityDesk documentation is organized by roadmap, architecture area, deployment path, and implementation phase.
 
 ## Roadmap
 
