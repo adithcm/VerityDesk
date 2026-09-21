@@ -1,276 +1,291 @@
-# InvestorAgent
+# VerityDesk
 
-InvestorAgent is a local-first market intelligence application concept that combines credible news collection, multi-agent research workflows, and an interactive UI for daily financial context.
+VerityDesk is a local-first AI intelligence desk for daily news, markets, companies, macroeconomics, and housing research. It combines live web research, direct data APIs, scheduled ingestion, multi-agent analysis, source-backed citations, personalization, and a packaged macOS desktop app.
 
-The goal is to help users understand what is happening across world news, company news, markets, macroeconomics, and housing, then turn that information into cited research summaries, watchlist ideas, and scenario-based investing context.
+The project is designed to answer questions like:
 
-> This project is for research and educational purposes only. It does not provide financial advice, investment recommendations, or instructions to buy or sell securities. Users should do their own research and consult a licensed financial advisor before making investment decisions.
+- What are the major world, U.S., AI, and market events I should know today?
+- What changed for my watchlist and the S&P 500?
+- What is happening in a specific housing market?
+- Which sources support this answer, and what is uncertain?
 
-## Product Vision
+> VerityDesk is for research and educational use only. It is not financial advice and does not provide buy, sell, or hold recommendations.
 
-InvestorAgent should feel like a personal market intelligence terminal:
+## What Makes It Interesting
 
-- Daily digest of major world, business, market, macro, and housing news.
-- Company and ticker-focused research summaries.
-- Market strategy context with bullish factors, bearish factors, risks, and watchlist signals.
-- Source-backed answers with citations, timestamps, and clear separation between facts and analysis.
-- Local desktop app experience for macOS, with a portable version others can run on their own machine.
+- **Agentic research workflow:** a coordinator routes work to specialist agents, fuses evidence, and creates a final cited answer.
+- **Tavily-first live web research:** current web search is the primary path for flexible questions, while direct APIs and local data verify and add structure.
+- **Direct API ingestion:** FRED, Census, SEC, FHFA, Freddie Mac, Alpha Vantage, Finnhub, NewsAPI, BBC RSS, and GDELT are integrated or scaffolded.
+- **Personalized daily intelligence:** user settings drive daily briefing topics, watchlists, regions, housing markets, companies, and answer style.
+- **Local desktop deployment:** Electron packages the Next.js frontend, FastAPI backend, local database mode, app icon, and startup process into `VerityDesk.app`.
+- **Source-backed output:** answers include confidence, citations, timestamps, data gaps, and guardrails for investment-oriented content.
 
-## News Domains
+## High-Level Architecture
 
-InvestorAgent v1 is organized around ten news domains:
+```mermaid
+flowchart LR
+    User["User / macOS app"] --> UI["Next.js UI"]
+    UI --> API["FastAPI backend"]
+    API --> Auth["Local auth + user settings"]
+    API --> Agents["Research agent runtime"]
+    API --> Reports["Reports + daily briefings"]
+    API --> Ingestion["Ingestion scheduler"]
 
-1. World and Geopolitics
-2. U.S. Economy and Policy
-3. Markets and Rates
-4. Companies and Earnings
-5. Housing and Real Estate
-6. Commodities and Energy
-7. Technology and AI
-8. Banking and Credit
-9. Consumer and Labor
-10. Regulation and Legal
-
-## Core Capabilities
-
-- Collect news and data from credible sources using APIs, RSS feeds, and compliant scraping where appropriate.
-- Run scheduled daily collection jobs.
-- Deduplicate, normalize, and store articles, source metadata, tickers, sectors, and macro indicators.
-- Analyze user questions through specialized agents.
-- Generate daily briefings and focused reports.
-- Show source links for claims and preserve retrieved timestamps.
-- Apply financial guardrails to strategy-oriented outputs.
-
-## Agent Framework
-
-The system is designed around a coordinator agent that routes user requests to specialized agents.
-
-Potential agents:
-
-- `CoordinatorAgent`: understands the user request and decides which agents should run.
-- `WorldNewsAgent`: summarizes major geopolitical and global economic developments.
-- `CompanyNewsAgent`: tracks company-specific events, earnings, management changes, and product news.
-- `MarketNewsAgent`: watches equity markets, sectors, commodities, bonds, currencies, and volatility.
-- `MacroAgent`: follows inflation, jobs, rates, Fed commentary, GDP, and other macro indicators.
-- `HousingMarketAgent`: tracks housing supply, mortgage rates, affordability, prices, and regional trends.
-- `StrategyAgent`: converts research into scenario-based market context and watchlist themes.
-- `CitationAgent`: verifies claims, attaches sources, and flags unsupported conclusions.
-- `RiskAgent`: checks for missing caveats, uncertainty, and financial-advice wording.
-
-## Financial Guardrails
-
-InvestorAgent should never directly tell a user to buy, sell, or hold a security.
-
-Instead of:
-
-```text
-Buy NVDA.
+    Agents --> Tavily["Tavily live web search"]
+    Agents --> Store["Local evidence store"]
+    Agents --> APIs["Direct APIs"]
+    Ingestion --> RSS["RSS feeds"]
+    Ingestion --> APIs
+    APIs --> Store
+    RSS --> Store
+    Store --> DB["SQLite desktop DB / Postgres dev DB"]
+    Reports --> DB
+    Auth --> DB
 ```
 
-The app should say:
+## Agent Workflow
 
-```text
-NVDA may be worth monitoring if earnings revisions, AI infrastructure demand, and margin trends remain strong. Key risks include valuation compression, export restrictions, and increased competition. This is not financial advice.
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as Coordinator
+    participant E as Evidence Fusion
+    participant W as Live Web
+    participant D as Direct APIs
+    participant L as Local Cache
+    participant A as Specialist Agents
+    participant S as Synthesis + Guardrails
+
+    U->>C: Ask question or open daily brief
+    C->>C: Infer intent, domains, tickers, regions
+    C->>E: Build research plan
+    E->>W: Search current web when freshness matters
+    E->>D: Pull API-backed evidence
+    E->>L: Read stored articles, observations, reports
+    E->>A: Send fused evidence packet
+    A->>S: Specialist findings, risks, citations
+    S->>U: Markdown answer with citations and guardrails
 ```
 
-Every investment-oriented answer should include:
+## Core Agents
 
-- Clear disclaimer.
-- Bullish factors.
-- Bearish factors.
-- Key risks.
-- Time horizon assumptions.
-- Source citations.
-- "Not a recommendation" framing.
+| Agent | Role |
+| --- | --- |
+| `CoordinatorAgent` | Determines intent, routes to specialists, and controls the research workflow. |
+| `NewsDigestAgent` | Summarizes broad world, policy, market, AI, banking, labor, and legal news. |
+| `CompanyAgent` | Analyzes company news, filings, risks, catalysts, and ticker-specific context. |
+| `MarketAgent` | Interprets markets, rates, credit, sectors, commodities, and risk signals. |
+| `MacroAgent` | Tracks macroeconomic, policy, inflation, jobs, rates, and consumer conditions. |
+| `HousingAgent` | Focuses on housing, mortgage rates, affordability, local markets, and inventory signals. |
+| `SynthesisAgent` | Turns specialist findings into a clear natural-language answer. |
+| `RiskGuardrailAgent` | Prevents direct financial advice and enforces disclaimer/risk language. |
 
-## App Architecture
+## Data Sources And APIs
 
-Recommended architecture:
+| Source | Used For | Key Required |
+| --- | --- | --- |
+| Tavily | Live web research and current cited sources | Yes |
+| OpenAI | Natural-language synthesis and specialist agent summaries | Yes |
+| FRED | Rates, labor, macro, mortgage-rate series | Yes |
+| U.S. Census | Economic indicators, housing/economic datasets | Yes |
+| Alpha Vantage | Market news, quotes, macro/sector context | Yes |
+| Finnhub | Company news and quote snapshots | Yes |
+| NewsAPI | Broad news discovery by category/topic | Yes |
+| SEC APIs / EDGAR RSS | Company filings and reporting signals | No |
+| BBC RSS | Reputable world and business news feed | No |
+| FHFA HPI | House price index observations | No |
+| Freddie Mac PMMS | Mortgage-rate dataset | No |
+| GDELT | Global event/news discovery | No |
 
-- Frontend: Next.js with TypeScript.
-- Backend API: FastAPI.
-- Agent orchestration: Python-based workflow, such as LangGraph-style routing.
-- Storage: SQLite with SQLAlchemy and Alembic for local-first development, with a path to Postgres later.
-- Collection: RSS and official APIs first, Playwright/browser scraping only where compliant and necessary.
-- Scheduling: local background jobs for daily updates.
-- LLM provider: OpenAI API first, behind a provider abstraction.
-- Packaging: Tauri for a native desktop app later, plus Docker Compose for portable self-hosting.
+## Application Features
 
-## Deployment Targets
+- Login and local user-specific settings.
+- First-time setup flow for location, watchlist, companies, sectors, briefing topics, and answer style.
+- Daily brief page with score, summary cards, deeper read, citations, and data gaps.
+- Agent chat with session memory and previous chat list.
+- Visual home dashboard for daily read, housing, markets, companies, and macro modules.
+- Source health/status page and manual refresh.
+- Saved report history.
+- Local desktop database storage.
+- Development Postgres support.
+- Packaged macOS app build.
 
-InvestorAgent should support two main deployment paths:
+## Tech Stack
 
-1. Local desktop app
-   - Installable macOS app.
-   - Opens like a normal desktop application.
-   - Uses the same local backend and storage.
+| Layer | Technology |
+| --- | --- |
+| Frontend | Next.js, React, TypeScript, Tailwind CSS |
+| Backend | FastAPI, Python, SQLAlchemy, Alembic |
+| Agents | Python agent runtime, OpenAI model client, Tavily live web research |
+| Storage | SQLite for packaged desktop, Postgres for dev/multiuser path |
+| Ingestion | RSS, official APIs, dataset downloads, scheduled refresh |
+| Desktop | Electron, electron-builder, macOS `.app` packaging |
+| Tooling | Makefile, Docker Compose for Postgres/dev |
 
-2. Portable local web app
-   - Runs through Docker or a simple local command.
-   - Opens in a browser.
-   - Can be shared with someone else to run on their own system.
+## Desktop App
 
-Deployment timing:
+The local macOS app is generated at:
 
-- Phase 9 is the final UI, prompting, and product polish pass after source and agent functionality are stronger.
-- Phase 9.5 is the post-Phase 9 product differentiation pass: automatic daily topic panels, first-time setup/profile, clearer Markdown answers, change tracking, watch items, alerts foundation, and widget ideas.
-- Phase 10 packages the app as a local macOS desktop app with background refresh behavior.
-- Phase 11 focuses on portable deployment for other systems.
+```text
+desktop/dist/mac-arm64/VerityDesk.app
+```
 
-## Source Principles
+It starts the backend and frontend automatically, reads local API keys, runs migrations, and stores data locally.
 
-The project should prioritize reputable and compliant sources:
+Desktop data lives at:
 
-- Official company investor relations pages.
-- SEC filings and earnings materials.
-- Central bank and government economic data.
-- Trusted financial and business news outlets.
-- Housing and mortgage market data providers.
-- RSS feeds and official APIs where available.
+```text
+~/Library/Application Support/VerityDesk/
+```
 
-The system should respect source terms, paywalls, and `robots.txt`.
+Important files:
 
-## Roadmap
+```text
+~/Library/Application Support/VerityDesk/config.env
+~/Library/Application Support/VerityDesk/veritydesk.db
+```
 
-- Define the initial source catalog.
-- Build the local database schema.
-- Implement daily ingestion jobs.
-- Add article deduplication and source metadata.
-- Build the first set of specialist agents.
-- Create a dashboard UI with daily digest, watchlist, and chat/research modes.
-- Add guardrail checks and citation enforcement.
-- Package the app for local desktop use.
-- Add Docker support for portable deployment.
+## Quickstart: Desktop Build
 
-## Status
-
-Phases 1-6 are complete. Next planned work is Phase 7: source expansion and parser completion.
-
-## Local Development
-
-Phase 2 uses a split local app:
-
-- `frontend/`: Next.js with TypeScript.
-- `backend/`: FastAPI in Python.
-
-Runtime requirements:
-
-- Node.js `>=20.9.0`
-- Python `>=3.11`
-
-This repo supports a project-local Node install at `.runtime/node-v22.23.2-darwin-arm64`. The `.runtime/` directory is ignored by git because it is machine-local.
-
-Install the project-local Node runtime:
+From the repo root:
 
 ```bash
 make node-install
+python3 -m venv .venv
+.venv/bin/pip install -e backend[dev]
+cd frontend && npm install
+cd ../desktop && npm install
+cd ..
+make desktop-pack-mac
 ```
 
-Use it in your shell with:
+Then open:
 
-```bash
-export PATH="$PWD/.runtime/node-v22.23.2-darwin-arm64/bin:$PATH"
-node --version
-npm --version
+```text
+desktop/dist/mac-arm64/VerityDesk.app
 ```
 
-Copy the example environment file before running local services:
+The app is currently unsigned, so macOS may require right-click `Open` or a System Settings approval.
+
+## Quickstart: Local Development
+
+Create the environment:
 
 ```bash
 cp .env.example .env
+python3 -m venv .venv
+.venv/bin/pip install -e backend[dev]
+make node-install
+cd frontend && npm install
+cd ../desktop && npm install
+cd ..
 ```
 
-Start the local app with one command:
+Run the local web app:
 
 ```bash
+make postgres-up
+make db-upgrade
 make app-dev
 ```
 
-This applies database migrations, starts the backend at `http://localhost:8000`, and starts the frontend at `http://localhost:3000`. Press `Ctrl+C` in that terminal to stop both services.
-
-For Phase 8 live web research, add `TAVILY_API_KEY` to `.env`. Without it, the app keeps running and live web search returns a clean missing-key status.
-
-In the app:
-
-- Use **Dashboard** to ask one question, open the latest briefing, view saved reports, and review suggested next steps.
-- Use **Daily Briefing** to generate and read a saved briefing from current evidence.
-- Use **Reports** to reopen saved reports after restart, refresh reports, archive reports, delete reports, and inspect citations/details when needed.
-- Use **Sources** to review source/API status, run manual ingestion, inspect latest retrieved items, and see recent ingestion runs.
-- Use **Watchlist** to generate company research.
-- Use **Agent Chat** for custom research questions with automatic context detection and optional Advanced controls.
-- Use **Settings** to save personalization, enable daily automation, set the scheduled time, choose ingestion mode, and optionally generate an automatic daily briefing after ingestion.
-
-Daily automation only runs while the local backend is open. The schedule is saved in the local database and the startup command applies migrations automatically.
-
-Run the backend:
-
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -e backend[dev]
-make backend-dev
-```
-
-Run backend checks and migrations from the repo root:
-
-```bash
-make backend-test
-make backend-lint
-make db-upgrade
-```
-
-Run the configured RSS ingestion sources:
-
-```bash
-make rss-ingest
-```
-
-Run the configured official API and dataset ingestion sources:
-
-```bash
-make official-api-ingest
-```
-
-Run the frontend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-From the repo root, the Makefile automatically uses the project-local Node runtime:
-
-```bash
-make frontend-dev
-make frontend-build
-make frontend-typecheck
-```
-
-Or run both with Docker Compose:
-
-```bash
-docker compose up --build
-```
-
-Local URLs:
+URLs:
 
 - Frontend: `http://localhost:3000`
-- Backend health: `http://localhost:8000/health`
-- Source catalog: `http://localhost:8000/api/v1/sources`
-- Agent query: `POST http://localhost:8000/api/v1/agents/query`
-- Ingestion run: `POST http://localhost:8000/api/v1/ingestion/run`
-- Ingestion health: `http://localhost:8000/api/v1/ingestion/health`
-- Latest ingested items: `http://localhost:8000/api/v1/ingestion/latest-items`
-- Scheduler status: `http://localhost:8000/api/v1/ingestion/schedule`
-- Saved reports: `http://localhost:8000/api/v1/reports`
-- Proactive suggestions: `http://localhost:8000/api/v1/suggestions/proactive`
+- Backend: `http://localhost:8000`
+- Health: `http://localhost:8000/health`
 
-## Planning Docs
+## Configuration
 
-- [Documentation Index](docs/README.md)
-- [Implementation Phases](docs/roadmap/implementation-phases.md)
-- [Phase 1](docs/phases/phase-1/README.md)
-- [Phase 2](docs/phases/phase-2/README.md)
-- [Phase 3](docs/phases/phase-3/README.md)
-- [Phase 4](docs/phases/phase-4/README.md)
-- [Phase 5](docs/phases/phase-5/README.md)
+Development uses `.env`.
+
+Packaged desktop mode uses:
+
+```text
+~/Library/Application Support/VerityDesk/config.env
+```
+
+Common keys:
+
+```bash
+OPENAI_API_KEY=
+TAVILY_API_KEY=
+FRED_API_KEY=
+CENSUS_API_KEY=
+ALPHA_VANTAGE_API_KEY=
+FINNHUB_API_KEY=
+NEWSAPI_KEY=
+```
+
+Do not commit real keys.
+
+## Database
+
+Development can use Postgres:
+
+```bash
+make postgres-up
+make postgres-shell
+```
+
+The packaged desktop app uses SQLite:
+
+```text
+~/Library/Application Support/VerityDesk/veritydesk.db
+```
+
+You can inspect it in DBeaver with a SQLite connection.
+
+## Safety And Guardrails
+
+VerityDesk avoids direct investment instructions. Strategy-oriented responses must include:
+
+- research/education framing
+- no buy/sell/hold recommendation
+- risks and uncertainty
+- citations where available
+- source freshness and data gaps
+
+## Project Status
+
+Completed:
+
+- Research and planning
+- Next.js + FastAPI app scaffold
+- Database models and migrations
+- Source catalog and ingestion
+- Multi-agent research framework
+- Report and daily briefing generation
+- Tavily live web research
+- Major UI redesign and personalization
+- Multiuser-local auth and user-scoped reports
+- Local macOS desktop app packaging
+
+Current branch focus:
+
+- Documentation polish for interview and repo review.
+
+## Documentation Map
+
+- [Architecture](docs/architecture/README.md)
+- [Agent framework](docs/agents/README.md)
+- [Data sources and APIs](docs/data-sources/README.md)
+- [Database and persistence](docs/database/README.md)
+- [Deployment](docs/deployment/README.md)
+- [Desktop user guide](docs/deployment/desktop-user-guide.md)
+- [Desktop deployment details](docs/deployment/desktop-deployment.md)
+- [Postgres multiuser local setup](docs/deployment/postgres-multiuser-local.md)
+- [Implementation phases](docs/roadmap/implementation-phases.md)
+- [Project history](docs/project-history/README.md)
+- [Phase 10 desktop deployment](docs/phases/phase-10/README.md)
+
+## Future Work
+
+- Apple Developer ID signing and notarization.
+- `.dmg` installer.
+- Smaller app bundle.
+- macOS Keychain-backed API key storage.
+- More robust frontend smoke tests.
+- Portfolio-aware research mode.
+- Alerts, widgets, notifications, and report export.
+- Hosted/cloud deployment path for multi-device sync.

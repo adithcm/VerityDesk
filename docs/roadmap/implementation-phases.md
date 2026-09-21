@@ -1,8 +1,8 @@
 # Implementation Phases
 
-Last updated: 2026-09-05
+Last updated: 2026-09-21
 
-This document tracks the full InvestorAgent implementation roadmap from planning through advanced features.
+This document tracks the full VerityDesk implementation roadmap from planning through advanced features.
 
 ## Current Status
 
@@ -12,6 +12,14 @@ This document tracks the full InvestorAgent implementation roadmap from planning
 - Phase 4: Complete
 - Phase 5: Complete
 - Phase 6: Complete
+- Phase 7: Complete
+- Phase 8: Complete
+- Phase 9: Complete
+- Phase 9.5: Complete
+- Phase 9.6: Complete
+- Phase 10: Complete
+
+The project is currently in documentation polish after the first local macOS desktop deployment.
 
 ## Phase 1: Research And Planning
 
@@ -270,7 +278,7 @@ Next phase:
 
 ## Phase 7: Source Expansion And Parser Completion
 
-Status: Planned
+Status: Complete
 
 Purpose: finish scaffolded API connectors/parsers and broaden credible source coverage so the app can answer more flexible data questions, including regional housing and macro questions.
 
@@ -310,7 +318,7 @@ Detailed plan: [Phase 7](../phases/phase-7/README.md).
 
 ## Phase 8: Agent Framework Restructure And Web-First Research
 
-Status: Planned
+Status: Complete
 
 Purpose: restructure the multi-agent system, LLM orchestration, retrieval flow, and answer generation so the app behaves like a web-capable research assistant. The user should ask one question, the system should search credible live sources when appropriate, use direct APIs/local data as support and verification, then return a concise cited answer.
 
@@ -365,7 +373,7 @@ Detailed plan: [Phase 8](../phases/phase-8/README.md).
 
 ## Phase 9: Final UI, Prompting, And Product Polish
 
-Status: Planned
+Status: Complete
 
 Purpose: do a final product-quality pass after source coverage and agent flexibility are stronger, so the UI and prompts are polished around real working functionality rather than temporary data gaps.
 
@@ -431,7 +439,7 @@ Detailed plan: [Phase 9.5](../phases/phase-9-5/README.md).
 
 ## Phase 9.6: Option M Visual Product Implementation
 
-Status: Planned
+Status: Complete
 
 Purpose: implement the approved Option M product direction before desktop deployment, making VerityDesk a visual daily intelligence app with an agent explanation layer.
 
@@ -470,7 +478,7 @@ Detailed plan: [Phase 9.6](../phases/phase-9-6/README.md).
 
 ## Phase 10: Local Desktop App
 
-Status: In progress
+Status: Complete
 
 Purpose: package the local web app as a native-feeling macOS desktop app after the Option M visual product implementation is reliable.
 
